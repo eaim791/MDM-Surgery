@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #F4F4F5;
+  --surface: #FFFFFF;
+  --ink: #1E2427;
+  --muted: #6E767B;
+  --faint: #9AA1A6;
+  --line: #E3E5E7;
+  --chip: #F1F2F3;
+  --band: rgba(255, 255, 255, 0.85);
+  --inv-bg: #1E2427;
+  --inv-ink: #FFFFFF;
+  --photo: #EDEEEF;
+  --photo-ink: #A9AFB3;
+  --shadow: rgba(30, 36, 39, 0.06);
+  --rule: rgba(30, 36, 39, 0.18);
+  --scrim-core: rgba(244, 244, 245, 0.62);
+  --scrim-edge: rgba(244, 244, 245, 0.14);
+  --hero-body: #363E43;
+}
+
+.dark {
+  --bg: #15181A;
+  --surface: #1D2124;
+  --ink: #ECEEEF;
+  --muted: #9AA2A7;
+  --faint: #767E83;
+  --line: #2B3033;
+  --chip: #252A2D;
+  --band: rgba(21, 24, 26, 0.86);
+  --inv-bg: #ECEEEF;
+  --inv-ink: #15181A;
+  --photo: #262B2E;
+  --photo-ink: #6C7378;
+  --shadow: rgba(0, 0, 0, 0.35);
+  --rule: rgba(236, 238, 239, 0.22);
+  --scrim-core: rgba(21, 24, 26, 0.68);
+  --scrim-edge: rgba(21, 24, 26, 0.22);
+  --hero-body: #CDD4D8;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Procedure line art is black ink on transparent — invert it on dark backgrounds */
+.dark .proc-art { filter: invert(1); }
