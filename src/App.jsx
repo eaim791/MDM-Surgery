@@ -1,20 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import {
-  Menu, X, ChevronDown, ArrowDown, ArrowRight, Mail, Instagram, Linkedin,
+  Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Mail, Instagram, Linkedin,
   Facebook, Youtube, MapPin, Sun, Moon, Languages, Check, Star, Play, Award, FileText, ZoomIn,
 } from "lucide-react";
 import { UI } from "./i18n.js";
-import heroVideoWebm from "./assets/hero.webm";
-import heroVideoMp4 from "./assets/hero.mp4";
-import heroPoster from "./assets/hero-poster.jpg";
-import heroMobileWebm from "./assets/hero-mobile.webm";
-import heroMobileMp4 from "./assets/hero-mobile.mp4";
-import heroMobilePoster from "./assets/hero-mobile-poster.jpg";
-import marceloPhoto from "./assets/marcelodimaggio.jpeg";
+import heroVideo from "./assets/hero-bg.mp4";
+import marceloPhoto from "./assets/marcelodimaggio.jpg";
 import {
-  PROCEDURES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
-  LOCATIONS, SEDES, TESTIMONIALS, casesFor, INTERVIEWS, CERTIFICATES, PAPERS,
+  PROCEDURES, PROCEDURES_WITH_CASES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
+  LOCATIONS, SEDES, TESTIMONIALS, casesFor, CERTIFICATES, PAPERS,
 } from "./data.js";
 
 /* --------------------------------- HELPERS -------------------------------- */
@@ -39,6 +34,9 @@ async function submitToFormspree(payload) {
   });
   if (!res.ok) throw new Error("Formspree request failed");
 }
+
+// Full interviews playlist on the MDM Surgery YouTube channel
+const INTERVIEWS_PLAYLIST = "https://www.youtube.com/watch?v=WjhflcAPAD0&list=PLfsFc_yQNZ7Y";
 
 const SOCIAL_LINKS = {
   facebook: "https://www.facebook.com/mdm.marcelodimaggio",
@@ -121,6 +119,20 @@ const SectionTitle = ({ children }) => (
   </h2>
 );
 
+function CarouselArrows({ onPrev, onNext, prevLabel, nextLabel }) {
+  const btn = "flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)]";
+  return (
+    <div className="mt-6 flex justify-end gap-3">
+      <button type="button" onClick={onPrev} aria-label={prevLabel} title={prevLabel} className={btn}>
+        <ArrowLeft size={16} strokeWidth={1.5} />
+      </button>
+      <button type="button" onClick={onNext} aria-label={nextLabel} title={nextLabel} className={btn}>
+        <ArrowRight size={16} strokeWidth={1.5} />
+      </button>
+    </div>
+  );
+}
+
 function PhotoBox({ label, className = "", textClass = "text-2xl" }) {
   return (
     <div className={`flex items-center justify-center bg-[var(--photo)] ${className}`}>
@@ -189,7 +201,7 @@ function ScrollSideDecor() {
 
 export default function App() {
   const [open, setOpen] = useState(false);
-  const [subOpen, setSubOpen] = useState(true);
+  const [openSubmenus, setOpenSubmenus] = useState(() => new Set());
   const [active, setActive] = useState("home");
   const [theme, setTheme] = useState(() => localStorage.getItem("mdm-theme") || "light");
   const [lang, setLang] = useState(() => localStorage.getItem("mdm-lang") || "es");
@@ -202,22 +214,19 @@ export default function App() {
   const [sent, setSent] = useState(false);
   const [testPage, setTestPage] = useState(0);
   const [lightbox, setLightbox] = useState(null);
+  const [igHint, setIgHint] = useState(null);
+  const papersRef = useRef(null);
   const [pastHero, setPastHero] = useState(false);
-  const [isMobile, setIsMobile] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches
-  );
-
-  // Swap to the portrait video below the lg breakpoint
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 1023px)");
-    const onChange = (e) => setIsMobile(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
   const [introDone, setIntroDone] = useState(false);
   const [formErr, setFormErr] = useState("");
   const reduce = useReducedMotion();
+  const [loading, setLoading] = useState(true);
   const t = UI[lang];
+
+  useEffect(() => {
+    const id = setTimeout(() => setLoading(false), reduce ? 0 : 850);
+    return () => clearTimeout(id);
+  }, [reduce]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -254,6 +263,27 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
+  // The "visit our Instagram" note next to a procedure without photos: it fades out on
+  // the next mouse move (after a short grace period, so the click itself doesn't kill it),
+  // on scroll, or on its own after a few seconds.
+  useEffect(() => {
+    if (!igHint) return;
+    const dismiss = () => setIgHint(null);
+    const timeout = setTimeout(dismiss, 5000);
+    const arm = setTimeout(() => {
+      window.addEventListener("pointermove", dismiss, { once: true });
+      window.addEventListener("scroll", dismiss, { once: true, passive: true });
+      window.addEventListener("keydown", dismiss, { once: true });
+    }, 700);
+    return () => {
+      clearTimeout(timeout);
+      clearTimeout(arm);
+      window.removeEventListener("pointermove", dismiss);
+      window.removeEventListener("scroll", dismiss);
+      window.removeEventListener("keydown", dismiss);
+    };
+  }, [igHint]);
+
   const scrollTo = (id, closeMenu = true) => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
@@ -284,7 +314,17 @@ export default function App() {
     }
   };
 
+  // Horizontal carousels advance one card at a time (card width + the flex gap)
+  const scrollCarousel = (ref, dir) => {
+    const el = ref.current;
+    if (!el) return;
+    const card = el.firstElementChild;
+    const step = card ? card.getBoundingClientRect().width + 20 : el.clientWidth * 0.9;
+    el.scrollBy({ left: dir * step, behavior: reduce ? "auto" : "smooth" });
+  };
+
   const goToResult = (slug) => {
+    if (casesFor(slug).length === 0) { setIgHint(slug); return; }
     setOpenCase((p) => ({ ...p, [slug]: p[slug] ?? 0 }));
     setTimeout(() => scrollTo(`res-${slug}`), 30);
   };
@@ -299,22 +339,28 @@ export default function App() {
       ] },
     { id: "procedures", label: t.nav.procedures },
     { id: "resultados", label: t.nav.resultados },
-    { id: "interviews", label: t.nav.interviews },
-    { id: "certs", label: t.nav.certs },
-    { id: "papers", label: t.nav.papers },
+    { id: "press", label: t.nav.press, submenu: [
+        { id: "interviews", label: t.nav.interviews },
+        { id: "certs", label: t.nav.certs },
+        { id: "papers", label: t.nav.papers },
+      ] },
     { id: "testimonios", label: t.nav.testimonios },
     { id: "locations", label: t.nav.locations },
     { id: "contact", label: t.nav.contact },
   ];
 
   useEffect(() => {
-    const ids = ["home", "areas", "team", "procedures", "resultados", "interviews", "certs", "papers", "testimonios", "locations", "contact"];
-    const subs = ["dr-di-maggio", "surgical-team", "assistants"];
+    const ids = ["home", "areas", "team", "procedures", "resultados", "press", "testimonios", "locations", "contact"];
+    const subParent = {
+      "dr-di-maggio": "team", "surgical-team": "team", "assistants": "team",
+      "interviews": "press", "certs": "press", "papers": "press",
+    };
+    const subs = Object.keys(subParent);
     const ob = new IntersectionObserver(
       (es) => es.forEach((e) => {
         if (!e.isIntersecting) return;
         if (ids.includes(e.target.id)) setActive(e.target.id);
-        else if (subs.includes(e.target.id)) setActive("team");
+        else if (subParent[e.target.id]) setActive(subParent[e.target.id]);
       }),
       { rootMargin: "-40% 0px -55% 0px" }
     );
@@ -371,16 +417,23 @@ export default function App() {
       <nav className="flex-1 space-y-0.5 overflow-y-auto">
         {NAV.map((item) => item.submenu ? (
           <div key={item.id}>
-            <button onClick={() => { setSubOpen((v) => !v); scrollTo(item.id, false); }}
+            <button onClick={() => {
+                setOpenSubmenus((prev) => {
+                  const next = new Set(prev);
+                  next.has(item.id) ? next.delete(item.id) : next.add(item.id);
+                  return next;
+                });
+                scrollTo(item.id, false);
+              }}
               className={`group flex w-full cursor-pointer items-center justify-between px-1 py-2 text-[13px] tracking-wide transition-colors duration-200 ${active === item.id ? "text-[var(--ink)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}>
               <span className="relative">
                 {item.label}
                 <span className={`absolute left-0 -bottom-0.5 h-px bg-[var(--ink)] transition-all duration-300 ${active === item.id ? "w-6" : "w-0 group-hover:w-6"}`} />
               </span>
-              <ChevronDown size={14} className={`transition-transform duration-300 ${subOpen ? "rotate-180" : ""}`} />
+              <ChevronDown size={14} className={`transition-transform duration-300 ${openSubmenus.has(item.id) ? "rotate-180" : ""}`} />
             </button>
             <AnimatePresence initial={false}>
-              {subOpen && (
+              {openSubmenus.has(item.id) && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25, ease: "easeOut" }} className="overflow-hidden">
                   <div className="ml-3 mt-1 space-y-0.5 border-l border-[var(--line)] pl-3">
@@ -420,6 +473,21 @@ export default function App() {
         .font-display { font-family: 'Playfair Display', Georgia, serif; }
         .font-sans { font-family: 'Inter', system-ui, sans-serif; }
       `}</style>
+
+      <AnimatePresence>
+        {loading && (
+          <motion.div key="loader" exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : 0.4, ease: "easeInOut" }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-[var(--bg)]">
+            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: reduce ? 0 : 0.4, ease: "easeOut" }} className="flex flex-col items-center">
+              <span className="font-display text-3xl font-normal tracking-[0.1em] text-[var(--ink)]">MDM</span>
+              <motion.span initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
+                transition={{ duration: reduce ? 0 : 0.5, ease: "easeInOut", delay: reduce ? 0 : 0.15 }}
+                className="mt-3 h-px w-14 origin-center bg-[var(--ink)]" />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <ScrollSideDecor />
 
@@ -461,6 +529,17 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Floating consultation CTA — hidden on the home/hero section */}
+      <motion.button type="button" onClick={() => scrollTo("contact")}
+        aria-label={t.contact.cta} title={t.contact.cta} aria-hidden={!pastHero}
+        initial={false}
+        animate={{ opacity: pastHero ? 1 : 0, scale: pastHero ? 1 : 0.8 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        style={{ pointerEvents: pastHero ? "auto" : "none" }}
+        className="fixed bottom-6 right-6 z-40 flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] shadow-[0_8px_24px_var(--shadow)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] sm:bottom-8 sm:right-8">
+        <Mail size={18} strokeWidth={1.5} />
+      </motion.button>
+
       {/* Lightbox — certificates & papers */}
       <AnimatePresence>
         {lightbox && (
@@ -484,26 +563,19 @@ export default function App() {
         <section id="home" className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-6 pb-24 pt-28 lg:pt-24">
           {/* Background video — scoped to this section, sits inside main's lg:pl-60 so it never covers the sidebar */}
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-            {reduce ? (
-              // Respect prefers-reduced-motion: a still frame instead of a looping video
-              <img src={isMobile ? heroMobilePoster : heroPoster} alt=""
-                className="absolute inset-0 h-full w-full object-cover" />
-            ) : (
-              <video
-                key={isMobile ? "mobile" : "desktop"}
-                className="absolute inset-0 h-full w-full object-cover"
-                poster={isMobile ? heroMobilePoster : heroPoster}
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="auto"
-                tabIndex={-1}
-              >
-                <source src={isMobile ? heroMobileWebm : heroVideoWebm} type="video/webm" />
-                <source src={isMobile ? heroMobileMp4 : heroVideoMp4} type="video/mp4" />
-              </video>
-            )}
+            {/* One video for every breakpoint — it is framed to survive the portrait crop.
+                With prefers-reduced-motion it stays on its first frame instead of looping. */}
+            <video
+              className="absolute inset-0 h-full w-full object-cover"
+              src={heroVideo}
+              autoPlay={!reduce}
+              loop={!reduce}
+              muted
+              playsInline
+              preload="auto"
+              tabIndex={-1}
+            />
+
             <div
               className="absolute inset-0"
               style={{
@@ -722,6 +794,17 @@ export default function App() {
                         className="w-full cursor-pointer border border-[var(--line)] px-4 py-2.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)] transition-colors duration-200 hover:border-[var(--ink)]">
                         {t.proc.cta}
                       </button>
+                      <AnimatePresence>
+                        {igHint === p.slug && (
+                          <motion.a key="ig-hint" href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
+                            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                            transition={{ duration: 0.25, ease: "easeOut" }}
+                            className="-mt-1 flex items-center gap-2 text-[11px] leading-snug text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
+                            <Instagram size={13} strokeWidth={1.5} className="flex-shrink-0" />
+                            {t.proc.noResults}
+                          </motion.a>
+                        )}
+                      </AnimatePresence>
                       <button type="button" onClick={() => askAbout(p[lang].name)}
                         className="w-full cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-4 py-2.5 text-[10px] uppercase tracking-[0.16em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85">
                         {t.proc.ask}
@@ -744,8 +827,8 @@ export default function App() {
             </motion.div>
 
             <div className="mt-10 space-y-10">
-              {PROCEDURES.map((p, i) => {
-                const cases = casesFor(i);
+              {PROCEDURES_WITH_CASES.map((p) => {
+                const cases = casesFor(p.slug);
                 const sel = openCase[p.slug];
                 return (
                   <motion.div key={p.slug} id={`res-${p.slug}`} initial="hidden" whileInView="visible"
@@ -774,23 +857,39 @@ export default function App() {
                           <div className="pt-6">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <p className="text-[12px] uppercase tracking-[0.18em] text-[var(--faint)]">
-                                {t.res.case} {cases[sel].n} · {cases[sel].initials}
+                                {t.res.case} {cases[sel].n} · {p[lang].name}
                               </p>
                               <button onClick={() => setOpenCase((prev) => ({ ...prev, [p.slug]: undefined }))}
                                 className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
                                 {t.res.close}
                               </button>
                             </div>
-                            <figure className="mt-4 overflow-hidden rounded-xl border border-[var(--line)]">
-                              <PhotoBox label={cases[sel].initials} className="h-64 w-full sm:h-80" textClass="text-4xl" />
-                              <figcaption className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                                <span>{t.res.before} / {t.res.after}</span>
-                                <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
-                                  className="normal-case tracking-normal text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
-                                  {t.res.viewIg}
-                                </a>
-                              </figcaption>
-                            </figure>
+                            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              {[
+                                { caption: t.res.before, src: cases[sel].before },
+                                { caption: t.res.after, src: cases[sel].after },
+                              ].map(({ caption, src }) => (
+                                <figure key={caption} className="overflow-hidden rounded-xl border border-[var(--line)]">
+                                  <button type="button" onClick={() => setLightbox({ src, alt: `${p[lang].name} · ${caption}` })}
+                                    className="group relative block h-64 w-full cursor-zoom-in overflow-hidden bg-[var(--photo)] sm:h-96">
+                                    <img src={src} alt={`${p[lang].name} · ${caption}`} loading="lazy"
+                                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
+                                      <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                                    </span>
+                                  </button>
+                                  <figcaption className="border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                                    {caption}
+                                  </figcaption>
+                                </figure>
+                              ))}
+                            </div>
+                            <div className="mt-3 text-right">
+                              <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
+                                className="text-[11px] text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
+                                {t.res.viewIg}
+                              </a>
+                            </div>
                           </div>
                         </motion.div>
                       )}
@@ -805,106 +904,122 @@ export default function App() {
             </div>
           </section>
 
-          {/* ============ ENTREVISTAS ============ */}
-          <section id="interviews" className="scroll-mt-24 pt-24">
+          {/* ============ TRAYECTORIA & PRENSA ============ */}
+          <section id="press" className="scroll-mt-24 pt-24">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
-              <Eyebrow>{t.interviews.eyebrow}</Eyebrow>
-              <SectionTitle>{t.interviews.title}</SectionTitle>
-              <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.interviews.body}</p>
+              <Eyebrow>{t.press.eyebrow}</Eyebrow>
+              <SectionTitle>{t.press.title}</SectionTitle>
+              <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.press.body}</p>
             </motion.div>
-            <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
-              className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {INTERVIEWS.map((v) => (
-                <motion.div key={v.slug} variants={fadeUp} whileHover={{ scale: 1.02 }} transition={{ duration: 0.2 }}
-                  className="flex flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] transition-shadow duration-200 hover:shadow-[0_10px_30px_var(--shadow)]">
-                  <div className="aspect-video w-full overflow-hidden bg-[var(--photo)]">
-                    {v.youtubeId ? (
-                      <iframe className="h-full w-full" src={`https://www.youtube.com/embed/${v.youtubeId}`}
-                        title={v[lang].title} loading="lazy"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen />
-                    ) : (
-                      <div className="flex h-full items-center justify-center">
-                        <Play size={28} strokeWidth={1.3} className="text-[var(--photo-ink)] opacity-70" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-display text-[15px] font-normal leading-snug text-[var(--ink)]">{v[lang].title}</h3>
-                    {v.url && (
-                      <a href={v.url} target="_blank" rel="noopener noreferrer"
-                        className="mt-1 inline-block text-[11px] uppercase tracking-[0.14em] text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
-                        {t.interviews.watch}
-                      </a>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
-          </section>
 
-          {/* ============ CERTIFICADOS ============ */}
-          <section id="certs" className="scroll-mt-24 pt-24">
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
-              <Eyebrow>{t.certs.eyebrow}</Eyebrow>
-              <SectionTitle>{t.certs.title}</SectionTitle>
-              <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.certs.body}</p>
-            </motion.div>
-            <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
-              className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {CERTIFICATES.map((c) => (
-                <motion.div key={c.slug} variants={fadeUp} whileHover={{ scale: 1.02 }} transition={{ duration: 0.2 }}
-                  className={`self-start ${c.featured ? "col-span-2" : ""}`}>
-                  <button type="button" onClick={() => c.image && setLightbox({ src: c.image, alt: c[lang].title })}
-                    className={`group relative block aspect-[3/4] w-full cursor-zoom-in overflow-hidden rounded-xl border bg-[var(--surface)] ${c.featured ? "border-2 border-[var(--ink)] shadow-[0_14px_36px_var(--shadow)]" : "border-[var(--line)]"}`}>
-                    {c.image ? (
-                      <img src={c.image} alt={c[lang].title}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                    ) : (
-                      <div className="flex h-full items-center justify-center bg-[var(--photo)]">
-                        <Award size={26} strokeWidth={1.3} className="text-[var(--photo-ink)] opacity-70" />
-                      </div>
-                    )}
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/25">
-                      <ZoomIn size={c.featured ? 30 : 22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-                    </span>
-                  </button>
-                  {c.featured && (
-                    <p className="mt-2 text-center text-[11px] uppercase tracking-[0.18em] text-[var(--ink)]">{c[lang].title}</p>
-                  )}
-                </motion.div>
-              ))}
-            </motion.div>
-          </section>
+            <div id="interviews" className="scroll-mt-24 pt-12">
+              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+                <Eyebrow>{t.interviews.eyebrow}</Eyebrow>
+                <SectionTitle>{t.interviews.title}</SectionTitle>
+                <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.interviews.body}</p>
+              </motion.div>
+              <motion.a initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}
+                whileHover={{ y: -3 }} transition={{ duration: 0.25, ease: "easeOut" }}
+                href={INTERVIEWS_PLAYLIST} target="_blank" rel="noopener noreferrer"
+                className="group mt-8 flex flex-wrap items-center gap-5 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 transition-[border-color,box-shadow] duration-300 ease-out hover:border-[var(--rule)] hover:shadow-[0_14px_32px_var(--shadow)] sm:p-8">
+                <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-300 ease-out group-hover:border-[var(--rule)] group-hover:bg-[var(--chip)] group-hover:text-[var(--ink)]">
+                  <Play size={20} strokeWidth={1.4} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-display text-[20px] font-normal leading-snug text-[var(--ink)] sm:text-[24px]">
+                    {t.interviews.cta}
+                  </span>
+                  <span className="mt-2 block text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">
+                    {t.interviews.watch}
+                  </span>
+                </span>
+                <ArrowRight size={20} strokeWidth={1.4}
+                  className="flex-shrink-0 text-[var(--faint)] transition-[transform,color] duration-300 ease-out group-hover:translate-x-1.5 group-hover:text-[var(--ink)]" />
+              </motion.a>
+            </div>
 
-          {/* ============ PAPERS ============ */}
-          <section id="papers" className="scroll-mt-24 pt-24">
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
-              <Eyebrow>{t.papers.eyebrow}</Eyebrow>
-              <SectionTitle>{t.papers.title}</SectionTitle>
-              <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.papers.body}</p>
-            </motion.div>
-            <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
-              className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {PAPERS.map((p) => (
-                <motion.div key={p.slug} variants={fadeUp} whileHover={{ scale: 1.02 }} transition={{ duration: 0.2 }}>
-                  <button type="button" onClick={() => p.cover && setLightbox({ src: p.cover, alt: p[lang].title })}
-                    className="group relative block aspect-[2/3] w-full cursor-zoom-in overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]">
-                    {p.cover ? (
-                      <img src={p.cover} alt={p[lang].title}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                    ) : (
-                      <div className="flex h-full items-center justify-center bg-[var(--photo)]">
-                        <FileText size={26} strokeWidth={1.3} className="text-[var(--photo-ink)] opacity-70" />
-                      </div>
+            <div id="certs" className="scroll-mt-24 pt-20">
+              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+                <Eyebrow>{t.certs.eyebrow}</Eyebrow>
+                <SectionTitle>{t.certs.title}</SectionTitle>
+                <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.certs.body}</p>
+              </motion.div>
+              <motion.ul variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
+                className="mt-10 border-t border-[var(--line)]">
+                {CERTIFICATES.map((c) => (
+                  <motion.li key={c.slug} variants={fadeUp}
+                    className="grid grid-cols-1 gap-x-8 gap-y-2 border-b border-[var(--line)] py-6 sm:grid-cols-[5rem_1fr_auto] sm:items-baseline">
+                    <span className="font-display text-[15px] text-[var(--faint)]">{c.year}</span>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{c.institution}</p>
+                      <h3 className="mt-2 font-display text-[19px] font-normal leading-snug text-[var(--ink)] sm:text-[21px]">
+                        {c[lang].title}
+                      </h3>
+                      {c[lang].meta && (
+                        <p className="mt-1.5 text-[12px] text-[var(--muted)]">{c[lang].meta}</p>
+                      )}
+                    </div>
+                    {c.image && (
+                      <button type="button" onClick={() => setLightbox({ src: c.image, alt: c[lang].title })}
+                        className="flex cursor-zoom-in items-center gap-1.5 justify-self-start text-[11px] uppercase tracking-[0.14em] text-[var(--faint)] transition-colors duration-200 hover:text-[var(--ink)] sm:justify-self-end">
+                        <ZoomIn size={13} strokeWidth={1.5} />
+                        {t.certs.view}
+                      </button>
                     )}
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/25">
-                      <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-                    </span>
-                  </button>
-                </motion.div>
-              ))}
-            </motion.div>
+                  </motion.li>
+                ))}
+              </motion.ul>
+            </div>
+
+            <div id="papers" className="scroll-mt-24 pt-20">
+              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+                <Eyebrow>{t.papers.eyebrow}</Eyebrow>
+                <SectionTitle>{t.papers.title}</SectionTitle>
+                <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.papers.body}</p>
+              </motion.div>
+              <CarouselArrows prevLabel={t.papers.prev} nextLabel={t.papers.next}
+                onPrev={() => scrollCarousel(papersRef, -1)} onNext={() => scrollCarousel(papersRef, 1)} />
+
+              <motion.div ref={papersRef} variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
+                className="no-scrollbar -mx-6 mt-4 flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-pl-6 px-6 pb-2 sm:-mx-8 sm:scroll-pl-8 sm:px-8">
+                {PAPERS.map((p) => (
+                  <motion.article key={p.slug} variants={fadeUp}
+                    className="flex w-[85vw] max-w-[560px] flex-shrink-0 snap-start flex-col rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 transition-shadow duration-200 hover:shadow-[0_10px_30px_var(--shadow)] sm:w-[60vw] sm:p-7 lg:w-[38vw]">
+                    <div className="flex items-start gap-2.5">
+                      {p.kind === "board"
+                        ? <Award size={15} strokeWidth={1.4} className="mt-0.5 flex-shrink-0 text-[var(--faint)]" />
+                        : <FileText size={15} strokeWidth={1.4} className="mt-0.5 flex-shrink-0 text-[var(--faint)]" />}
+                      <p className="text-[10px] uppercase leading-relaxed tracking-[0.22em] text-[var(--faint)]">
+                        {p.kind === "board" ? `${t.papers.board} · ${p.publisher}` : p.publisher}
+                      </p>
+                    </div>
+
+                    <h3 className="mt-4 font-display text-[20px] font-normal leading-snug text-[var(--ink)] sm:text-[23px]">
+                      {p.title}
+                    </h3>
+
+                    <p className="mt-3 text-[13px] leading-relaxed text-[var(--muted)]">{p.authors}</p>
+                    <p className="mt-1 mb-6 text-[12px] text-[var(--faint)]">{p[lang].ref}</p>
+
+                    <div className="mt-auto flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[var(--line)] pt-5 text-[11px] uppercase tracking-[0.14em]">
+                      {p.url && (
+                        <a href={p.url} target="_blank" rel="noopener noreferrer"
+                          className="text-[var(--faint)] transition-colors duration-200 hover:text-[var(--ink)]">
+                          {t.papers.doi}
+                        </a>
+                      )}
+                      {p.cover && (
+                        <button type="button" onClick={() => setLightbox({ src: p.cover, alt: p.title })}
+                          className="flex cursor-zoom-in items-center gap-1.5 uppercase text-[var(--faint)] transition-colors duration-200 hover:text-[var(--ink)]">
+                          <ZoomIn size={13} strokeWidth={1.5} />
+                          {p.kind === "board" ? t.papers.viewDoc : t.papers.view}
+                        </button>
+                      )}
+                    </div>
+                  </motion.article>
+                ))}
+              </motion.div>
+            </div>
           </section>
 
           {/* ============ TESTIMONIOS ============ */}
@@ -942,6 +1057,11 @@ export default function App() {
                   </motion.div>
                   {totalPages > 1 && (
                     <div className="mt-5 flex items-center justify-end gap-3">
+                      <button type="button" onClick={() => setTestPage((p) => p - 1)}
+                        aria-label={t.test.prev} title={t.test.prev}
+                        className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)]">
+                        <ArrowLeft size={16} strokeWidth={1.5} />
+                      </button>
                       <span className="text-[11px] tracking-wide text-[var(--faint)]">{page + 1} / {totalPages}</span>
                       <button type="button" onClick={() => setTestPage((p) => p + 1)}
                         aria-label={t.test.next} title={t.test.next}

@@ -10,35 +10,47 @@ const artFor = (slug) => ART[`./assets/proc/${slug}.png`];
 const CERT_IMAGES = import.meta.glob("./assets/certificados/*.{jpg,jpeg,png}", { eager: true, import: "default" });
 const PAPER_IMAGES = import.meta.glob("./assets/pappers/*.{jpg,jpeg,png}", { eager: true, import: "default" });
 
-const numericFileOrder = (globObj) =>
-  Object.entries(globObj).sort(([a], [b]) => {
-    const na = parseInt(a.match(/(\d+)\.\w+$/)?.[1] ?? "0", 10);
-    const nb = parseInt(b.match(/(\d+)\.\w+$/)?.[1] ?? "0", 10);
-    return na - nb;
-  }).map(([, image]) => image);
+const CASE_IMAGES = import.meta.glob("./assets/procedimientos/*/*.{jpg,jpeg,png,webp}", { eager: true, import: "default" });
 
-const CERT_TITLE_OVERRIDES = {
-  "licencia espana": "Licencia España",
-  "licencia new york": "Licencia New York",
-};
+const imageByFile = (globObj, folder) => (file) => globObj[`./assets/${folder}/${file}`];
+const certImage = imageByFile(CERT_IMAGES, "certificados");
+const paperImage = imageByFile(PAPER_IMAGES, "pappers");
 
-const fileBaseName = (path) => path.split("/").pop().replace(/\.\w+$/, "");
+/* Before/after photos live in ./assets/procedimientos/<slug>/. File names are free-form;
+   the only convention is that each one carries an "antes"/"before" or "despues"/"dsp"/"after"
+   token. Both sides are sorted by the rest of the name so the pairs line up even when the
+   two files are not spelled identically. */
+const AFTER_TOKEN = /(despu[eé]s|dsp|after)/;
+const BEFORE_TOKEN = /(antes|before)/;
 
-const certEntriesSorted = () =>
-  Object.entries(CERT_IMAGES)
-    .map(([path, image]) => {
-      const base = fileBaseName(path);
-      const num = parseInt(base.match(/^(\d+)$/)?.[1] ?? "", 10);
-      const featured = Number.isNaN(num);
-      return { image, base, num, featured };
-    })
-    .sort((a, b) => {
-      if (a.featured !== b.featured) return a.featured ? -1 : 1;
-      if (a.featured) return a.base.localeCompare(b.base);
-      return a.num - b.num;
-    });
+const CASES_BY_SLUG = (() => {
+  const acc = {};
+  for (const [path, image] of Object.entries(CASE_IMAGES)) {
+    const match = path.match(/\/procedimientos\/([^/]+)\/([^/]+)$/);
+    if (!match) continue;
+    const [, slug, file] = match;
+    const base = file.replace(/\.\w+$/, "").toLowerCase();
+    const side = AFTER_TOKEN.test(base) ? "after" : BEFORE_TOKEN.test(base) ? "before" : null;
+    if (!side) continue;
+    const key = base.replace(AFTER_TOKEN, " ").replace(BEFORE_TOKEN, " ").replace(/\s+/g, " ").trim();
+    acc[slug] ??= { before: [], after: [] };
+    acc[slug][side].push({ key, base, image });
+  }
 
-const parseYouTubeId = (url) => url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/)?.[1] ?? null;
+  const bySortKey = (a, b) => a.key.localeCompare(b.key) || a.base.localeCompare(b.base);
+  return Object.fromEntries(
+    Object.entries(acc).map(([slug, sides]) => {
+      const before = sides.before.sort(bySortKey);
+      const after = sides.after.sort(bySortKey);
+      const pairs = Array.from({ length: Math.min(before.length, after.length) }, (_, k) => ({
+        n: String(k + 1).padStart(2, "0"),
+        before: before[k].image,
+        after: after[k].image,
+      }));
+      return [slug, pairs];
+    }),
+  );
+})();
 
 const PROCEDURE_LIST = [
   { slug: "facial-harmonization", icon: Aperture,
@@ -178,42 +190,117 @@ export const SEDES = [
   "New York, USA",
 ];
 
-const INTERVIEW_URLS = [
-  "https://www.youtube.com/watch?v=CfVz8swFrZ0&t=78s",
-  "https://www.youtube.com/watch?v=WjhflcAPAD0",
-  "https://www.youtube.com/watch?v=AUXMm9YuWSw",
-  "https://www.youtube.com/watch?v=VzjfroYgGGU",
-  "https://www.youtube.com/watch?v=CnoUmrBgL2M",
-  // odz8HwpHxik removed: the video owner disabled playback on other websites.
-  "https://www.youtube.com/watch?v=3XOwaCpJHdk",
-  "https://www.youtube.com/watch?v=zzIYie20l6U",
+/* Each entry is transcribed from the certificate it links to. `institution` is what the
+   list shows; the image is only opened on demand through the lightbox. */
+const CERTIFICATE_LIST = [
+  { file: "Licencia new york.jpeg", year: "2018",
+    institution: "The University of the State of New York · Education Department",
+    es: { title: "Licencia para ejercer Medicina y Cirugía en el Estado de Nueva York", meta: "Licencia N.º 296483" },
+    en: { title: "License to practice Medicine and Surgery in the State of New York", meta: "License No. 296483" } },
+  { file: "5.jpeg", year: "2018",
+    institution: "New York State Board of Regents · Committee on the Professions",
+    es: { title: "Homologación de la matrícula médica argentina en Nueva York", meta: "Licencia por endorsement" },
+    en: { title: "Endorsement of the Argentine medical license in New York", meta: "Licensure by endorsement" } },
+  { file: "Licencia espana.jpeg", year: "2021",
+    institution: "Ministerio de Universidades · Reino de España",
+    es: { title: "Homologación del título de Médico en España", meta: "Credencial /2021/H02075 · Madrid" },
+    en: { title: "Recognition of the medical degree in Spain", meta: "Credential /2021/H02075 · Madrid" } },
+  { file: "10.jpeg", year: "2025",
+    institution: "American Society of Plastic Surgeons",
+    es: { title: "Miembro · 10 años de membresía", meta: "Reconocimiento por trayectoria y estándares profesionales" },
+    en: { title: "Member · 10 years of membership", meta: "Recognition for career and professional standards" } },
+  { file: "6.jpeg", year: "2016",
+    institution: "Mount Sinai Beth Israel · New York",
+    es: { title: "Medical Staff · Assistant Attending, Departamento de Cirugía", meta: "Privilegios en Cirugía Plástica y Reconstructiva" },
+    en: { title: "Medical Staff · Assistant Attending, Department of Surgery", meta: "Plastic and Reconstructive Surgery privileges" } },
+  { file: "1.jpg", year: "2017",
+    institution: "Universidad de Buenos Aires · Facultad de Medicina",
+    es: { title: "Recertificación del título de Especialista en Cirugía Plástica Reparadora", meta: "Res. C.D. N.º 1406/02 · Res. C.S. N.º 4171/04" },
+    en: { title: "Recertification as Specialist in Reconstructive Plastic Surgery", meta: "Res. C.D. No. 1406/02 · Res. C.S. No. 4171/04" } },
+  { file: "11.jpeg", year: "2005",
+    institution: "Sociedad Argentina de Cirugía Plástica, Estética y Reparadora · SACPER",
+    es: { title: "Miembro Titular", meta: "Asociación Médica Argentina · Buenos Aires" },
+    en: { title: "Full Member", meta: "Argentine Medical Association · Buenos Aires" } },
+  { file: "12.jpeg", year: "1996",
+    institution: "Sociedad de Cirugía Plástica de Buenos Aires · AMA",
+    es: { title: "Miembro Titular", meta: "Asociación Médica Argentina · Buenos Aires" },
+    en: { title: "Full Member", meta: "Argentine Medical Association · Buenos Aires" } },
+  { file: "2.jpeg", year: "2021",
+    institution: "The American Board of Surgical Assistants",
+    es: { title: "Surgical Assistant · Certified (SA-C)", meta: "Certificación N.º 21-776" },
+    en: { title: "Surgical Assistant · Certified (SA-C)", meta: "Certification No. 21-776" } },
 ];
 
-export const INTERVIEWS = INTERVIEW_URLS.map((url, i) => ({
-  slug: `interview-${i + 1}`,
-  url,
-  youtubeId: parseYouTubeId(url),
-  es: { title: `Entrevista ${String(i + 1).padStart(2, "0")}` },
-  en: { title: `Interview ${String(i + 1).padStart(2, "0")}` },
+export const CERTIFICATES = CERTIFICATE_LIST.map((c, i) => ({
+  slug: `certificate-${i + 1}`,
+  image: certImage(c.file),
+  institution: c.institution,
+  year: c.year,
+  es: c.es,
+  en: c.en,
 }));
 
-export const CERTIFICATES = certEntriesSorted().map((entry, i) => {
-  const overrideTitle = CERT_TITLE_OVERRIDES[entry.base.trim().toLowerCase()];
-  return {
-    slug: `certificate-${i + 1}`,
-    image: entry.image,
-    featured: entry.featured,
-    es: { title: overrideTitle ?? `Certificado ${String(i + 1).padStart(2, "0")}` },
-    en: { title: overrideTitle ?? `Certificate ${String(i + 1).padStart(2, "0")}` },
-  };
-});
+/* Publications and the editorial-board appointment, transcribed from the scans in
+   ./assets/pappers. Several scans document the same article; each one appears once here. */
+const PAPER_LIST = [
+  { file: "1.jpeg", publisher: "Facial Plastic Surgery Clinics of North America · Elsevier",
+    title: "Forehead and Orbital Rim Remodeling",
+    authors: "Marcelo Di Maggio, MD",
+    ref: "Vol. 27, N.º 2 · 2019 · pp. 207–220",
+    doi: "10.1016/j.fsc.2019.01.007" },
+  { file: "9.jpeg", publisher: "The Journal of Craniofacial Surgery · Wolters Kluwer",
+    title: "Surgical Management of the Nose in Relation With the Fronto-Orbital Area to Change and Feminize the Eyes’ Expression",
+    authors: "M. R. Di Maggio, J. Nazar Anchorena, J. C. Dobarro",
+    ref: "2019 · Original Article",
+    doi: "10.1097/SCS.0000000000005411" },
+  { file: "3.jpeg", publisher: "The Journal of Craniofacial Surgery · Wolters Kluwer",
+    title: "Surgical Management of the Superior Lip as a Complement in Facial Features Remodeling Surgery",
+    authors: "M. Di Maggio, J. C. Dobarro, J. Nazar Anchorena",
+    ref: "2019 · Technical Strategy",
+    doi: "10.1097/SCS.0000000000005382" },
+  { file: "4.jpeg", publisher: "Aesthetic Surgery Journal · Oxford University Press",
+    title: "Facial Feminization Surgery Changes Perception of Patient Gender",
+    authors: "M. Fisher, S. M. Lu, K. Chen, B. Zhang, M. Di Maggio, J. P. Bradley",
+    ref: "Vol. 40, N.º 7 · Julio 2020 · pp. 703–709 · Editor’s Choice",
+    refEn: "Vol. 40, No. 7 · July 2020 · pp. 703–709 · Editor’s Choice",
+    doi: "10.1093/asj/sjz303" },
+  { file: "8.jpeg", publisher: "Plastic and Reconstructive Surgery · ASPS",
+    title: "Facial Recognition Neural Networks Confirm Success of Facial Feminization Surgery",
+    authors: "K. Chen, S. M. Lu, R. Cheng, M. Fisher, B. H. Zhang, M. Di Maggio, J. P. Bradley",
+    ref: "Vol. 145 · 2020 · p. 203",
+    doi: null },
+  { file: "10.jpeg", publisher: "Plastic and Reconstructive Surgery · Global Open",
+    title: "Evaluating the Success of Facial Feminization Surgery Through Artificial and Human Intelligence",
+    authors: "S. M. Lu, K. Chen, M. Fisher, R. Cheng, B. H. Zhang, M. Di Maggio, J. P. Bradley",
+    ref: "Vol. 7, N.º 8S-1 · Agosto 2019 · pp. 47–48",
+    refEn: "Vol. 7, No. 8S-1 · August 2019 · pp. 47–48",
+    doi: "10.1097/01.GOX.0000584468.14112.e3" },
+  { file: "5.jpeg", publisher: "Atlas of Operative Techniques in Gender Confirmation Surgery · Elsevier",
+    title: "Facial features remodeling and affirming surgery (FFRS)",
+    authors: "M. Di Maggio, E. Elena Scarafoni",
+    ref: "Capítulo 12 · 2023 · pp. 183–210",
+    refEn: "Chapter 12 · 2023 · pp. 183–210",
+    doi: "10.1016/B978-0-323-98377-8.00014-2" },
+  { file: "11.jpeg", publisher: "Plastic and Reconstructive Surgery · ASPS",
+    kind: "board",
+    title: "Partner Society Associate Editor · Editorial Board",
+    authors: "Marcelo Di Maggio, MD",
+    ref: "Tercer mandato · 2023–2026",
+    refEn: "Third term · 2023–2026",
+    doi: null },
+];
 
-export const PAPERS = numericFileOrder(PAPER_IMAGES).map((cover, i) => ({
+export const PAPERS = PAPER_LIST.map((p, i) => ({
   slug: `paper-${i + 1}`,
-  cover,
-  url: null,
-  es: { title: `Paper ${String(i + 1).padStart(2, "0")}` },
-  en: { title: `Paper ${String(i + 1).padStart(2, "0")}` },
+  cover: paperImage(p.file),
+  kind: p.kind ?? "article",
+  publisher: p.publisher,
+  title: p.title,
+  authors: p.authors,
+  doi: p.doi,
+  url: p.doi ? `https://doi.org/${p.doi}` : null,
+  es: { ref: p.ref },
+  en: { ref: p.refEn ?? p.ref },
 }));
 
 export const TESTIMONIALS = [
@@ -231,12 +318,7 @@ export const TESTIMONIALS = [
     en: "They took the time to explain everything. The result exceeded what I expected." },
 ];
 
-const INITIALS = ["M.G.", "L.P.", "A.R.", "S.T.", "C.M.", "J.L.", "V.B.", "N.F.",
-                  "D.S.", "R.C.", "P.A.", "E.M.", "F.D.", "K.V.", "T.O.", "B.H.",
-                  "G.N.", "H.Q.", "I.W.", "O.Z.", "U.Y.", "X.K."];
+/* Only the cases that actually have a before/after pair on disk. */
+export const casesFor = (slug) => CASES_BY_SLUG[slug] ?? [];
 
-export const casesFor = (index, count = 3) =>
-  Array.from({ length: count }, (_, k) => ({
-    n: String(k + 1).padStart(2, "0"),
-    initials: INITIALS[(index * 3 + k) % INITIALS.length],
-  }));
+export const PROCEDURES_WITH_CASES = PROCEDURES.filter((p) => casesFor(p.slug).length > 0);

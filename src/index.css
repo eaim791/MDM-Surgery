@@ -59,3 +59,7 @@ body {
 
 /* Procedure line art is black ink on transparent — invert it on dark backgrounds */
 .dark .proc-art { filter: invert(1); }
+
+/* Horizontal carousels scroll by drag/arrows — the native bar adds nothing */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
