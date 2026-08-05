@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import {
-  Menu, X, ChevronDown, ArrowDown, Mail, Instagram, Linkedin,
-  Facebook, Youtube, MapPin, Sun, Moon, Languages, Check, Star,
+  Menu, X, ChevronDown, ArrowDown, ArrowRight, Mail, Instagram, Linkedin,
+  Facebook, Youtube, MapPin, Sun, Moon, Languages, Check, Star, Play, Award, FileText, ZoomIn,
 } from "lucide-react";
 import { UI } from "./i18n.js";
 import heroVideoWebm from "./assets/hero.webm";
@@ -11,10 +11,10 @@ import heroPoster from "./assets/hero-poster.jpg";
 import heroMobileWebm from "./assets/hero-mobile.webm";
 import heroMobileMp4 from "./assets/hero-mobile.mp4";
 import heroMobilePoster from "./assets/hero-mobile-poster.jpg";
-import marceloPhoto from "./assets/marcelodimaggio.png";
+import marceloPhoto from "./assets/marcelodimaggio.jpeg";
 import {
   PROCEDURES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
-  LOCATIONS, SEDES, TESTIMONIALS, casesFor,
+  LOCATIONS, SEDES, TESTIMONIALS, casesFor, INTERVIEWS, CERTIFICATES, PAPERS,
 } from "./data.js";
 
 /* --------------------------------- HELPERS -------------------------------- */
@@ -25,11 +25,20 @@ const XLogo = ({ size = 15 }) => (
   </svg>
 );
 
-const initialsOf = (name) =>
-  name.replace(/^(Dra?\.)\s*/, "").split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-
 const CONTACT_EMAIL = "info@mdmsurgery.com";
 const INSTAGRAM_HANDLE = "@mdmsurgery";
+const DEVELOPER_PORTFOLIO_URL = ""; // TODO: add portfolio link here
+const FORMSPREE_ENDPOINT = "https://formspree.io/f/xnpaaroa";
+const TEST_PAGE_SIZE = 2;
+
+async function submitToFormspree(payload) {
+  const res = await fetch(FORMSPREE_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Formspree request failed");
+}
 
 const SOCIAL_LINKS = {
   facebook: "https://www.facebook.com/mdm.marcelodimaggio",
@@ -150,6 +159,32 @@ function Slogan({ text }) {
   );
 }
 
+function RailDecor({ side, progress, dotTop }) {
+  return (
+    <div className={`pointer-events-none fixed inset-y-0 ${side === "left" ? "left-[17rem]" : "right-8"} z-20 hidden 2xl:block`}>
+      <div className="absolute inset-y-0 left-0 w-px bg-[var(--line)]" />
+      <motion.div style={{ scaleY: progress }} className="absolute inset-x-0 top-0 h-full w-px origin-top bg-[var(--ink)] opacity-25" />
+      <span aria-hidden="true" style={{ writingMode: "vertical-rl" }}
+        className="absolute left-1/2 top-16 -translate-x-1/2 whitespace-nowrap text-[9px] uppercase tracking-[0.35em] text-[var(--faint)] opacity-60">
+        Surgery &amp; Team
+      </span>
+      <motion.span aria-hidden="true" style={{ top: dotTop }}
+        className="absolute left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-[var(--ink)]" />
+    </div>
+  );
+}
+
+function ScrollSideDecor() {
+  const { scrollYProgress } = useScroll();
+  const dotTop = useTransform(scrollYProgress, [0, 1], ["4%", "92%"]);
+  return (
+    <>
+      <RailDecor side="left" progress={scrollYProgress} dotTop={dotTop} />
+      <RailDecor side="right" progress={scrollYProgress} dotTop={dotTop} />
+    </>
+  );
+}
+
 /* ---------------------------------- APP ----------------------------------- */
 
 export default function App() {
@@ -165,6 +200,8 @@ export default function App() {
   const [cSent, setCSent] = useState(false);
   const [cErr, setCErr] = useState("");
   const [sent, setSent] = useState(false);
+  const [testPage, setTestPage] = useState(0);
+  const [lightbox, setLightbox] = useState(null);
   const [pastHero, setPastHero] = useState(false);
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches
@@ -210,6 +247,13 @@ export default function App() {
     localStorage.setItem("mdm-lang", lang);
   }, [lang]);
 
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e) => { if (e.key === "Escape") setLightbox(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox]);
+
   const scrollTo = (id, closeMenu = true) => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
@@ -226,11 +270,18 @@ export default function App() {
     }, 30);
   };
 
-  const submitEnquiry = (e) => {
+  const submitEnquiry = async (e) => {
     e.preventDefault();
     if (!cForm.name.trim() || !cForm.email.trim() || !cForm.msg.trim()) { setCErr(t.contact.required); return; }
-    setCErr(""); setCSent(true);
-    setTimeout(() => setCSent(false), 6000);
+    setCErr("");
+    try {
+      await submitToFormspree({ form: "contact", name: cForm.name.trim(), email: cForm.email.trim(), message: cForm.msg.trim() });
+      setCSent(true);
+      setCForm({ name: "", email: "", msg: "" });
+      setTimeout(() => setCSent(false), 6000);
+    } catch {
+      setCErr(t.contact.sendError);
+    }
   };
 
   const goToResult = (slug) => {
@@ -248,13 +299,16 @@ export default function App() {
       ] },
     { id: "procedures", label: t.nav.procedures },
     { id: "resultados", label: t.nav.resultados },
+    { id: "interviews", label: t.nav.interviews },
+    { id: "certs", label: t.nav.certs },
+    { id: "papers", label: t.nav.papers },
     { id: "testimonios", label: t.nav.testimonios },
     { id: "locations", label: t.nav.locations },
     { id: "contact", label: t.nav.contact },
   ];
 
   useEffect(() => {
-    const ids = ["home", "areas", "team", "procedures", "resultados", "testimonios", "locations", "contact"];
+    const ids = ["home", "areas", "team", "procedures", "resultados", "interviews", "certs", "papers", "testimonios", "locations", "contact"];
     const subs = ["dr-di-maggio", "surgical-team", "assistants"];
     const ob = new IntersectionObserver(
       (es) => es.forEach((e) => {
@@ -271,14 +325,21 @@ export default function App() {
     return () => ob.disconnect();
   }, []);
 
-  const submitTestimonial = (e) => {
+  const submitTestimonial = async (e) => {
     e.preventDefault();
     if (!form.initials.trim() || !form.msg.trim()) { setFormErr(t.test.required); return; }
     setFormErr("");
-    setExtra((p) => [...p, { initials: form.initials.trim().toUpperCase(), place: form.place.trim(), text: form.msg.trim(), stars: form.stars }]);
+    const entry = { initials: form.initials.trim().toUpperCase(), place: form.place.trim(), text: form.msg.trim(), stars: form.stars };
+    setExtra((p) => [...p, entry]);
+    setTestPage(Math.floor((TESTIMONIALS.length + extra.length) / TEST_PAGE_SIZE));
     setForm({ initials: "", place: "", msg: "", stars: 5 });
     setSent(true);
     setTimeout(() => setSent(false), 6000);
+    try {
+      await submitToFormspree({ form: "testimonial", initials: entry.initials, place: entry.place, message: entry.text, stars: entry.stars });
+    } catch {
+      // Shown locally regardless; the email notification is best-effort.
+    }
   };
 
   const Toggles = ({ compact }) => (
@@ -360,6 +421,8 @@ export default function App() {
         .font-sans { font-family: 'Inter', system-ui, sans-serif; }
       `}</style>
 
+      <ScrollSideDecor />
+
       {/* Sidebar — always visible on desktop */}
       <aside className="fixed left-0 top-0 z-30 hidden h-screen w-60 overflow-y-auto border-r border-[var(--line)] bg-[var(--surface)] px-7 py-8 lg:block">
         {Sidebar}
@@ -395,6 +458,24 @@ export default function App() {
               {Sidebar}
             </motion.aside>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Lightbox — certificates & papers */}
+      <AnimatePresence>
+        {lightbox && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setLightbox(null)}
+            className="fixed inset-0 z-[100] flex cursor-zoom-out items-center justify-center bg-black/85 p-6">
+            <motion.img initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              src={lightbox.src} alt={lightbox.alt} onClick={(e) => e.stopPropagation()}
+              className="max-h-full max-w-full cursor-zoom-out rounded-lg object-contain shadow-2xl" />
+            <button onClick={() => setLightbox(null)} aria-label={t.a11y.close}
+              className="absolute right-5 top-5 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-white/10 text-white transition-colors duration-200 hover:bg-white/20">
+              <X size={20} strokeWidth={1.5} />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -538,23 +619,23 @@ export default function App() {
             </motion.div>
 
             <motion.div id="dr-di-maggio" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}
-              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-8 md:grid-cols-[minmax(0,280px)_1fr] md:items-start">
+              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-8 md:grid-cols-[minmax(0,340px)_1fr] md:items-center">
               <motion.div variants={fadeUp} className="overflow-hidden rounded-2xl">
                 <motion.div whileHover={{ scale: 1.05 }} transition={{ duration: 0.4, ease: "easeOut" }}>
-                  <img src={marceloPhoto} alt={LEAD.name} className="h-72 w-full object-cover" />
+                  <img src={marceloPhoto} alt={LEAD.name} className="h-[26rem] w-full object-cover sm:h-[32rem]" />
                 </motion.div>
               </motion.div>
               <motion.div variants={fadeUp}>
                 <div className="flex flex-wrap items-baseline gap-3">
-                  <h3 className="font-display text-2xl font-normal text-[var(--ink)]">{LEAD.name}</h3>
-                  <span className="text-[12px] tracking-wide text-[var(--faint)]">{LEAD[lang].years}</span>
+                  <h3 className="font-display text-3xl font-normal text-[var(--ink)] sm:text-4xl">{LEAD.name}</h3>
+                  <span className="text-[13px] tracking-wide text-[var(--faint)]">{LEAD[lang].years}</span>
                 </div>
-                <p className="mt-1 text-[12px] uppercase tracking-[0.12em] text-[var(--muted)]">{LEAD[lang].role}</p>
-                <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-[var(--muted)]">{LEAD[lang].bio}</p>
-                <ul className="mt-5 space-y-1.5">
+                <p className="mt-2 text-[13px] uppercase tracking-[0.12em] text-[var(--muted)] sm:text-[14px]">{LEAD[lang].role}</p>
+                <p className="mt-5 max-w-2xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{LEAD[lang].bio}</p>
+                <ul className="mt-6 space-y-2">
                   {LEAD[lang].creds.map((c) => (
-                    <li key={c} className="flex items-start gap-2 text-[13px] text-[var(--muted)]">
-                      <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-[var(--faint)]" />{c}
+                    <li key={c} className="flex items-start gap-2 text-[14px] text-[var(--muted)]">
+                      <span className="mt-2 h-1 w-1 flex-shrink-0 rounded-full bg-[var(--faint)]" />{c}
                     </li>
                   ))}
                 </ul>
@@ -574,21 +655,12 @@ export default function App() {
                 <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.team.specBody}</p>
               </motion.div>
               <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
-                className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {SPECIALISTS.map((sp) => (
                   <motion.div key={sp.name} variants={fadeUp} whileHover={{ scale: 1.02 }} transition={{ duration: 0.2 }}
-                    className="group flex items-center gap-4 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-4 transition-shadow duration-200 hover:shadow-[0_8px_24px_var(--shadow)]">
-                    <div className="h-[72px] w-[72px] flex-shrink-0 overflow-hidden rounded-lg">
-                      <PhotoBox label={initialsOf(sp.name)} className="h-full w-full" textClass="text-lg" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-display text-[16px] font-normal leading-snug text-[var(--ink)]">{sp.name}</h3>
-                      <p className="mt-0.5 text-[11px] leading-snug text-[var(--faint)]">{sp[lang]}</p>
-                      <div className="mt-2.5 flex gap-1.5">
-                        <IconLink Icon={Instagram} label={`Instagram — ${sp.name}`} small />
-                        <IconLink Icon={Linkedin} label={`LinkedIn — ${sp.name}`} small />
-                      </div>
-                    </div>
+                    className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 transition-shadow duration-200 hover:shadow-[0_10px_30px_var(--shadow)]">
+                    <h3 className="font-display text-lg font-normal text-[var(--ink)]">{sp.name}</h3>
+                    <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted)]">{sp[lang]}</p>
                   </motion.div>
                 ))}
               </motion.div>
@@ -709,16 +781,16 @@ export default function App() {
                                 {t.res.close}
                               </button>
                             </div>
-                            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                              {[t.res.before, t.res.after].map((lbl) => (
-                                <figure key={lbl} className="overflow-hidden rounded-xl border border-[var(--line)]">
-                                  <PhotoBox label={cases[sel].initials} className="h-56 w-full" textClass="text-3xl" />
-                                  <figcaption className="border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                                    {lbl}
-                                  </figcaption>
-                                </figure>
-                              ))}
-                            </div>
+                            <figure className="mt-4 overflow-hidden rounded-xl border border-[var(--line)]">
+                              <PhotoBox label={cases[sel].initials} className="h-64 w-full sm:h-80" textClass="text-4xl" />
+                              <figcaption className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                                <span>{t.res.before} / {t.res.after}</span>
+                                <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
+                                  className="normal-case tracking-normal text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
+                                  {t.res.viewIg}
+                                </a>
+                              </figcaption>
+                            </figure>
                           </div>
                         </motion.div>
                       )}
@@ -733,6 +805,108 @@ export default function App() {
             </div>
           </section>
 
+          {/* ============ ENTREVISTAS ============ */}
+          <section id="interviews" className="scroll-mt-24 pt-24">
+            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+              <Eyebrow>{t.interviews.eyebrow}</Eyebrow>
+              <SectionTitle>{t.interviews.title}</SectionTitle>
+              <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.interviews.body}</p>
+            </motion.div>
+            <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
+              className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {INTERVIEWS.map((v) => (
+                <motion.div key={v.slug} variants={fadeUp} whileHover={{ scale: 1.02 }} transition={{ duration: 0.2 }}
+                  className="flex flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] transition-shadow duration-200 hover:shadow-[0_10px_30px_var(--shadow)]">
+                  <div className="aspect-video w-full overflow-hidden bg-[var(--photo)]">
+                    {v.youtubeId ? (
+                      <iframe className="h-full w-full" src={`https://www.youtube.com/embed/${v.youtubeId}`}
+                        title={v[lang].title} loading="lazy"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <Play size={28} strokeWidth={1.3} className="text-[var(--photo-ink)] opacity-70" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-display text-[15px] font-normal leading-snug text-[var(--ink)]">{v[lang].title}</h3>
+                    {v.url && (
+                      <a href={v.url} target="_blank" rel="noopener noreferrer"
+                        className="mt-1 inline-block text-[11px] uppercase tracking-[0.14em] text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
+                        {t.interviews.watch}
+                      </a>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </motion.div>
+          </section>
+
+          {/* ============ CERTIFICADOS ============ */}
+          <section id="certs" className="scroll-mt-24 pt-24">
+            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+              <Eyebrow>{t.certs.eyebrow}</Eyebrow>
+              <SectionTitle>{t.certs.title}</SectionTitle>
+              <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.certs.body}</p>
+            </motion.div>
+            <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
+              className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {CERTIFICATES.map((c) => (
+                <motion.div key={c.slug} variants={fadeUp} whileHover={{ scale: 1.02 }} transition={{ duration: 0.2 }}
+                  className={`self-start ${c.featured ? "col-span-2" : ""}`}>
+                  <button type="button" onClick={() => c.image && setLightbox({ src: c.image, alt: c[lang].title })}
+                    className={`group relative block aspect-[3/4] w-full cursor-zoom-in overflow-hidden rounded-xl border bg-[var(--surface)] ${c.featured ? "border-2 border-[var(--ink)] shadow-[0_14px_36px_var(--shadow)]" : "border-[var(--line)]"}`}>
+                    {c.image ? (
+                      <img src={c.image} alt={c[lang].title}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center bg-[var(--photo)]">
+                        <Award size={26} strokeWidth={1.3} className="text-[var(--photo-ink)] opacity-70" />
+                      </div>
+                    )}
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/25">
+                      <ZoomIn size={c.featured ? 30 : 22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                    </span>
+                  </button>
+                  {c.featured && (
+                    <p className="mt-2 text-center text-[11px] uppercase tracking-[0.18em] text-[var(--ink)]">{c[lang].title}</p>
+                  )}
+                </motion.div>
+              ))}
+            </motion.div>
+          </section>
+
+          {/* ============ PAPERS ============ */}
+          <section id="papers" className="scroll-mt-24 pt-24">
+            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+              <Eyebrow>{t.papers.eyebrow}</Eyebrow>
+              <SectionTitle>{t.papers.title}</SectionTitle>
+              <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.papers.body}</p>
+            </motion.div>
+            <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
+              className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {PAPERS.map((p) => (
+                <motion.div key={p.slug} variants={fadeUp} whileHover={{ scale: 1.02 }} transition={{ duration: 0.2 }}>
+                  <button type="button" onClick={() => p.cover && setLightbox({ src: p.cover, alt: p[lang].title })}
+                    className="group relative block aspect-[2/3] w-full cursor-zoom-in overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]">
+                    {p.cover ? (
+                      <img src={p.cover} alt={p[lang].title}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center bg-[var(--photo)]">
+                        <FileText size={26} strokeWidth={1.3} className="text-[var(--photo-ink)] opacity-70" />
+                      </div>
+                    )}
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/25">
+                      <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                    </span>
+                  </button>
+                </motion.div>
+              ))}
+            </motion.div>
+          </section>
+
           {/* ============ TESTIMONIOS ============ */}
           <section id="testimonios" className="scroll-mt-24 pt-24">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
@@ -740,25 +914,45 @@ export default function App() {
               <SectionTitle>{t.test.title}</SectionTitle>
             </motion.div>
 
-            <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}
-              className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {[...TESTIMONIALS.map((x) => ({ initials: x.initials, place: x.place, text: x[lang], stars: x.stars })), ...extra].map((x, i) => (
-                <motion.figure key={`${x.initials}-${i}`} variants={fadeUp}
-                  className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6">
-                  <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full">
-                      <PhotoBox label={x.initials} className="h-full w-full" textClass="text-sm" />
+            {(() => {
+              const all = [...TESTIMONIALS.map((x) => ({ initials: x.initials, place: x.place, text: x[lang], stars: x.stars })), ...extra];
+              const totalPages = Math.max(1, Math.ceil(all.length / TEST_PAGE_SIZE));
+              const page = ((testPage % totalPages) + totalPages) % totalPages;
+              const visible = all.slice(page * TEST_PAGE_SIZE, page * TEST_PAGE_SIZE + TEST_PAGE_SIZE);
+              return (
+                <>
+                  <motion.div key={page} variants={container} initial="hidden" animate="visible"
+                    className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {visible.map((x, i) => (
+                      <motion.figure key={`${x.initials}-${page}-${i}`} variants={fadeUp}
+                        className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6">
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full">
+                            <PhotoBox label={x.initials} className="h-full w-full" textClass="text-sm" />
+                          </div>
+                          <figcaption>
+                            <p className="font-display text-[16px] font-normal text-[var(--ink)]">{x.initials}</p>
+                            {x.place && <p className="text-[11px] text-[var(--faint)]">{x.place}</p>}
+                          </figcaption>
+                        </div>
+                        <div className="mt-4"><Stars value={x.stars ?? 5} t={t} /></div>
+                        <blockquote className="mt-3 text-[13px] leading-relaxed italic text-[var(--muted)]">“{x.text}”</blockquote>
+                      </motion.figure>
+                    ))}
+                  </motion.div>
+                  {totalPages > 1 && (
+                    <div className="mt-5 flex items-center justify-end gap-3">
+                      <span className="text-[11px] tracking-wide text-[var(--faint)]">{page + 1} / {totalPages}</span>
+                      <button type="button" onClick={() => setTestPage((p) => p + 1)}
+                        aria-label={t.test.next} title={t.test.next}
+                        className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)]">
+                        <ArrowRight size={16} strokeWidth={1.5} />
+                      </button>
                     </div>
-                    <figcaption>
-                      <p className="font-display text-[16px] font-normal text-[var(--ink)]">{x.initials}</p>
-                      {x.place && <p className="text-[11px] text-[var(--faint)]">{x.place}</p>}
-                    </figcaption>
-                  </div>
-                  <div className="mt-4"><Stars value={x.stars ?? 5} t={t} /></div>
-                  <blockquote className="mt-3 text-[13px] leading-relaxed italic text-[var(--muted)]">“{x.text}”</blockquote>
-                </motion.figure>
-              ))}
-            </motion.div>
+                  )}
+                </>
+              );
+            })()}
 
             {/* Form */}
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }} variants={fadeUp}
@@ -911,6 +1105,17 @@ export default function App() {
             </div>
             <p className="mt-10 text-[11px] tracking-wide text-[var(--faint)]">
               © 2026 MDM Surgery — Marcelo Di Maggio &amp; Team.
+            </p>
+            <p className="mt-2 text-[11px] tracking-wide text-[var(--faint)]">
+              {t.footer.madeBy}:{" "}
+              {DEVELOPER_PORTFOLIO_URL ? (
+                <a href={DEVELOPER_PORTFOLIO_URL} target="_blank" rel="noopener noreferrer"
+                  className="underline decoration-dotted underline-offset-2 transition-colors hover:text-[var(--ink)]">
+                  Portfolio
+                </a>
+              ) : (
+                <span className="italic opacity-70">Portfolio (próximamente)</span>
+              )}
             </p>
           </footer>
         </div>

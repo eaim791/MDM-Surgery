@@ -7,6 +7,39 @@ import {
 const ART = import.meta.glob("./assets/proc/*.png", { eager: true, import: "default" });
 const artFor = (slug) => ART[`./assets/proc/${slug}.png`];
 
+const CERT_IMAGES = import.meta.glob("./assets/certificados/*.{jpg,jpeg,png}", { eager: true, import: "default" });
+const PAPER_IMAGES = import.meta.glob("./assets/pappers/*.{jpg,jpeg,png}", { eager: true, import: "default" });
+
+const numericFileOrder = (globObj) =>
+  Object.entries(globObj).sort(([a], [b]) => {
+    const na = parseInt(a.match(/(\d+)\.\w+$/)?.[1] ?? "0", 10);
+    const nb = parseInt(b.match(/(\d+)\.\w+$/)?.[1] ?? "0", 10);
+    return na - nb;
+  }).map(([, image]) => image);
+
+const CERT_TITLE_OVERRIDES = {
+  "licencia espana": "Licencia España",
+  "licencia new york": "Licencia New York",
+};
+
+const fileBaseName = (path) => path.split("/").pop().replace(/\.\w+$/, "");
+
+const certEntriesSorted = () =>
+  Object.entries(CERT_IMAGES)
+    .map(([path, image]) => {
+      const base = fileBaseName(path);
+      const num = parseInt(base.match(/^(\d+)$/)?.[1] ?? "", 10);
+      const featured = Number.isNaN(num);
+      return { image, base, num, featured };
+    })
+    .sort((a, b) => {
+      if (a.featured !== b.featured) return a.featured ? -1 : 1;
+      if (a.featured) return a.base.localeCompare(b.base);
+      return a.num - b.num;
+    });
+
+const parseYouTubeId = (url) => url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/)?.[1] ?? null;
+
 const PROCEDURE_LIST = [
   { slug: "facial-harmonization", icon: Aperture,
     es: { name: "Armonización Facial", desc: "Evaluación y remodelación del rostro como conjunto, combinando varios gestos quirúrgicos en un mismo plan para equilibrar las proporciones.", duration: "Variable según el plan", recovery: "2 a 3 semanas" },
@@ -144,6 +177,44 @@ export const SEDES = [
   "Madrid, España",
   "New York, USA",
 ];
+
+const INTERVIEW_URLS = [
+  "https://www.youtube.com/watch?v=CfVz8swFrZ0&t=78s",
+  "https://www.youtube.com/watch?v=WjhflcAPAD0",
+  "https://www.youtube.com/watch?v=AUXMm9YuWSw",
+  "https://www.youtube.com/watch?v=VzjfroYgGGU",
+  "https://www.youtube.com/watch?v=CnoUmrBgL2M",
+  // odz8HwpHxik removed: the video owner disabled playback on other websites.
+  "https://www.youtube.com/watch?v=3XOwaCpJHdk",
+  "https://www.youtube.com/watch?v=zzIYie20l6U",
+];
+
+export const INTERVIEWS = INTERVIEW_URLS.map((url, i) => ({
+  slug: `interview-${i + 1}`,
+  url,
+  youtubeId: parseYouTubeId(url),
+  es: { title: `Entrevista ${String(i + 1).padStart(2, "0")}` },
+  en: { title: `Interview ${String(i + 1).padStart(2, "0")}` },
+}));
+
+export const CERTIFICATES = certEntriesSorted().map((entry, i) => {
+  const overrideTitle = CERT_TITLE_OVERRIDES[entry.base.trim().toLowerCase()];
+  return {
+    slug: `certificate-${i + 1}`,
+    image: entry.image,
+    featured: entry.featured,
+    es: { title: overrideTitle ?? `Certificado ${String(i + 1).padStart(2, "0")}` },
+    en: { title: overrideTitle ?? `Certificate ${String(i + 1).padStart(2, "0")}` },
+  };
+});
+
+export const PAPERS = numericFileOrder(PAPER_IMAGES).map((cover, i) => ({
+  slug: `paper-${i + 1}`,
+  cover,
+  url: null,
+  es: { title: `Paper ${String(i + 1).padStart(2, "0")}` },
+  en: { title: `Paper ${String(i + 1).padStart(2, "0")}` },
+}));
 
 export const TESTIMONIALS = [
   { initials: "M.G.", place: "Buenos Aires", stars: 5,
