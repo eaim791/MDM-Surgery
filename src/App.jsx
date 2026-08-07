@@ -233,6 +233,7 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("mdm-theme") || "light");
   const [lang, setLang] = useState(() => localStorage.getItem("mdm-lang") || "es");
   const [openCase, setOpenCase] = useState({});
+  const [openAngle, setOpenAngle] = useState({});
   const [extra, setExtra] = useState([]);
   const [form, setForm] = useState({ initials: "", place: "", msg: "", stars: 5 });
   const [cForm, setCForm] = useState({ name: "", email: "", msg: "" });
@@ -797,22 +798,28 @@ export default function App() {
               <SectionTitle>{t.proc.title}</SectionTitle>
             </motion.div>
             <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
-              className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {PROCEDURES.map((p) => (
-                <motion.div key={p.slug} variants={fadeUp} whileHover={{ scale: 1.02 }} transition={{ duration: 0.2 }}
-                  className="group relative flex flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 transition-shadow duration-200 hover:shadow-[0_10px_30px_var(--shadow)]">
+                <motion.div key={p.slug} variants={fadeUp} whileHover={{ y: -3 }} transition={{ duration: 0.2 }}
+                  className="group relative flex flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5 transition-shadow duration-200 hover:shadow-[0_10px_30px_var(--shadow)]">
 
                   {/* Artwork revealed faintly on hover */}
-                  <img src={p.art} alt="" aria-hidden="true"
-                    className="proc-art pointer-events-none absolute -bottom-6 -right-6 w-44 opacity-0 transition-opacity duration-500 group-hover:opacity-[0.09]" />
+                  {p.art && (
+                    <img src={p.art} alt="" aria-hidden="true"
+                      className="proc-art pointer-events-none absolute -bottom-6 -right-6 w-36 opacity-0 transition-opacity duration-500 group-hover:opacity-[0.09]" />
+                  )}
 
                   <div className="relative flex flex-1 flex-col">
-                    <img src={p.art} alt="" aria-hidden="true"
-                      className="proc-art h-14 w-auto max-w-[72px] object-contain object-left" />
-                    <h3 className="mt-4 font-display text-[18px] font-normal leading-snug text-[var(--ink)]">{p[lang].name}</h3>
-                    <p className="mt-2 text-[13px] leading-relaxed text-[var(--muted)]">{p[lang].desc}</p>
+                    {p.art ? (
+                      <img src={p.art} alt="" aria-hidden="true"
+                        className="proc-art h-10 w-auto max-w-[56px] object-contain object-left" />
+                    ) : (
+                      <p.icon size={26} strokeWidth={1.2} aria-hidden="true" className="h-10 text-[var(--ink)]" />
+                    )}
+                    <h3 className="mt-3 font-display text-[16px] font-normal leading-snug text-[var(--ink)]">{p[lang].name}</h3>
+                    <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted)]">{p[lang].desc}</p>
 
-                    <dl className="mt-4 space-y-1.5 border-t border-[var(--line)] pt-4 text-[12px]">
+                    <dl className="mt-3 space-y-1 border-t border-[var(--line)] pt-3 text-[11px]">
                       <div className="flex justify-between gap-3">
                         <dt className="text-[var(--faint)]">{t.proc.duration}</dt>
                         <dd className="text-right text-[var(--ink)]">{p[lang].duration}</dd>
@@ -823,9 +830,9 @@ export default function App() {
                       </div>
                     </dl>
 
-                    <div className="mt-5 flex flex-1 flex-col justify-end gap-2">
+                    <div className="mt-4 flex flex-1 flex-col justify-end gap-1.5">
                       <button type="button" onClick={() => goToResult(p.slug)}
-                        className="w-full cursor-pointer border border-[var(--line)] px-4 py-2.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)] transition-colors duration-200 hover:border-[var(--ink)]">
+                        className="w-full cursor-pointer border border-[var(--line)] px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-[var(--ink)] transition-colors duration-200 hover:border-[var(--ink)]">
                         {t.proc.cta}
                       </button>
                       <AnimatePresence>
@@ -840,7 +847,7 @@ export default function App() {
                         )}
                       </AnimatePresence>
                       <button type="button" onClick={() => askAbout(p[lang].name)}
-                        className="w-full cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-4 py-2.5 text-[10px] uppercase tracking-[0.16em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85">
+                        className="w-full cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85">
                         {t.proc.ask}
                       </button>
                     </div>
@@ -898,34 +905,70 @@ export default function App() {
                                 {t.res.close}
                               </button>
                             </div>
-                            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                              {[
-                                { caption: t.res.before, src: cases[sel].before },
-                                { caption: t.res.after, src: cases[sel].after },
-                              ].map(({ caption, src }) => (
-                                <figure key={caption} className="overflow-hidden rounded-xl border border-[var(--line)]">
-                                  <button type="button"
-                                    onClick={() => setLightbox({ src, alt: `${p[lang].name} · ${caption}`, watermark: cases[sel].watermark })}
-                                    className="group relative block h-64 w-full cursor-zoom-in overflow-hidden bg-[var(--photo)] sm:h-96">
-                                    <img src={src} alt={`${p[lang].name} · ${caption}`} loading="lazy"
-                                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                                    {cases[sel].watermark && <Watermark />}
-                                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
-                                      <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                            {(() => {
+                              const kase = cases[sel];
+                              const ai = Math.min(openAngle[`${p.slug}-${sel}`] ?? 0, kase.angles.length - 1);
+                              const angle = kase.angles[ai];
+                              return (
+                                <>
+                                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                    {[
+                                      { caption: t.res.before, src: angle.before },
+                                      { caption: t.res.after, src: angle.after },
+                                    ].map(({ caption, src }) => (
+                                      <figure key={caption} className="overflow-hidden rounded-xl border border-[var(--line)]">
+                                        <button type="button"
+                                          onClick={() => setLightbox({ src, alt: `${p[lang].name} · ${caption}`, watermark: kase.watermark })}
+                                          className="group relative block aspect-[4/5] w-full cursor-zoom-in overflow-hidden bg-[var(--photo)]">
+                                          <img src={src} alt={`${p[lang].name} · ${caption}`} loading="lazy"
+                                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                          {kase.watermark && <Watermark />}
+                                          <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
+                                            <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                                          </span>
+                                        </button>
+                                        <figcaption className="border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                                          {caption}
+                                        </figcaption>
+                                      </figure>
+                                    ))}
+                                  </div>
+
+                                  {/* Other shots of the same patient */}
+                                  {kase.angles.length > 1 && (
+                                    <div className="mt-4">
+                                      <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.angles}</p>
+                                      <div className="mt-3 flex flex-wrap gap-3">
+                                        {kase.angles.map((a, k) => (
+                                          <button key={k} type="button"
+                                            onClick={() => setOpenAngle((prev) => ({ ...prev, [`${p.slug}-${sel}`]: k }))}
+                                            aria-pressed={k === ai} aria-label={`${t.res.angle} ${k + 1}`}
+                                            className={`relative h-16 w-16 cursor-pointer overflow-hidden rounded-lg border transition-colors duration-200 ${
+                                              k === ai ? "border-[var(--ink)]" : "border-[var(--line)] opacity-70 hover:opacity-100"}`}>
+                                            <img src={a.after} alt="" aria-hidden="true" loading="lazy"
+                                              className="h-full w-full object-cover" />
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
+                                    className="group mt-6 flex items-center justify-between gap-4 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-5 py-4 transition-[border-color,box-shadow] duration-300 ease-out hover:border-[var(--rule)] hover:shadow-[0_10px_26px_var(--shadow)]">
+                                    <span className="flex items-center gap-3">
+                                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-300 group-hover:border-[var(--rule)] group-hover:bg-[var(--chip)] group-hover:text-[var(--ink)]">
+                                        <Instagram size={17} strokeWidth={1.5} />
+                                      </span>
+                                      <span className="font-display text-[16px] leading-snug text-[var(--ink)] sm:text-[18px]">
+                                        {t.res.viewIg}
+                                      </span>
                                     </span>
-                                  </button>
-                                  <figcaption className="border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                                    {caption}
-                                  </figcaption>
-                                </figure>
-                              ))}
-                            </div>
-                            <div className="mt-3 text-right">
-                              <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
-                                className="text-[11px] text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
-                                {t.res.viewIg}
-                              </a>
-                            </div>
+                                    <ArrowRight size={18} strokeWidth={1.4}
+                                      className="flex-shrink-0 text-[var(--faint)] transition-[transform,color] duration-300 ease-out group-hover:translate-x-1.5 group-hover:text-[var(--ink)]" />
+                                  </a>
+                                </>
+                              );
+                            })()}
                           </div>
                         </motion.div>
                       )}

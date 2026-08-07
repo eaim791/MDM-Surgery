@@ -1,6 +1,6 @@
 import {
   Aperture, Scan, Triangle, Eye, Flower2, Hexagon, MoveUp, Wind,
-  Focus, Circle, Smile, Activity, Feather, PersonStanding,
+  Focus, Circle, Smile, Activity, Feather, PersonStanding, Sparkles, Gem,
   Receipt, Hotel, Plane, Headphones,
 } from "lucide-react";
 
@@ -10,57 +10,65 @@ const artFor = (slug) => ART[`./assets/proc/${slug}.png`];
 const CERT_IMAGES = import.meta.glob("./assets/certificados/*.{jpg,jpeg,png}", { eager: true, import: "default" });
 const PAPER_IMAGES = import.meta.glob("./assets/pappers/*.{jpg,jpeg,png}", { eager: true, import: "default" });
 
-const CASE_IMAGES = import.meta.glob("./assets/procedimientos/*/*.{jpg,jpeg,png,webp}", { eager: true, import: "default" });
+const CASE_IMAGES = import.meta.glob("./assets/procedimientos/*/*/*.{jpg,jpeg,png,webp}", { eager: true, import: "default" });
 
 const imageByFile = (globObj, folder) => (file) => globObj[`./assets/${folder}/${file}`];
 const certImage = imageByFile(CERT_IMAGES, "certificados");
 const paperImage = imageByFile(PAPER_IMAGES, "pappers");
 
-/* Before/after photos live in ./assets/procedimientos/<slug>/. File names are free-form;
-   the only convention is that each one carries an "antes"/"before" or "despues"/"dsp"/"after"
-   token. Both sides are sorted by the rest of the name so the pairs line up even when the
-   two files are not spelled identically. */
+/* Photos live in ./assets/procedimientos/<slug>/<case>/, one folder per case. Inside a case
+   folder every file carries an "antes"/"before" or "despues"/"dsp"/"after" token; a case can
+   hold several shots of the same patient (antes-1 + despues-1, antes-2 + despues-2 …), which
+   the UI shows as switchable angles. Both sides are sorted by name so the angles line up. */
 const AFTER_TOKEN = /(despu[eé]s|dsp|after)/;
 const BEFORE_TOKEN = /(antes|before)/;
 
-/* Folders whose photos were already published with the MDM logo burned into the image.
-   Every other folder gets the logo drawn over the photo by the UI instead. Checked file by
-   file — each of these folders is uniform, so if you drop in a photo from another source,
-   move its folder in or out of this list. */
-const SLUGS_WITH_BURNED_LOGO = new Set([
-  "feminization",
-  "forehead-orbital",
-  "upper-lip-lift",
-  "body-remodeling",
+/* Only the first few cases per procedure are published. */
+const MAX_CASES = 3;
+
+/* The UI draws the MDM logo over every case photo, except the few that still carry a full,
+   readable logo of their own — reframing the photos to 4:5 cropped it out of most of them.
+   Add a "<slug>/<case>" key here only when a case already shows the complete logo. */
+const CASES_WITH_OWN_LOGO = new Set([
+  "breast/caso-01",
+  "feminization/caso-01",
+  "forehead-orbital/caso-01",
+  "forehead-orbital/caso-02",
 ]);
 
 const CASES_BY_SLUG = (() => {
   const acc = {};
   for (const [path, image] of Object.entries(CASE_IMAGES)) {
-    const match = path.match(/\/procedimientos\/([^/]+)\/([^/]+)$/);
+    const match = path.match(/\/procedimientos\/([^/]+)\/([^/]+)\/([^/]+)$/);
     if (!match) continue;
-    const [, slug, file] = match;
+    const [, slug, caseId, file] = match;
     const base = file.replace(/\.\w+$/, "").toLowerCase();
     const side = AFTER_TOKEN.test(base) ? "after" : BEFORE_TOKEN.test(base) ? "before" : null;
     if (!side) continue;
-    const key = base.replace(AFTER_TOKEN, " ").replace(BEFORE_TOKEN, " ").replace(/\s+/g, " ").trim();
-    acc[slug] ??= { before: [], after: [] };
-    acc[slug][side].push({ key, base, image });
+    acc[slug] ??= {};
+    acc[slug][caseId] ??= { before: [], after: [] };
+    acc[slug][caseId][side].push({ base, image });
   }
 
-  const bySortKey = (a, b) => a.key.localeCompare(b.key) || a.base.localeCompare(b.base);
+  const byBase = (a, b) => a.base.localeCompare(b.base, undefined, { numeric: true });
   return Object.fromEntries(
-    Object.entries(acc).map(([slug, sides]) => {
-      const before = sides.before.sort(bySortKey);
-      const after = sides.after.sort(bySortKey);
-      const needsWatermark = !SLUGS_WITH_BURNED_LOGO.has(slug);
-      const pairs = Array.from({ length: Math.min(before.length, after.length) }, (_, k) => ({
-        n: String(k + 1).padStart(2, "0"),
-        before: before[k].image,
-        after: after[k].image,
-        watermark: needsWatermark,
-      }));
-      return [slug, pairs];
+    Object.entries(acc).map(([slug, cases]) => {
+      const list = Object.keys(cases)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .map((caseId) => {
+          const before = cases[caseId].before.sort(byBase);
+          const after = cases[caseId].after.sort(byBase);
+          // Each angle is one before/after shot of the same patient.
+          const angles = Array.from({ length: Math.min(before.length, after.length) }, (_, k) => ({
+            before: before[k].image,
+            after: after[k].image,
+          }));
+          return { caseId, angles, watermark: !CASES_WITH_OWN_LOGO.has(`${slug}/${caseId}`) };
+        })
+        .filter((c) => c.angles.length > 0)
+        .slice(0, MAX_CASES)
+        .map((c, i) => ({ ...c, n: String(i + 1).padStart(2, "0") }));
+      return [slug, list];
     }),
   );
 })();
@@ -79,8 +87,11 @@ const PROCEDURE_LIST = [
     es: { name: "Expresión de la Mirada", desc: "Conjunto de gestos sobre párpados, cejas y región periorbitaria orientados a modificar la expresión de la mirada.", duration: "1 a 3 horas", recovery: "7 a 14 días" },
     en: { name: "Eyes Expression", desc: "A set of procedures on the eyelids, brows and periorbital area aimed at changing the expression of the gaze.", duration: "1 to 3 hours", recovery: "7 to 14 days" } },
   { slug: "feminization", icon: Flower2,
-    es: { name: "Feminización y Rejuvenecimiento", desc: "Plan combinado que suaviza los rasgos y trata los signos de la edad en un mismo tiempo quirúrgico.", duration: "Variable según el plan", recovery: "3 a 4 semanas" },
-    en: { name: "Feminization & Rejuvenation", desc: "A combined plan that softens the features and addresses signs of ageing in a single surgical session.", duration: "Varies with the plan", recovery: "3 to 4 weeks" } },
+    es: { name: "Feminización", desc: "Conjunto de gestos quirúrgicos sobre la estructura ósea y los tejidos blandos orientados a suavizar los rasgos del rostro.", duration: "Variable según el plan", recovery: "3 a 4 semanas" },
+    en: { name: "Feminization", desc: "A set of surgical steps on the bone structure and soft tissues aimed at softening the features of the face.", duration: "Varies with the plan", recovery: "3 to 4 weeks" } },
+  { slug: "rejuvenation", icon: Sparkles,
+    es: { name: "Rejuvenecimiento Facial", desc: "Tratamiento de los signos de la edad en el rostro y el cuello, combinando reposición de tejidos y trabajo sobre la calidad de la piel.", duration: "Variable según el plan", recovery: "2 a 3 semanas" },
+    en: { name: "Facial Rejuvenation", desc: "Treatment of the signs of ageing in the face and neck, combining tissue repositioning and work on skin quality.", duration: "Varies with the plan", recovery: "2 to 3 weeks" } },
   { slug: "masculinization", icon: Hexagon,
     es: { name: "Masculinización y Antiaging", desc: "Plan combinado que marca los rasgos y trata los signos de la edad en un mismo tiempo quirúrgico.", duration: "Variable según el plan", recovery: "3 a 4 semanas" },
     en: { name: "Masculinization & Antiaging", desc: "A combined plan that strengthens the features and addresses signs of ageing in a single surgical session.", duration: "Varies with the plan", recovery: "3 to 4 weeks" } },
@@ -105,6 +116,9 @@ const PROCEDURE_LIST = [
   { slug: "hair-implants", icon: Feather,
     es: { name: "Implante Capilar", desc: "Redistribución de folículos propios para recomponer la línea de implantación y la densidad del cabello.", duration: "4 a 8 horas", recovery: "5 a 7 días" },
     en: { name: "Hair Implants", desc: "Redistribution of the patient's own follicles to rebuild the hairline and hair density.", duration: "4 to 8 hours", recovery: "5 to 7 days" } },
+  { slug: "breast", icon: Gem,
+    es: { name: "Mamas", desc: "Aumento, reducción o elevación mamaria, con implantes o tejido propio, según la proporción buscada para el conjunto del cuerpo.", duration: "2 a 3 horas", recovery: "2 a 4 semanas" },
+    en: { name: "Breast", desc: "Breast augmentation, reduction or lift, with implants or the patient's own tissue, according to the proportion sought for the whole body.", duration: "2 to 3 hours", recovery: "2 to 4 weeks" } },
   { slug: "body-remodeling", icon: PersonStanding,
     es: { name: "Remodelación Corporal", desc: "Modelado del contorno corporal mediante lipoaspiración, tratamiento de la pared abdominal y remodelación de zonas específicas.", duration: "2 a 5 horas", recovery: "3 a 4 semanas" },
     en: { name: "Body Remodeling", desc: "Body contour shaping through liposuction, abdominal wall treatment and remodeling of specific areas.", duration: "2 to 5 hours", recovery: "3 to 4 weeks" } },
