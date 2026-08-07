@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion, useScroll, useTransform, useInView } from "framer-motion";
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Mail, Instagram, Linkedin,
   Facebook, Youtube, MapPin, Sun, Moon, Languages, Check, Star, Play, Award, FileText, ZoomIn,
@@ -119,6 +119,25 @@ const SectionTitle = ({ children }) => (
   </h2>
 );
 
+/* Watermark for the case photos that were published without the MDM logo burned in.
+   Deliberately faint — readable against the photo without competing with it. */
+function Watermark({ size = "md" }) {
+  const s = size === "lg"
+    ? { pad: "px-6 py-4", mark: "text-5xl", name: "text-[11px]", tag: "text-[10px]" }
+    : { pad: "px-4 py-2.5", mark: "text-3xl", name: "text-[7px]", tag: "text-[6px]" };
+  return (
+    <span aria-hidden="true"
+      className="pointer-events-none absolute left-1/2 top-[7%] flex -translate-x-1/2 select-none flex-col items-center bg-white/10 text-white opacity-[0.55] mix-blend-luminosity backdrop-blur-[1px]"
+      style={{ textShadow: "0 1px 3px rgba(0,0,0,0.35)" }}>
+      <span className={`flex flex-col items-center ${s.pad}`}>
+        <span className={`font-display font-normal leading-none tracking-[0.02em] ${s.mark}`}>MDM</span>
+        <span className={`mt-1 uppercase leading-none tracking-[0.3em] ${s.name}`}>Marcelo Di Maggio</span>
+        <span className={`mt-1 lowercase leading-none tracking-[0.42em] ${s.tag}`}>surgery &amp; team</span>
+      </span>
+    </span>
+  );
+}
+
 function CarouselArrows({ onPrev, onNext, prevLabel, nextLabel }) {
   const btn = "flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)]";
   return (
@@ -142,6 +161,14 @@ function PhotoBox({ label, className = "", textClass = "text-2xl" }) {
 }
 
 function Slogan({ text }) {
+  // Driven by useInView rather than whileInView: whileInView latches its `once` flag inside
+  // the observer effect, so a remount (StrictMode) or a fast scroll could leave the words
+  // stuck at opacity 0. A ref-based check re-evaluates and can't strand the text invisible.
+  const ref = useRef(null);
+  const reduce = useReducedMotion();
+  const inView = useInView(ref, { once: true, amount: 0.3 });
+  const show = inView || reduce;
+
   const rule = {
     hidden: { scaleX: 0 },
     visible: { scaleX: 1, transition: { duration: 0.9, ease: "easeOut" } },
@@ -152,9 +179,9 @@ function Slogan({ text }) {
   };
   return (
     <motion.div
+      ref={ref}
       initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.5 }}
+      animate={show ? "visible" : "hidden"}
       variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.055, delayChildren: 0.15 } } }}
       className="mt-20 text-center"
     >
@@ -546,10 +573,14 @@ export default function App() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setLightbox(null)}
             className="fixed inset-0 z-[100] flex cursor-zoom-out items-center justify-center bg-black/85 p-6">
-            <motion.img initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
+            <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
               transition={{ duration: 0.25, ease: "easeOut" }}
-              src={lightbox.src} alt={lightbox.alt} onClick={(e) => e.stopPropagation()}
-              className="max-h-full max-w-full cursor-zoom-out rounded-lg object-contain shadow-2xl" />
+              onClick={(e) => e.stopPropagation()}
+              className="relative flex max-h-full max-w-full cursor-zoom-out">
+              <img src={lightbox.src} alt={lightbox.alt}
+                className="max-h-full max-w-full rounded-lg object-contain shadow-2xl" />
+              {lightbox.watermark && <Watermark size="lg" />}
+            </motion.div>
             <button onClick={() => setLightbox(null)} aria-label={t.a11y.close}
               className="absolute right-5 top-5 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-white/10 text-white transition-colors duration-200 hover:bg-white/20">
               <X size={20} strokeWidth={1.5} />
@@ -676,6 +707,9 @@ export default function App() {
                   </motion.div>
                 ))}
               </div>
+              <motion.p variants={fadeUp} className="mt-6 border-t border-[var(--line)] pt-5 text-[12px] leading-relaxed text-[var(--faint)]">
+                {t.areas.includedNote}
+              </motion.p>
             </motion.div>
 
             <Slogan text={t.areas.slogan} />
@@ -870,10 +904,12 @@ export default function App() {
                                 { caption: t.res.after, src: cases[sel].after },
                               ].map(({ caption, src }) => (
                                 <figure key={caption} className="overflow-hidden rounded-xl border border-[var(--line)]">
-                                  <button type="button" onClick={() => setLightbox({ src, alt: `${p[lang].name} · ${caption}` })}
+                                  <button type="button"
+                                    onClick={() => setLightbox({ src, alt: `${p[lang].name} · ${caption}`, watermark: cases[sel].watermark })}
                                     className="group relative block h-64 w-full cursor-zoom-in overflow-hidden bg-[var(--photo)] sm:h-96">
                                     <img src={src} alt={`${p[lang].name} · ${caption}`} loading="lazy"
                                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                    {cases[sel].watermark && <Watermark />}
                                     <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
                                       <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
                                     </span>

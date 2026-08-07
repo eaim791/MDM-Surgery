@@ -23,6 +23,17 @@ const paperImage = imageByFile(PAPER_IMAGES, "pappers");
 const AFTER_TOKEN = /(despu[eé]s|dsp|after)/;
 const BEFORE_TOKEN = /(antes|before)/;
 
+/* Folders whose photos were already published with the MDM logo burned into the image.
+   Every other folder gets the logo drawn over the photo by the UI instead. Checked file by
+   file — each of these folders is uniform, so if you drop in a photo from another source,
+   move its folder in or out of this list. */
+const SLUGS_WITH_BURNED_LOGO = new Set([
+  "feminization",
+  "forehead-orbital",
+  "upper-lip-lift",
+  "body-remodeling",
+]);
+
 const CASES_BY_SLUG = (() => {
   const acc = {};
   for (const [path, image] of Object.entries(CASE_IMAGES)) {
@@ -42,10 +53,12 @@ const CASES_BY_SLUG = (() => {
     Object.entries(acc).map(([slug, sides]) => {
       const before = sides.before.sort(bySortKey);
       const after = sides.after.sort(bySortKey);
+      const needsWatermark = !SLUGS_WITH_BURNED_LOGO.has(slug);
       const pairs = Array.from({ length: Math.min(before.length, after.length) }, (_, k) => ({
         n: String(k + 1).padStart(2, "0"),
         before: before[k].image,
         after: after[k].image,
+        watermark: needsWatermark,
       }));
       return [slug, pairs];
     }),
@@ -160,7 +173,6 @@ export const SPECIALISTS = [
   { name: "Dr. Laura Adduci", es: "Neurocirugía", en: "Neurosurgery" },
   { name: "Dr. Agustín Mendilharzu", es: "Otorrinolaringología", en: "ENT" },
   { name: "Dr. Daniel Roscher", es: "Cirugía Ortognática", en: "Orthognathic Surgery" },
-  { name: "Dr. Roberto Martínez Rinaldi", es: "Equipo MDM Córdoba", en: "MDM Córdoba Team" },
   { name: "Dr. Javier Belinky", es: "Cirugía de reasignación sexual · Buenos Aires", en: "Sex reassignment surgery · Buenos Aires" },
   { name: "Dr. Maximiliano Scime", es: "Odontología · Implantes", en: "Dentistry · Implants" },
 ];
