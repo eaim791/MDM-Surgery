@@ -23,8 +23,8 @@ const paperImage = imageByFile(PAPER_IMAGES, "pappers");
 const AFTER_TOKEN = /(despu[eé]s|dsp|after)/;
 const BEFORE_TOKEN = /(antes|before)/;
 
-/* Only the first few cases per procedure are published. */
-const MAX_CASES = 3;
+/* Only the first cases per procedure are published. */
+const MAX_CASES = 40;
 
 /* The UI draws the MDM logo over every case photo, except the few that still carry a full,
    readable logo of their own — reframing the photos to 4:5 cropped it out of most of them.
@@ -33,7 +33,6 @@ const CASES_WITH_OWN_LOGO = new Set([
   "breast/caso-01",
   "feminization/caso-01",
   "forehead-orbital/caso-01",
-  "forehead-orbital/caso-02",
 ]);
 
 const CASES_BY_SLUG = (() => {

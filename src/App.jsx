@@ -232,8 +232,9 @@ export default function App() {
   const [active, setActive] = useState("home");
   const [theme, setTheme] = useState(() => localStorage.getItem("mdm-theme") || "light");
   const [lang, setLang] = useState(() => localStorage.getItem("mdm-lang") || "es");
-  const [openCase, setOpenCase] = useState({});
-  const [openAngle, setOpenAngle] = useState({});
+  const [activeSlug, setActiveSlug] = useState(PROCEDURES_WITH_CASES[0]?.slug);
+  const [activeCase, setActiveCase] = useState(0);
+  const [activeAngle, setActiveAngle] = useState(0);
   const [extra, setExtra] = useState([]);
   const [form, setForm] = useState({ initials: "", place: "", msg: "", stars: 5 });
   const [cForm, setCForm] = useState({ name: "", email: "", msg: "" });
@@ -244,6 +245,7 @@ export default function App() {
   const [lightbox, setLightbox] = useState(null);
   const [igHint, setIgHint] = useState(null);
   const papersRef = useRef(null);
+  const casesRef = useRef(null);
   const [pastHero, setPastHero] = useState(false);
   const [introDone, setIntroDone] = useState(false);
   const [formErr, setFormErr] = useState("");
@@ -353,8 +355,10 @@ export default function App() {
 
   const goToResult = (slug) => {
     if (casesFor(slug).length === 0) { setIgHint(slug); return; }
-    setOpenCase((p) => ({ ...p, [slug]: p[slug] ?? 0 }));
-    setTimeout(() => scrollTo(`res-${slug}`), 30);
+    setActiveSlug(slug);
+    setActiveCase(0);
+    setActiveAngle(0);
+    setTimeout(() => scrollTo("resultados"), 30);
   };
 
   const NAV = [
@@ -860,6 +864,8 @@ export default function App() {
           </section>
 
           {/* ============ RESULTADOS ============ */}
+          {/* One gallery block: procedure tabs on top, then the cases of whichever is
+              selected. The frame keeps a fixed height so the page never jumps. */}
           <section id="resultados" className="scroll-mt-24 pt-24">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
               <Eyebrow>{t.res.eyebrow}</Eyebrow>
@@ -867,120 +873,124 @@ export default function App() {
               <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.res.body}</p>
             </motion.div>
 
-            <div className="mt-10 space-y-10">
-              {PROCEDURES_WITH_CASES.map((p) => {
-                const cases = casesFor(p.slug);
-                const sel = openCase[p.slug];
-                return (
-                  <motion.div key={p.slug} id={`res-${p.slug}`} initial="hidden" whileInView="visible"
-                    viewport={{ once: true, amount: 0.15 }} variants={fadeUp}
-                    className="scroll-mt-24 border-b border-[var(--line)] pb-10 last:border-0">
-                    <h3 className="font-display text-2xl font-normal text-[var(--ink)]">{p[lang].name}</h3>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {cases.map((c, ci) => (
-                        <button key={c.n}
-                          onClick={() => setOpenCase((prev) => ({ ...prev, [p.slug]: prev[p.slug] === ci ? undefined : ci }))}
-                          aria-pressed={sel === ci}
-                          className={`cursor-pointer rounded-full border px-4 py-1.5 text-[11px] uppercase tracking-[0.16em] transition-colors duration-200 ${
-                            sel === ci
-                              ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]"
-                              : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"}`}>
-                          {t.res.case} {c.n}
-                        </button>
+            {(() => {
+              const proc = PROCEDURES_WITH_CASES.find((x) => x.slug === activeSlug) ?? PROCEDURES_WITH_CASES[0];
+              const cases = casesFor(proc.slug);
+              const ci = Math.min(activeCase, cases.length - 1);
+              const kase = cases[ci];
+              const ai = Math.min(activeAngle, kase.angles.length - 1);
+              const angle = kase.angles[ai];
+              return (
+                <>
+                  {/* Procedure filter */}
+                  <div role="tablist" aria-label={t.res.filter}
+                    className="no-scrollbar -mx-6 mt-10 flex gap-2 overflow-x-auto px-6 pb-1 sm:-mx-8 sm:flex-wrap sm:overflow-visible sm:px-8">
+                    {PROCEDURES_WITH_CASES.map((x) => (
+                      <button key={x.slug} type="button" role="tab" aria-selected={x.slug === proc.slug}
+                        onClick={() => { setActiveSlug(x.slug); setActiveCase(0); setActiveAngle(0); }}
+                        className={`flex-shrink-0 cursor-pointer rounded-full border px-4 py-2 text-[11px] uppercase tracking-[0.14em] transition-colors duration-200 ${
+                          x.slug === proc.slug
+                            ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]"
+                            : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"}`}>
+                        {x[lang].name}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div id={`res-${proc.slug}`} className="mt-8 scroll-mt-24 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-7">
+                    {/* Case selector */}
+                    <p className="truncate text-[11px] uppercase tracking-[0.18em] text-[var(--faint)]">{proc[lang].name}</p>
+                    <div className="mt-3 flex h-[34px] items-center gap-3">
+                      <div ref={casesRef} className="no-scrollbar flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+                        {cases.map((c, k) => (
+                          <button key={c.n} type="button" aria-pressed={k === ci}
+                            onClick={() => { setActiveCase(k); setActiveAngle(0); }}
+                            className={`flex-shrink-0 cursor-pointer rounded-full border px-4 py-1.5 text-[11px] uppercase tracking-[0.16em] transition-colors duration-200 ${
+                              k === ci
+                                ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]"
+                                : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"}`}>
+                            {t.res.case} {c.n}
+                          </button>
+                        ))}
+                      </div>
+                      {cases.length > 4 && (
+                        <div className="flex flex-shrink-0 items-center gap-1.5">
+                          <button type="button" aria-label={t.res.prevCase} title={t.res.prevCase}
+                            onClick={() => scrollCarousel(casesRef, -1)}
+                            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)]">
+                            <ArrowLeft size={14} strokeWidth={1.5} />
+                          </button>
+                          <button type="button" aria-label={t.res.nextCase} title={t.res.nextCase}
+                            onClick={() => scrollCarousel(casesRef, 1)}
+                            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)]">
+                            <ArrowRight size={14} strokeWidth={1.5} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Before / after */}
+                    <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {[
+                        { caption: t.res.before, src: angle.before },
+                        { caption: t.res.after, src: angle.after },
+                      ].map(({ caption, src }) => (
+                        <figure key={caption} className="overflow-hidden rounded-lg border border-[var(--line)]">
+                          <button type="button"
+                            onClick={() => setLightbox({ src, alt: `${proc[lang].name} · ${caption}`, watermark: kase.watermark })}
+                            className="group relative block aspect-[4/5] w-full cursor-zoom-in overflow-hidden bg-[var(--photo)]">
+                            <img key={src} src={src} alt={`${proc[lang].name} · ${caption}`} loading="lazy"
+                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                            {kase.watermark && <Watermark />}
+                            <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
+                              <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                            </span>
+                          </button>
+                          <figcaption className="border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                            {caption}
+                          </figcaption>
+                        </figure>
                       ))}
                     </div>
 
-                    <AnimatePresence initial={false} mode="wait">
-                      {sel !== undefined && cases[sel] && (
-                        <motion.div key={sel} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3, ease: "easeOut" }}
-                          className="overflow-hidden">
-                          <div className="pt-6">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <p className="text-[12px] uppercase tracking-[0.18em] text-[var(--faint)]">
-                                {t.res.case} {cases[sel].n} · {p[lang].name}
-                              </p>
-                              <button onClick={() => setOpenCase((prev) => ({ ...prev, [p.slug]: undefined }))}
-                                className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
-                                {t.res.close}
+                    {/* Other shots of the same patient — the row keeps its height so the
+                        block does not resize when a case has a single photo. */}
+                    <div className="mt-4 h-[98px]">
+                      {kase.angles.length > 1 && (
+                        <>
+                          <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.angles}</p>
+                          <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto">
+                            {kase.angles.map((a, k) => (
+                              <button key={k} type="button" onClick={() => setActiveAngle(k)}
+                                aria-pressed={k === ai} aria-label={`${t.res.angle} ${k + 1}`}
+                                className={`relative h-16 w-16 flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border transition-colors duration-200 ${
+                                  k === ai ? "border-[var(--ink)]" : "border-[var(--line)] opacity-70 hover:opacity-100"}`}>
+                                <img src={a.after} alt="" aria-hidden="true" loading="lazy"
+                                  className="h-full w-full object-cover" />
                               </button>
-                            </div>
-                            {(() => {
-                              const kase = cases[sel];
-                              const ai = Math.min(openAngle[`${p.slug}-${sel}`] ?? 0, kase.angles.length - 1);
-                              const angle = kase.angles[ai];
-                              return (
-                                <>
-                                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                    {[
-                                      { caption: t.res.before, src: angle.before },
-                                      { caption: t.res.after, src: angle.after },
-                                    ].map(({ caption, src }) => (
-                                      <figure key={caption} className="overflow-hidden rounded-xl border border-[var(--line)]">
-                                        <button type="button"
-                                          onClick={() => setLightbox({ src, alt: `${p[lang].name} · ${caption}`, watermark: kase.watermark })}
-                                          className="group relative block aspect-[4/5] w-full cursor-zoom-in overflow-hidden bg-[var(--photo)]">
-                                          <img src={src} alt={`${p[lang].name} · ${caption}`} loading="lazy"
-                                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                                          {kase.watermark && <Watermark />}
-                                          <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
-                                            <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-                                          </span>
-                                        </button>
-                                        <figcaption className="border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                                          {caption}
-                                        </figcaption>
-                                      </figure>
-                                    ))}
-                                  </div>
-
-                                  {/* Other shots of the same patient */}
-                                  {kase.angles.length > 1 && (
-                                    <div className="mt-4">
-                                      <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.angles}</p>
-                                      <div className="mt-3 flex flex-wrap gap-3">
-                                        {kase.angles.map((a, k) => (
-                                          <button key={k} type="button"
-                                            onClick={() => setOpenAngle((prev) => ({ ...prev, [`${p.slug}-${sel}`]: k }))}
-                                            aria-pressed={k === ai} aria-label={`${t.res.angle} ${k + 1}`}
-                                            className={`relative h-16 w-16 cursor-pointer overflow-hidden rounded-lg border transition-colors duration-200 ${
-                                              k === ai ? "border-[var(--ink)]" : "border-[var(--line)] opacity-70 hover:opacity-100"}`}>
-                                            <img src={a.after} alt="" aria-hidden="true" loading="lazy"
-                                              className="h-full w-full object-cover" />
-                                          </button>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
-                                    className="group mt-6 flex items-center justify-between gap-4 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-5 py-4 transition-[border-color,box-shadow] duration-300 ease-out hover:border-[var(--rule)] hover:shadow-[0_10px_26px_var(--shadow)]">
-                                    <span className="flex items-center gap-3">
-                                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-300 group-hover:border-[var(--rule)] group-hover:bg-[var(--chip)] group-hover:text-[var(--ink)]">
-                                        <Instagram size={17} strokeWidth={1.5} />
-                                      </span>
-                                      <span className="font-display text-[16px] leading-snug text-[var(--ink)] sm:text-[18px]">
-                                        {t.res.viewIg}
-                                      </span>
-                                    </span>
-                                    <ArrowRight size={18} strokeWidth={1.4}
-                                      className="flex-shrink-0 text-[var(--faint)] transition-[transform,color] duration-300 ease-out group-hover:translate-x-1.5 group-hover:text-[var(--ink)]" />
-                                  </a>
-                                </>
-                              );
-                            })()}
+                            ))}
                           </div>
-                        </motion.div>
+                        </>
                       )}
-                    </AnimatePresence>
+                    </div>
 
-                    {sel === undefined && (
-                      <p className="mt-3 text-[12px] text-[var(--faint)]">{t.res.pick}</p>
-                    )}
-                  </motion.div>
-                );
-              })}
-            </div>
+                    <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
+                      className="group mt-2 flex items-center justify-between gap-4 rounded-lg border border-[var(--line)] px-5 py-4 transition-[border-color,box-shadow] duration-300 ease-out hover:border-[var(--rule)] hover:shadow-[0_10px_26px_var(--shadow)]">
+                      <span className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-300 group-hover:border-[var(--rule)] group-hover:bg-[var(--chip)] group-hover:text-[var(--ink)]">
+                          <Instagram size={17} strokeWidth={1.5} />
+                        </span>
+                        <span className="font-display text-[16px] leading-snug text-[var(--ink)] sm:text-[18px]">
+                          {t.res.viewIg}
+                        </span>
+                      </span>
+                      <ArrowRight size={18} strokeWidth={1.4}
+                        className="flex-shrink-0 text-[var(--faint)] transition-[transform,color] duration-300 ease-out group-hover:translate-x-1.5 group-hover:text-[var(--ink)]" />
+                    </a>
+                  </div>
+                </>
+              );
+            })()}
           </section>
 
           {/* ============ TRAYECTORIA & PRENSA ============ */}
