@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence, useReducedMotion, useScroll, useTransform, useInView } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion, useInView } from "framer-motion";
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Mail, Instagram, Linkedin,
   Facebook, Youtube, MapPin, Sun, Moon, Languages, Check, Star, Play, Award, FileText, ZoomIn,
@@ -8,7 +8,7 @@ import { UI } from "./i18n.js";
 import heroVideo from "./assets/hero-bg.mp4";
 import marceloPhoto from "./assets/marcelodimaggio.jpg";
 import {
-  PROCEDURES, PROCEDURES_WITH_CASES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
+  PROCEDURES, PROCEDURE_GROUPS, PROCEDURES_WITH_CASES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
   LOCATIONS, SEDES, TESTIMONIALS, casesFor, CERTIFICATES, PAPERS,
 } from "./data.js";
 
@@ -22,9 +22,12 @@ const XLogo = ({ size = 15 }) => (
 
 const CONTACT_EMAIL = "info@mdmsurgery.com";
 const INSTAGRAM_HANDLE = "@mdmsurgery";
-const DEVELOPER_PORTFOLIO_URL = ""; // TODO: add portfolio link here
+const DEVELOPER_NAME = "Emma A.";
+const DEVELOPER_PORTFOLIO_URL = "https://emmaporttfolio.netlify.app/";
 const FORMSPREE_ENDPOINT = "https://formspree.io/f/xnpaaroa";
 const TEST_PAGE_SIZE = 2;
+// Certificaciones internacionales que se ven de entrada; el resto queda plegado.
+const CERTS_PREVIEW = 3;
 
 async function submitToFormspree(payload) {
   const res = await fetch(FORMSPREE_ENDPOINT, {
@@ -160,6 +163,31 @@ function PhotoBox({ label, className = "", textClass = "text-2xl" }) {
   );
 }
 
+/* Pequenos destellos de cuatro puntas repartidos sobre la frase. Cada uno arranca
+   en un momento distinto, asi el titileo nunca se ve sincronizado. */
+const SPARKS = [
+  { x: 6,  y: 30, s: 15, d: 0.0 }, { x: 21, y: 12, s: 10, d: 2.6 },
+  { x: 33, y: 62, s: 13, d: 1.1 }, { x: 46, y: 20, s: 18, d: 3.8 },
+  { x: 57, y: 70, s: 11, d: 0.6 }, { x: 68, y: 28, s: 14, d: 4.6 },
+  { x: 79, y: 58, s: 10, d: 2.0 }, { x: 90, y: 24, s: 16, d: 5.4 },
+  { x: 13, y: 72, s: 9,  d: 3.2 }, { x: 62, y: 8,  s: 9,  d: 6.1 },
+];
+
+function Sparkles() {
+  return (
+    <span aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-visible">
+      {SPARKS.map((k, i) => (
+        <svg key={i} viewBox="0 0 24 24" width={k.s} height={k.s}
+          className="sparkle absolute text-[var(--ink)]"
+          style={{ left: `${k.x}%`, top: `${k.y}%`, animationDelay: `${k.d}s` }}>
+          <path fill="currentColor"
+            d="M12 0c.5 6.4 5.1 11 11.5 11.5C17.1 12 12.5 16.6 12 23c-.5-6.4-5.1-11-11.5-11.5C6.9 11 11.5 6.4 12 0z" />
+        </svg>
+      ))}
+    </span>
+  );
+}
+
 function Slogan({ text }) {
   // Driven by useInView rather than whileInView: whileInView latches its `once` flag inside
   // the observer effect, so a remount (StrictMode) or a fast scroll could leave the words
@@ -183,9 +211,10 @@ function Slogan({ text }) {
       initial="hidden"
       animate={show ? "visible" : "hidden"}
       variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.055, delayChildren: 0.15 } } }}
-      className="mt-20 text-center"
+      className="relative mt-20 text-center"
     >
       <motion.span variants={rule} className="mx-auto block h-px w-20 origin-center bg-[var(--line)]" />
+      {show && !reduce && <Sparkles />}
       <p className="mx-auto mt-8 max-w-2xl font-display text-[22px] font-normal italic leading-snug text-[var(--ink)] sm:text-[28px]">
         {text.split(" ").map((w, i) => (
           <motion.span key={i} variants={word} className="inline-block">
@@ -198,28 +227,10 @@ function Slogan({ text }) {
   );
 }
 
-function RailDecor({ side, progress, dotTop }) {
-  return (
-    <div className={`pointer-events-none fixed inset-y-0 ${side === "left" ? "left-[17rem]" : "right-8"} z-20 hidden 2xl:block`}>
-      <div className="absolute inset-y-0 left-0 w-px bg-[var(--line)]" />
-      <motion.div style={{ scaleY: progress }} className="absolute inset-x-0 top-0 h-full w-px origin-top bg-[var(--ink)] opacity-25" />
-      <span aria-hidden="true" style={{ writingMode: "vertical-rl" }}
-        className="absolute left-1/2 top-16 -translate-x-1/2 whitespace-nowrap text-[9px] uppercase tracking-[0.35em] text-[var(--faint)] opacity-60">
-        Surgery &amp; Team
-      </span>
-      <motion.span aria-hidden="true" style={{ top: dotTop }}
-        className="absolute left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-[var(--ink)]" />
-    </div>
-  );
-}
 
 function ScrollSideDecor() {
-  const { scrollYProgress } = useScroll();
-  const dotTop = useTransform(scrollYProgress, [0, 1], ["4%", "92%"]);
   return (
     <>
-      <RailDecor side="left" progress={scrollYProgress} dotTop={dotTop} />
-      <RailDecor side="right" progress={scrollYProgress} dotTop={dotTop} />
     </>
   );
 }
@@ -246,6 +257,9 @@ export default function App() {
   const [igHint, setIgHint] = useState(null);
   const papersRef = useRef(null);
   const casesRef = useRef(null);
+  const [activeGroup, setActiveGroup] = useState("facial");
+  const [activeProc, setActiveProc] = useState("facial-harmonization");
+  const [certsOpen, setCertsOpen] = useState(false);
   const [pastHero, setPastHero] = useState(false);
   const [introDone, setIntroDone] = useState(false);
   const [formErr, setFormErr] = useState("");
@@ -358,7 +372,11 @@ export default function App() {
     setActiveSlug(slug);
     setActiveCase(0);
     setActiveAngle(0);
-    setTimeout(() => scrollTo("resultados"), 30);
+    setTimeout(() => {
+      const el = document.getElementById(`res-${slug}`);
+      if (el) el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+      else scrollTo("resultados");
+    }, 60);
   };
 
   const NAV = [
@@ -628,7 +646,7 @@ export default function App() {
               <div className="inline-block">
                 <div className="relative">
                   <motion.h1 variants={heroFade}
-                    className="font-display font-normal leading-[0.85] tracking-[0.01em] text-[var(--ink)]"
+                    className="hero-mark font-display font-normal leading-[0.85] tracking-[0.01em] text-[var(--ink)]"
                     style={{ fontSize: "clamp(5rem, 20vw, 14rem)" }}>
                     <span className="sr-only">Marcelo Di Maggio — Surgery &amp; Team</span>
                     <span aria-hidden="true">MDM</span>
@@ -655,7 +673,7 @@ export default function App() {
               </div>
             </div>
 
-            <motion.p variants={heroFade} className="mx-auto mt-10 max-w-lg text-[13px] leading-relaxed text-[var(--hero-body)] sm:text-[14px]">
+            <motion.p variants={heroFade} className="hero-text mx-auto mt-10 max-w-lg text-[13px] leading-relaxed text-[var(--hero-body)] sm:text-[14px]">
               {t.hero.intro}
             </motion.p>
             <motion.div variants={heroFade} className="mt-9">
@@ -796,71 +814,127 @@ export default function App() {
           </section>
 
           {/* ============ PROCEDURES ============ */}
+          {/* Vista partida: a la izquierda solo los nombres, a la derecha una ficha
+              fija que sigue al cursor por la lista. */}
           <section id="procedures" className="scroll-mt-24 pt-24">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
               <Eyebrow>{t.proc.eyebrow}</Eyebrow>
               <SectionTitle>{t.proc.title}</SectionTitle>
             </motion.div>
-            <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
-              className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {PROCEDURES.map((p) => (
-                <motion.div key={p.slug} variants={fadeUp} whileHover={{ y: -3 }} transition={{ duration: 0.2 }}
-                  className="group relative flex flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5 transition-shadow duration-200 hover:shadow-[0_10px_30px_var(--shadow)]">
 
-                  {/* Artwork revealed faintly on hover */}
-                  {p.art && (
-                    <img src={p.art} alt="" aria-hidden="true"
-                      className="proc-art pointer-events-none absolute -bottom-6 -right-6 w-36 opacity-0 transition-opacity duration-500 group-hover:opacity-[0.09]" />
-                  )}
-
-                  <div className="relative flex flex-1 flex-col">
-                    {p.art ? (
-                      <img src={p.art} alt="" aria-hidden="true"
-                        className="proc-art h-10 w-auto max-w-[56px] object-contain object-left" />
-                    ) : (
-                      <p.icon size={26} strokeWidth={1.2} aria-hidden="true" className="h-10 text-[var(--ink)]" />
-                    )}
-                    <h3 className="mt-3 font-display text-[16px] font-normal leading-snug text-[var(--ink)]">{p[lang].name}</h3>
-                    <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted)]">{p[lang].desc}</p>
-
-                    <dl className="mt-3 space-y-1 border-t border-[var(--line)] pt-3 text-[11px]">
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-[var(--faint)]">{t.proc.duration}</dt>
-                        <dd className="text-right text-[var(--ink)]">{p[lang].duration}</dd>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-[var(--faint)]">{t.proc.recovery}</dt>
-                        <dd className="text-right text-[var(--ink)]">{p[lang].recovery}</dd>
-                      </div>
-                    </dl>
-
-                    <div className="mt-4 flex flex-1 flex-col justify-end gap-1.5">
-                      <button type="button" onClick={() => goToResult(p.slug)}
-                        className="w-full cursor-pointer border border-[var(--line)] px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-[var(--ink)] transition-colors duration-200 hover:border-[var(--ink)]">
-                        {t.proc.cta}
+            {(() => {
+              const grupo = PROCEDURE_GROUPS.find((g) => g.id === activeGroup) ?? PROCEDURE_GROUPS[0];
+              const p = PROCEDURES.find((x) => x.slug === activeProc) ?? grupo.items[0];
+              return (
+                <div className="mt-10 rounded-xl border border-[var(--line)] p-5 sm:p-7">
+                  {/* Pestañas por zona */}
+                  <div role="tablist" aria-label={t.proc.zones}
+                    className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-4 sm:-mx-7 sm:flex-wrap sm:overflow-visible sm:px-7">
+                    {PROCEDURE_GROUPS.map((g) => (
+                      <button key={g.id} type="button" role="tab" aria-selected={g.id === grupo.id}
+                        onClick={() => { setActiveGroup(g.id); setActiveProc(g.items[0].slug); }}
+                        className={`flex-shrink-0 cursor-pointer rounded-full border px-4 py-1.5 text-[11px] uppercase tracking-[0.14em] transition-colors duration-200 ${
+                          g.id === grupo.id
+                            ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]"
+                            : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"}`}>
+                        {g[lang]}
                       </button>
-                      <AnimatePresence>
-                        {igHint === p.slug && (
-                          <motion.a key="ig-hint" href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
-                            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                            transition={{ duration: 0.25, ease: "easeOut" }}
-                            className="-mt-1 flex items-center gap-2 text-[11px] leading-snug text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
-                            <Instagram size={13} strokeWidth={1.5} className="flex-shrink-0" />
-                            {t.proc.noResults}
-                          </motion.a>
-                        )}
-                      </AnimatePresence>
-                      <button type="button" onClick={() => askAbout(p[lang].name)}
-                        className="w-full cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85">
-                        {t.proc.ask}
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                </motion.div>
-              ))}
-            </motion.div>
 
-            <p className="mt-6 max-w-2xl text-[12px] leading-relaxed text-[var(--faint)]">{t.proc.note}</p>
+                  <div className="grid gap-8 border-t border-[var(--line)] pt-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-12">
+                  {/* Lista de nombres */}
+                  <motion.ul key={grupo.id} variants={container} initial="hidden" animate="visible"
+                    className="border-t border-[var(--line)]">
+                    {grupo.items.map((x) => {
+                      const on = x.slug === p.slug;
+                      return (
+                        <motion.li key={x.slug} variants={fadeUp} className="border-b border-[var(--line)]">
+                          <button type="button"
+                            onClick={() => setActiveProc(x.slug)}
+                            aria-current={on}
+                            className="group flex w-full cursor-pointer items-center gap-4 py-4 text-left transition-colors duration-200">
+                            {x.art ? (
+                              <img src={x.art} alt="" aria-hidden="true"
+                                className={`proc-art h-6 w-6 flex-shrink-0 object-contain transition-opacity duration-200 ${on ? "opacity-100" : "opacity-45 group-hover:opacity-70"}`} />
+                            ) : (
+                              <x.icon size={17} strokeWidth={1.3} aria-hidden="true"
+                                className={`h-6 w-6 flex-shrink-0 transition-colors duration-200 ${on ? "text-[var(--ink)]" : "text-[var(--faint)] group-hover:text-[var(--muted)]"}`} />
+                            )}
+                            <span className={`font-display text-[17px] font-normal leading-snug transition-colors duration-200 sm:text-[19px] ${on ? "text-[var(--ink)]" : "text-[var(--muted)] group-hover:text-[var(--ink)]"}`}>
+                              {x[lang].name}
+                            </span>
+                            <ArrowRight size={16} strokeWidth={1.4}
+                              className={`ml-auto flex-shrink-0 transition-all duration-200 ${on ? "translate-x-0 text-[var(--ink)] opacity-100" : "-translate-x-2 text-[var(--faint)] opacity-0"}`} />
+                          </button>
+                        </motion.li>
+                      );
+                    })}
+                  </motion.ul>
+
+                  {/* Ficha fija */}
+                  <div className="lg:sticky lg:top-24 lg:self-start">
+                    <motion.article key={p.slug}
+                      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.28, ease: "easeOut" }}
+                      className="relative flex flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] p-7 sm:p-8">
+                      {p.art && (
+                        <img src={p.art} alt="" aria-hidden="true"
+                          className="proc-art pointer-events-none absolute -bottom-8 -right-8 w-52 opacity-[0.07]" />
+                      )}
+                      <div className="relative">
+                        {p.art ? (
+                          <img src={p.art} alt="" aria-hidden="true"
+                            className="proc-art h-12 w-auto max-w-[64px] object-contain object-left" />
+                        ) : (
+                          <p.icon size={28} strokeWidth={1.2} aria-hidden="true" className="h-12 text-[var(--ink)]" />
+                        )}
+                        <h3 className="mt-5 font-display text-[24px] font-normal leading-snug text-[var(--ink)] sm:text-[28px]">
+                          {p[lang].name}
+                        </h3>
+                        <p className="mt-3 text-[14px] leading-relaxed text-[var(--muted)]">{p[lang].desc}</p>
+
+                        <dl className="mt-6 space-y-2 border-t border-[var(--line)] pt-5 text-[13px]">
+                          <div className="flex justify-between gap-4">
+                            <dt className="text-[var(--faint)]">{t.proc.duration}</dt>
+                            <dd className="text-right text-[var(--ink)]">{p[lang].duration}</dd>
+                          </div>
+                          <div className="flex justify-between gap-4">
+                            <dt className="text-[var(--faint)]">{t.proc.recovery}</dt>
+                            <dd className="text-right text-[var(--ink)]">{p[lang].recovery}</dd>
+                          </div>
+                        </dl>
+
+                        <button type="button" onClick={() => askAbout(p[lang].name)}
+                          className="mt-7 w-full cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-4 py-3 text-[10px] uppercase tracking-[0.16em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85">
+                          {t.proc.ask}
+                        </button>
+
+                        <button type="button" onClick={() => goToResult(p.slug)}
+                          className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 border border-[var(--line)] px-4 py-2.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--chip)]">
+                          {t.proc.cta}
+                          <ArrowRight size={13} strokeWidth={1.5} />
+                        </button>
+                        <AnimatePresence>
+                          {igHint === p.slug && (
+                            <motion.a key="ig-hint" href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
+                              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                              transition={{ duration: 0.25, ease: "easeOut" }}
+                              className="mt-2 flex items-center justify-center gap-2 text-[11px] leading-snug text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
+                              <Instagram size={13} strokeWidth={1.5} className="flex-shrink-0" />
+                              {t.proc.noResults}
+                            </motion.a>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </motion.article>
+                  </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <p className="mt-8 max-w-2xl text-[12px] leading-relaxed text-[var(--faint)]">{t.proc.note}</p>
           </section>
 
           {/* ============ RESULTADOS ============ */}
@@ -883,18 +957,19 @@ export default function App() {
               return (
                 <>
                   {/* Procedure filter */}
-                  <div role="tablist" aria-label={t.res.filter}
-                    className="no-scrollbar -mx-6 mt-10 flex gap-2 overflow-x-auto px-6 pb-1 sm:-mx-8 sm:flex-wrap sm:overflow-visible sm:px-8">
-                    {PROCEDURES_WITH_CASES.map((x) => (
-                      <button key={x.slug} type="button" role="tab" aria-selected={x.slug === proc.slug}
-                        onClick={() => { setActiveSlug(x.slug); setActiveCase(0); setActiveAngle(0); }}
-                        className={`flex-shrink-0 cursor-pointer rounded-full border px-4 py-2 text-[11px] uppercase tracking-[0.14em] transition-colors duration-200 ${
-                          x.slug === proc.slug
-                            ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]"
-                            : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"}`}>
-                        {x[lang].name}
-                      </button>
-                    ))}
+                  {/* Selector de procedimiento: una sola linea en vez de la fila de fichas */}
+                  <div className="relative mt-10 inline-block w-full max-w-sm">
+                    <label htmlFor="res-filtro" className="sr-only">{t.res.filter}</label>
+                    <select id="res-filtro" value={proc.slug}
+                      onChange={(e) => { setActiveSlug(e.target.value); setActiveCase(0); setActiveAngle(0); }}
+                      className="w-full cursor-pointer appearance-none border-b border-[var(--line)] bg-transparent py-3 pr-9 font-display text-[19px] text-[var(--ink)] transition-colors duration-200 hover:border-[var(--ink)] focus:border-[var(--ink)] focus:outline-none sm:text-[22px]">
+                      {PROCEDURES_WITH_CASES.map((x) => (
+                        <option key={x.slug} value={x.slug}>{x[lang].name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={17} strokeWidth={1.5} aria-hidden="true"
+                      className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-[var(--faint)]" />
+                    <span className="mt-1.5 block text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.filter}</span>
                   </div>
 
                   <div id={`res-${proc.slug}`} className="mt-8 scroll-mt-24 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-7">
@@ -939,8 +1014,10 @@ export default function App() {
                           <button type="button"
                             onClick={() => setLightbox({ src, alt: `${proc[lang].name} · ${caption}`, watermark: kase.watermark })}
                             className="group relative block aspect-[4/5] w-full cursor-zoom-in overflow-hidden bg-[var(--photo)]">
+                            {/* object-contain: la foto se ve entera, en su calidad original,
+                                sobre el gris del marco. Nunca se amplia para llenar el cuadro. */}
                             <img key={src} src={src} alt={`${proc[lang].name} · ${caption}`} loading="lazy"
-                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                              className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]" />
                             {kase.watermark && <Watermark />}
                             <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
                               <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
@@ -1035,8 +1112,14 @@ export default function App() {
               </motion.div>
               <motion.ul variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
                 className="mt-10 border-t border-[var(--line)]">
-                {CERTIFICATES.map((c) => (
-                  <motion.li key={c.slug} variants={fadeUp}
+                {CERTIFICATES.slice(0, certsOpen ? undefined : CERTS_PREVIEW).map((c, i) => (
+                  <motion.li key={c.slug}
+                    variants={i < CERTS_PREVIEW ? fadeUp : undefined}
+                    {...(i < CERTS_PREVIEW ? {} : {
+                      initial: { opacity: 0, y: -6 },
+                      animate: { opacity: 1, y: 0 },
+                      transition: { duration: 0.35, ease: "easeOut", delay: (i - CERTS_PREVIEW) * 0.05 },
+                    })}
                     className="grid grid-cols-1 gap-x-8 gap-y-2 border-b border-[var(--line)] py-6 sm:grid-cols-[5rem_1fr_auto] sm:items-baseline">
                     <span className="font-display text-[15px] text-[var(--faint)]">{c.year}</span>
                     <div>
@@ -1058,6 +1141,18 @@ export default function App() {
                   </motion.li>
                 ))}
               </motion.ul>
+
+              {CERTIFICATES.length > CERTS_PREVIEW && (
+                <button type="button" onClick={() => setCertsOpen((v) => !v)}
+                  aria-expanded={certsOpen}
+                  className="group mt-6 flex cursor-pointer items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[var(--faint)] transition-colors duration-200 hover:text-[var(--ink)]">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--line)] transition-colors duration-200 group-hover:border-[var(--ink)]">
+                    <ChevronDown size={13} strokeWidth={1.6}
+                      className={`transition-transform duration-300 ${certsOpen ? "rotate-180" : ""}`} />
+                  </span>
+                  {certsOpen ? t.certs.less : t.certs.more.replace("{n}", CERTIFICATES.length - CERTS_PREVIEW)}
+                </button>
+              )}
             </div>
 
             <div id="papers" className="scroll-mt-24 pt-20">
@@ -1235,48 +1330,48 @@ export default function App() {
           {/* ============ CONTACT ============ */}
           <section id="contact" className="scroll-mt-24 pt-24">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}
-              className="rounded-2xl bg-[var(--inv-bg)] px-8 py-12 sm:px-12">
-              <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--inv-ink)] opacity-50">{t.contact.eyebrow}</p>
-              <h2 className="mt-3 font-display text-3xl font-normal text-[var(--inv-ink)] sm:text-4xl">{t.contact.title}</h2>
-              <p className="mt-4 max-w-md text-[14px] leading-relaxed text-[var(--inv-ink)] opacity-70">{t.contact.body}</p>
-              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-[var(--inv-ink)] opacity-80">
+              className="rounded-2xl bg-[var(--contact-bg)] px-8 py-12 sm:px-12">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--contact-ink)] opacity-50">{t.contact.eyebrow}</p>
+              <h2 className="mt-3 font-display text-3xl font-normal text-[var(--contact-ink)] sm:text-4xl">{t.contact.title}</h2>
+              <p className="mt-4 max-w-md text-[14px] leading-relaxed text-[var(--contact-ink)] opacity-70">{t.contact.body}</p>
+              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-[var(--contact-ink)] opacity-80">
                 <a href={`mailto:${CONTACT_EMAIL}`} className="transition-opacity hover:opacity-100">{CONTACT_EMAIL}</a>
                 <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="transition-opacity hover:opacity-100">{INSTAGRAM_HANDLE}</a>
               </div>
               <form onSubmit={submitEnquiry} className="mt-8 max-w-xl space-y-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <label className="block">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--inv-ink)] opacity-60">{t.contact.fName}</span>
+                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--contact-ink)] opacity-60">{t.contact.fName}</span>
                     <input type="text" value={cForm.name} placeholder={t.contact.fNamePh} maxLength={60}
                       onChange={(e) => setCForm({ ...cForm, name: e.target.value })}
-                      className="mt-2 w-full rounded-lg border border-[var(--inv-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--inv-ink)] outline-none transition-colors placeholder:text-[var(--inv-ink)]/35 focus:border-[var(--inv-ink)]" />
+                      className="mt-2 w-full rounded-lg border border-[var(--contact-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--contact-ink)] outline-none transition-colors placeholder:text-[var(--contact-ink)]/35 focus:border-[var(--contact-ink)]" />
                   </label>
                   <label className="block">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--inv-ink)] opacity-60">{t.contact.fEmail}</span>
+                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--contact-ink)] opacity-60">{t.contact.fEmail}</span>
                     <input type="email" value={cForm.email} placeholder={t.contact.fEmailPh} maxLength={90}
                       onChange={(e) => setCForm({ ...cForm, email: e.target.value })}
-                      className="mt-2 w-full rounded-lg border border-[var(--inv-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--inv-ink)] outline-none transition-colors placeholder:text-[var(--inv-ink)]/35 focus:border-[var(--inv-ink)]" />
+                      className="mt-2 w-full rounded-lg border border-[var(--contact-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--contact-ink)] outline-none transition-colors placeholder:text-[var(--contact-ink)]/35 focus:border-[var(--contact-ink)]" />
                   </label>
                 </div>
                 <label className="block">
-                  <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--inv-ink)] opacity-60">{t.contact.fMsg}</span>
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--contact-ink)] opacity-60">{t.contact.fMsg}</span>
                   <textarea id="contact-msg" rows={4} value={cForm.msg} placeholder={t.contact.fMsgPh} maxLength={800}
                     onChange={(e) => setCForm({ ...cForm, msg: e.target.value })}
-                    className="mt-2 w-full resize-y rounded-lg border border-[var(--inv-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--inv-ink)] outline-none transition-colors placeholder:text-[var(--inv-ink)]/35 focus:border-[var(--inv-ink)]" />
+                    className="mt-2 w-full resize-y rounded-lg border border-[var(--contact-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--contact-ink)] outline-none transition-colors placeholder:text-[var(--contact-ink)]/35 focus:border-[var(--contact-ink)]" />
                 </label>
                 {cErr && <p className="text-[12px] text-[#E0908D]">{cErr}</p>}
                 <div className="flex flex-wrap items-center gap-4">
                   <button type="submit"
-                    className="cursor-pointer bg-[var(--inv-ink)] px-8 py-3.5 text-[11px] uppercase tracking-[0.22em] text-[var(--inv-bg)] transition-opacity duration-200 hover:opacity-85">
+                    className="cursor-pointer bg-[var(--contact-ink)] px-8 py-3.5 text-[11px] uppercase tracking-[0.22em] text-[var(--contact-bg)] transition-opacity duration-200 hover:opacity-85">
                     {t.contact.send}
                   </button>
                   {cSent && (
-                    <span className="flex items-center gap-1.5 text-[12px] text-[var(--inv-ink)] opacity-80">
+                    <span className="flex items-center gap-1.5 text-[12px] text-[var(--contact-ink)] opacity-80">
                       <Check size={14} strokeWidth={1.6} /> {t.contact.thanks}
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] leading-relaxed text-[var(--inv-ink)] opacity-45">{t.contact.note}</p>
+                <p className="text-[11px] leading-relaxed text-[var(--contact-ink)] opacity-45">{t.contact.note}</p>
               </form>
             </motion.div>
           </section>
@@ -1317,14 +1412,10 @@ export default function App() {
             </p>
             <p className="mt-2 text-[11px] tracking-wide text-[var(--faint)]">
               {t.footer.madeBy}:{" "}
-              {DEVELOPER_PORTFOLIO_URL ? (
-                <a href={DEVELOPER_PORTFOLIO_URL} target="_blank" rel="noopener noreferrer"
-                  className="underline decoration-dotted underline-offset-2 transition-colors hover:text-[var(--ink)]">
-                  Portfolio
-                </a>
-              ) : (
-                <span className="italic opacity-70">Portfolio (próximamente)</span>
-              )}
+              <a href={DEVELOPER_PORTFOLIO_URL} target="_blank" rel="noopener noreferrer"
+                className="underline decoration-dotted underline-offset-2 transition-colors hover:text-[var(--ink)]">
+                {DEVELOPER_NAME}
+              </a>
             </p>
           </footer>
         </div>

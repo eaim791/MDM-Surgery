@@ -115,6 +115,12 @@ const PROCEDURE_LIST = [
   { slug: "hair-implants", icon: Feather,
     es: { name: "Implante Capilar", desc: "Redistribución de folículos propios para recomponer la línea de implantación y la densidad del cabello.", duration: "4 a 8 horas", recovery: "5 a 7 días" },
     en: { name: "Hair Implants", desc: "Redistribution of the patient's own follicles to rebuild the hairline and hair density.", duration: "4 to 8 hours", recovery: "5 to 7 days" } },
+  { slug: "profiloplasty", icon: Aperture,
+    es: { name: "Perfiloplastia", desc: "Trabajo conjunto sobre nariz, mentón y labios para redefinir la línea del perfil como una sola unidad.", duration: "3 a 4 horas", recovery: "2 a 3 semanas" },
+    en: { name: "Profiloplasty", desc: "Combined work on nose, chin and lips to redefine the profile line as a single unit.", duration: "3 to 4 hours", recovery: "2 to 3 weeks" } },
+  { slug: "tensor-threads", icon: Feather,
+    es: { name: "Hilos Tensores", desc: "Reposición de los tejidos del rostro mediante hilos, sin cirugía abierta, para redefinir el contorno.", duration: "Alrededor de 1 hora", recovery: "3 a 7 días" },
+    en: { name: "Tensor Threads", desc: "Repositioning of the facial tissues with threads, without open surgery, to redefine the contour.", duration: "About 1 hour", recovery: "3 to 7 days" } },
   { slug: "breast", icon: Gem,
     es: { name: "Mamas", desc: "Aumento, reducción o elevación mamaria, con implantes o tejido propio, según la proporción buscada para el conjunto del cuerpo.", duration: "2 a 3 horas", recovery: "2 a 4 semanas" },
     en: { name: "Breast", desc: "Breast augmentation, reduction or lift, with implants or the patient's own tissue, according to the proportion sought for the whole body.", duration: "2 to 3 hours", recovery: "2 to 4 weeks" } },
@@ -124,6 +130,26 @@ const PROCEDURE_LIST = [
 ];
 
 export const PROCEDURES = PROCEDURE_LIST.map((p) => ({ ...p, art: artFor(p.slug) }));
+
+/* Zonas del cuerpo con las que se agrupa el listado de procedimientos. */
+const GROUP_LIST = [
+  { id: "facial", es: "Facial y Estructura Ósea", en: "Facial & Bone Structure",
+    slugs: ["facial-harmonization", "forehead-orbital", "chin-jaw", "cheeks", "profiloplasty", "tensor-threads"] },
+  { id: "detail", es: "Ojos, Nariz y Detalle", en: "Eyes, Nose & Detail",
+    slugs: ["eyes-expression", "rhinoplasty", "blepharoplasty", "upper-lip-lift"] },
+  { id: "lifting", es: "Rejuvenecimiento y Lifting", en: "Rejuvenation & Lifting",
+    slugs: ["rejuvenation", "face-neck-lift"] },
+  { id: "gender", es: "Género e Identidad", en: "Gender & Identity",
+    slugs: ["feminization", "masculinization", "adams-remodeling"] },
+  { id: "body", es: "Corporal y Capilar", en: "Body & Hair",
+    slugs: ["breast", "body-remodeling", "hair-implants"] },
+];
+
+const bySlug = Object.fromEntries(PROCEDURES.map((p) => [p.slug, p]));
+export const PROCEDURE_GROUPS = GROUP_LIST.map((g) => ({
+  ...g,
+  items: g.slugs.map((s) => bySlug[s]).filter(Boolean),
+}));
 
 export const AREAS = [
   { es: { t: "Feminización Facial", d: "Estética facial completa orientada a la feminización." },
@@ -222,10 +248,6 @@ const CERTIFICATE_LIST = [
     institution: "The University of the State of New York · Education Department",
     es: { title: "Licencia para ejercer Medicina y Cirugía en el Estado de Nueva York", meta: "Licencia N.º 296483" },
     en: { title: "License to practice Medicine and Surgery in the State of New York", meta: "License No. 296483" } },
-  { file: "5.jpeg", year: "2018",
-    institution: "New York State Board of Regents · Committee on the Professions",
-    es: { title: "Homologación de la matrícula médica argentina en Nueva York", meta: "Licencia por endorsement" },
-    en: { title: "Endorsement of the Argentine medical license in New York", meta: "Licensure by endorsement" } },
   { file: "Licencia espana.jpeg", year: "2021",
     institution: "Ministerio de Universidades · Reino de España",
     es: { title: "Homologación del título de Médico en España", meta: "Credencial /2021/H02075 · Madrid" },
@@ -234,6 +256,10 @@ const CERTIFICATE_LIST = [
     institution: "American Society of Plastic Surgeons",
     es: { title: "Miembro · 10 años de membresía", meta: "Reconocimiento por trayectoria y estándares profesionales" },
     en: { title: "Member · 10 years of membership", meta: "Recognition for career and professional standards" } },
+  { file: "5.jpeg", year: "2018",
+    institution: "New York State Board of Regents · Committee on the Professions",
+    es: { title: "Homologación de la matrícula médica argentina en Nueva York", meta: "Licencia por endorsement" },
+    en: { title: "Endorsement of the Argentine medical license in New York", meta: "Licensure by endorsement" } },
   { file: "6.jpeg", year: "2016",
     institution: "Mount Sinai Beth Israel · New York",
     es: { title: "Medical Staff · Assistant Attending, Departamento de Cirugía", meta: "Privilegios en Cirugía Plástica y Reconstructiva" },

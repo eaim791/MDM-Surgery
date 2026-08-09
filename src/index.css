@@ -15,9 +15,12 @@
   --photo-ink: #A9AFB3;
   --shadow: rgba(30, 36, 39, 0.06);
   --rule: rgba(30, 36, 39, 0.18);
-  --scrim-core: rgba(244, 244, 245, 0.62);
-  --scrim-edge: rgba(244, 244, 245, 0.14);
+  --scrim-core: rgba(244, 244, 245, 0.15);
+  --scrim-edge: rgba(244, 244, 245, 0.03);
   --hero-body: #363E43;
+  --hero-halo: rgba(244, 244, 245, 0.85);
+  --contact-bg: #1E2427;
+  --contact-ink: #FFFFFF;
 }
 
 .dark {
@@ -38,9 +41,13 @@
   --scrim-core: rgba(21, 24, 26, 0.68);
   --scrim-edge: rgba(21, 24, 26, 0.22);
   --hero-body: #CDD4D8;
+  --hero-halo: rgba(21, 24, 26, 0.55);
+  --contact-bg: #22272A;
+  --contact-ink: #ECEEEF;
 }
 
 html {
+  color-scheme: light;
   scroll-behavior: smooth;
   background: var(--bg);
 }
@@ -63,3 +70,28 @@ body {
 /* Horizontal carousels scroll by drag/arrows — the native bar adds nothing */
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+
+
+/* El desplegable nativo hereda el tema; sin esto las opciones salen en blanco */
+.dark { color-scheme: dark; }
+select option { background: var(--surface); color: var(--ink); }
+
+/* Destellos sobre el slogan */
+@keyframes mdm-sparkle {
+  0%, 100%   { opacity: 0; transform: scale(.3) rotate(0deg); }
+  6%         { opacity: 1; transform: scale(1) rotate(15deg); }
+  14%        { opacity: 0; transform: scale(.4) rotate(30deg); }
+}
+.sparkle { animation: mdm-sparkle 7s ease-in-out infinite; transform-origin: center; }
+
+/* El hero ya casi no tiene velo sobre el video: una sombra suave mantiene
+   legible el texto sobre cualquier fotograma. */
+.hero-text {
+  text-shadow:
+    0 1px 3px var(--hero-halo),
+    0 2px 18px var(--hero-halo),
+    0 0 45px var(--hero-halo),
+    0 0 80px var(--hero-halo);
+}
+.hero-mark { filter: drop-shadow(0 2px 14px var(--hero-halo)) drop-shadow(0 0 40px var(--hero-halo)) drop-shadow(0 0 75px var(--hero-halo)); }
