@@ -8,7 +8,7 @@ import { UI } from "./i18n.js";
 import heroVideo from "./assets/hero-bg.mp4";
 import marceloPhoto from "./assets/marcelodimaggio.jpg";
 import {
-  PROCEDURES, PROCEDURE_GROUPS, PROCEDURES_WITH_CASES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
+  PROCEDURES, PROCEDURES_WITH_CASES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
   LOCATIONS, SEDES, TESTIMONIALS, casesFor, CERTIFICATES, PAPERS,
 } from "./data.js";
 
@@ -163,28 +163,35 @@ function PhotoBox({ label, className = "", textClass = "text-2xl" }) {
   );
 }
 
-/* Pequenos destellos de cuatro puntas repartidos sobre la frase. Cada uno arranca
-   en un momento distinto, asi el titileo nunca se ve sincronizado. */
-const SPARKS = [
-  { x: 6,  y: 30, s: 15, d: 0.0 }, { x: 21, y: 12, s: 10, d: 2.6 },
-  { x: 33, y: 62, s: 13, d: 1.1 }, { x: 46, y: 20, s: 18, d: 3.8 },
-  { x: 57, y: 70, s: 11, d: 0.6 }, { x: 68, y: 28, s: 14, d: 4.6 },
-  { x: 79, y: 58, s: 10, d: 2.0 }, { x: 90, y: 24, s: 16, d: 5.4 },
-  { x: 13, y: 72, s: 9,  d: 3.2 }, { x: 62, y: 8,  s: 9,  d: 6.1 },
-];
-
-function Sparkles() {
+/* Bloque plegable para las tres partes de Trayectoria & Prensa. */
+function Fold({ id, eyebrow, title, body, open, onToggle, children }) {
   return (
-    <span aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-visible">
-      {SPARKS.map((k, i) => (
-        <svg key={i} viewBox="0 0 24 24" width={k.s} height={k.s}
-          className="sparkle absolute text-[var(--ink)]"
-          style={{ left: `${k.x}%`, top: `${k.y}%`, animationDelay: `${k.d}s` }}>
-          <path fill="currentColor"
-            d="M12 0c.5 6.4 5.1 11 11.5 11.5C17.1 12 12.5 16.6 12 23c-.5-6.4-5.1-11-11.5-11.5C6.9 11 11.5 6.4 12 0z" />
-        </svg>
-      ))}
-    </span>
+    <div id={id} className="scroll-mt-24 border-b border-[var(--line)] last:border-0">
+      <button type="button" onClick={onToggle} aria-expanded={open}
+        className="group flex w-full cursor-pointer items-center gap-5 py-7 text-left">
+        <span className="min-w-0 flex-1">
+          <span className="block text-[10px] uppercase tracking-[0.3em] text-[var(--faint)]">{eyebrow}</span>
+          <span className="mt-2 block font-display text-2xl font-normal leading-tight text-[var(--ink)] sm:text-3xl">{title}</span>
+        </span>
+        <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border transition-colors duration-200 ${
+          open ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]" : "border-[var(--line)] text-[var(--muted)] group-hover:border-[var(--ink)]"}`}>
+          <ChevronDown size={17} strokeWidth={1.5}
+            className={`transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
+        </span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div key="c" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.35, ease: "easeOut" }}
+            className="overflow-hidden">
+            <div className="pb-10">
+              <p className="max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{body}</p>
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -201,24 +208,29 @@ function Slogan({ text }) {
     hidden: { scaleX: 0 },
     visible: { scaleX: 1, transition: { duration: 0.9, ease: "easeOut" } },
   };
-  const word = {
-    hidden: { opacity: 0, y: 12 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+  // El slogan se lee en dos tiempos: cada mitad entra por separado, con un
+  // retraso corto entre una y otra, para dar ritmo a la lectura.
+  const half = {
+    hidden: { opacity: 0, y: 14 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } },
   };
+  const corte = text.indexOf(",");
+  const mitades = corte > 0
+    ? [text.slice(0, corte + 1), text.slice(corte + 1).trim()]
+    : [text];
   return (
     <motion.div
       ref={ref}
       initial="hidden"
       animate={show ? "visible" : "hidden"}
-      variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.055, delayChildren: 0.15 } } }}
+      variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.45, delayChildren: 0.2 } } }}
       className="relative mt-20 text-center"
     >
       <motion.span variants={rule} className="mx-auto block h-px w-20 origin-center bg-[var(--line)]" />
-      {show && !reduce && <Sparkles />}
       <p className="mx-auto mt-8 max-w-2xl font-display text-[22px] font-normal italic leading-snug text-[var(--ink)] sm:text-[28px]">
-        {text.split(" ").map((w, i) => (
-          <motion.span key={i} variants={word} className="inline-block">
-            {w}&nbsp;
+        {mitades.map((frag, i) => (
+          <motion.span key={i} variants={half} className="inline">
+            {i > 0 ? " " : ""}{frag}
           </motion.span>
         ))}
       </p>
@@ -257,9 +269,10 @@ export default function App() {
   const [igHint, setIgHint] = useState(null);
   const papersRef = useRef(null);
   const casesRef = useRef(null);
-  const [activeGroup, setActiveGroup] = useState("facial");
   const [activeProc, setActiveProc] = useState("facial-harmonization");
+  const [procModal, setProcModal] = useState(false);
   const [certsOpen, setCertsOpen] = useState(false);
+  const [fold, setFold] = useState(null);
   const [pastHero, setPastHero] = useState(false);
   const [introDone, setIntroDone] = useState(false);
   const [formErr, setFormErr] = useState("");
@@ -301,6 +314,14 @@ export default function App() {
   }, [lang]);
 
   useEffect(() => {
+    if (!procModal) return;
+    const onKey = (e) => { if (e.key === "Escape") setProcModal(false); };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  }, [procModal]);
+
+  useEffect(() => {
     if (!lightbox) return;
     const onKey = (e) => { if (e.key === "Escape") setLightbox(null); };
     window.addEventListener("keydown", onKey);
@@ -329,8 +350,16 @@ export default function App() {
   }, [igHint]);
 
   const scrollTo = (id, closeMenu = true) => {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    // Las tres partes de Trayectoria & Prensa son plegables: al elegirlas en el
+    // nav se abre la que corresponde y se cierran las otras.
+    const esPliegue = id === "interviews" || id === "certs" || id === "papers";
+    if (esPliegue) setFold(id);
+    const ir = () => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    };
+    // si se despliega un bloque, se espera a que crezca antes de posicionar
+    if (esPliegue) setTimeout(ir, 60); else ir();
     if (closeMenu) setOpen(false);
   };
 
@@ -823,35 +852,19 @@ export default function App() {
             </motion.div>
 
             {(() => {
-              const grupo = PROCEDURE_GROUPS.find((g) => g.id === activeGroup) ?? PROCEDURE_GROUPS[0];
-              const p = PROCEDURES.find((x) => x.slug === activeProc) ?? grupo.items[0];
+              const p = PROCEDURES.find((x) => x.slug === activeProc) ?? PROCEDURES[0];
               return (
                 <div className="mt-10 rounded-xl border border-[var(--line)] p-5 sm:p-7">
-                  {/* Pestañas por zona */}
-                  <div role="tablist" aria-label={t.proc.zones}
-                    className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-4 sm:-mx-7 sm:flex-wrap sm:overflow-visible sm:px-7">
-                    {PROCEDURE_GROUPS.map((g) => (
-                      <button key={g.id} type="button" role="tab" aria-selected={g.id === grupo.id}
-                        onClick={() => { setActiveGroup(g.id); setActiveProc(g.items[0].slug); }}
-                        className={`flex-shrink-0 cursor-pointer rounded-full border px-4 py-1.5 text-[11px] uppercase tracking-[0.14em] transition-colors duration-200 ${
-                          g.id === grupo.id
-                            ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]"
-                            : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"}`}>
-                        {g[lang]}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="grid gap-8 border-t border-[var(--line)] pt-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-12">
+                  <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-12">
                   {/* Lista de nombres */}
-                  <motion.ul key={grupo.id} variants={container} initial="hidden" animate="visible"
+                  <motion.ul variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
                     className="border-t border-[var(--line)]">
-                    {grupo.items.map((x) => {
+                    {PROCEDURES.map((x) => {
                       const on = x.slug === p.slug;
                       return (
                         <motion.li key={x.slug} variants={fadeUp} className="border-b border-[var(--line)]">
                           <button type="button"
-                            onClick={() => setActiveProc(x.slug)}
+                            onClick={() => { setActiveProc(x.slug); if (window.matchMedia("(max-width: 1023px)").matches) setProcModal(true); }}
                             aria-current={on}
                             className="group flex w-full cursor-pointer items-center gap-4 py-4 text-left transition-colors duration-200">
                             {x.art ? (
@@ -873,7 +886,7 @@ export default function App() {
                   </motion.ul>
 
                   {/* Ficha fija */}
-                  <div className="lg:sticky lg:top-24 lg:self-start">
+                  <div className="hidden lg:sticky lg:top-24 lg:block lg:self-start">
                     <motion.article key={p.slug}
                       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.28, ease: "easeOut" }}
@@ -930,6 +943,53 @@ export default function App() {
                     </motion.article>
                   </div>
                   </div>
+
+                  {/* Movil: la ficha se abre como ventana emergente sobre la pagina */}
+                  <AnimatePresence>
+                    {procModal && (
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        onClick={() => setProcModal(false)} role="dialog" aria-modal="true"
+                        className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 p-4 backdrop-blur-md lg:hidden">
+                        <motion.div onClick={(e) => e.stopPropagation()}
+                          initial={{ y: 28, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 28, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          className="relative max-h-[86vh] w-full overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 pb-8 shadow-[0_20px_60px_var(--shadow)]">
+                          <button type="button" onClick={() => setProcModal(false)} aria-label={t.a11y.close}
+                            className="absolute right-4 top-4 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:text-[var(--ink)]">
+                            <X size={17} strokeWidth={1.6} />
+                          </button>
+                          {p.art ? (
+                            <img src={p.art} alt="" aria-hidden="true" className="proc-art h-11 w-auto max-w-[60px] object-contain object-left" />
+                          ) : (
+                            <p.icon size={26} strokeWidth={1.2} aria-hidden="true" className="h-11 text-[var(--ink)]" />
+                          )}
+                          <h3 className="mt-4 max-w-[85%] font-display text-[23px] font-normal leading-snug text-[var(--ink)]">
+                            {p[lang].name}
+                          </h3>
+                          <p className="mt-3 text-[14px] leading-relaxed text-[var(--muted)]">{p[lang].desc}</p>
+                          <dl className="mt-5 space-y-2 border-t border-[var(--line)] pt-4 text-[13px]">
+                            <div className="flex justify-between gap-4">
+                              <dt className="text-[var(--faint)]">{t.proc.duration}</dt>
+                              <dd className="text-right text-[var(--ink)]">{p[lang].duration}</dd>
+                            </div>
+                            <div className="flex justify-between gap-4">
+                              <dt className="text-[var(--faint)]">{t.proc.recovery}</dt>
+                              <dd className="text-right text-[var(--ink)]">{p[lang].recovery}</dd>
+                            </div>
+                          </dl>
+                          <button type="button" onClick={() => { setProcModal(false); askAbout(p[lang].name); }}
+                            className="mt-6 w-full cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-4 py-3 text-[10px] uppercase tracking-[0.16em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85">
+                            {t.proc.ask}
+                          </button>
+                          <button type="button" onClick={() => { setProcModal(false); goToResult(p.slug); }}
+                            className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 border border-[var(--line)] px-4 py-2.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)] transition-colors duration-200 hover:border-[var(--ink)]">
+                            {t.proc.cta}
+                            <ArrowRight size={13} strokeWidth={1.5} />
+                          </button>
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               );
             })()}
@@ -958,18 +1018,21 @@ export default function App() {
                 <>
                   {/* Procedure filter */}
                   {/* Selector de procedimiento: una sola linea en vez de la fila de fichas */}
-                  <div className="relative mt-10 inline-block w-full max-w-sm">
-                    <label htmlFor="res-filtro" className="sr-only">{t.res.filter}</label>
-                    <select id="res-filtro" value={proc.slug}
-                      onChange={(e) => { setActiveSlug(e.target.value); setActiveCase(0); setActiveAngle(0); }}
-                      className="w-full cursor-pointer appearance-none border-b border-[var(--line)] bg-transparent py-3 pr-9 font-display text-[19px] text-[var(--ink)] transition-colors duration-200 hover:border-[var(--ink)] focus:border-[var(--ink)] focus:outline-none sm:text-[22px]">
-                      {PROCEDURES_WITH_CASES.map((x) => (
-                        <option key={x.slug} value={x.slug}>{x[lang].name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={17} strokeWidth={1.5} aria-hidden="true"
-                      className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-[var(--faint)]" />
-                    <span className="mt-1.5 block text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.filter}</span>
+                  <div className="mt-10 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[0_6px_20px_var(--shadow)] sm:p-5">
+                    <label htmlFor="res-filtro" className="block text-[10px] uppercase tracking-[0.26em] text-[var(--faint)]">
+                      {t.res.filter}
+                    </label>
+                    <div className="relative mt-2">
+                      <select id="res-filtro" value={proc.slug}
+                        onChange={(e) => { setActiveSlug(e.target.value); setActiveCase(0); setActiveAngle(0); }}
+                        className="w-full cursor-pointer appearance-none rounded-lg border-2 border-[var(--ink)] bg-[var(--ink)] py-3.5 pl-5 pr-12 font-display text-[19px] text-[var(--surface)] transition-opacity duration-200 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[var(--rule)] sm:text-[22px]">
+                        {PROCEDURES_WITH_CASES.map((x) => (
+                          <option key={x.slug} value={x.slug}>{x[lang].name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={20} strokeWidth={1.6} aria-hidden="true"
+                        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--surface)]" />
+                    </div>
                   </div>
 
                   <div id={`res-${proc.slug}`} className="mt-8 scroll-mt-24 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-7">
@@ -1017,7 +1080,8 @@ export default function App() {
                             {/* object-contain: la foto se ve entera, en su calidad original,
                                 sobre el gris del marco. Nunca se amplia para llenar el cuadro. */}
                             <img key={src} src={src} alt={`${proc[lang].name} · ${caption}`} loading="lazy"
-                              className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]" />
+                              style={{ objectPosition: kase.focus }}
+                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
                             {kase.watermark && <Watermark />}
                             <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
                               <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
@@ -1078,12 +1142,9 @@ export default function App() {
               <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.press.body}</p>
             </motion.div>
 
-            <div id="interviews" className="scroll-mt-24 pt-12">
-              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
-                <Eyebrow>{t.interviews.eyebrow}</Eyebrow>
-                <SectionTitle>{t.interviews.title}</SectionTitle>
-                <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.interviews.body}</p>
-              </motion.div>
+            <div className="mt-10 border-t border-[var(--line)]">
+            <Fold id="interviews" eyebrow={t.interviews.eyebrow} title={t.interviews.title} body={t.interviews.body}
+              open={fold === "interviews"} onToggle={() => setFold(fold === "interviews" ? null : "interviews")}>
               <motion.a initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}
                 whileHover={{ y: -3 }} transition={{ duration: 0.25, ease: "easeOut" }}
                 href={INTERVIEWS_PLAYLIST} target="_blank" rel="noopener noreferrer"
@@ -1102,14 +1163,10 @@ export default function App() {
                 <ArrowRight size={20} strokeWidth={1.4}
                   className="flex-shrink-0 text-[var(--faint)] transition-[transform,color] duration-300 ease-out group-hover:translate-x-1.5 group-hover:text-[var(--ink)]" />
               </motion.a>
-            </div>
 
-            <div id="certs" className="scroll-mt-24 pt-20">
-              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
-                <Eyebrow>{t.certs.eyebrow}</Eyebrow>
-                <SectionTitle>{t.certs.title}</SectionTitle>
-                <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.certs.body}</p>
-              </motion.div>
+            </Fold>
+            <Fold id="certs" eyebrow={t.certs.eyebrow} title={t.certs.title} body={t.certs.body}
+              open={fold === "certs"} onToggle={() => setFold(fold === "certs" ? null : "certs")}>
               <motion.ul variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
                 className="mt-10 border-t border-[var(--line)]">
                 {CERTIFICATES.slice(0, certsOpen ? undefined : CERTS_PREVIEW).map((c, i) => (
@@ -1153,14 +1210,10 @@ export default function App() {
                   {certsOpen ? t.certs.less : t.certs.more.replace("{n}", CERTIFICATES.length - CERTS_PREVIEW)}
                 </button>
               )}
-            </div>
 
-            <div id="papers" className="scroll-mt-24 pt-20">
-              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
-                <Eyebrow>{t.papers.eyebrow}</Eyebrow>
-                <SectionTitle>{t.papers.title}</SectionTitle>
-                <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.papers.body}</p>
-              </motion.div>
+            </Fold>
+            <Fold id="papers" eyebrow={t.papers.eyebrow} title={t.papers.title} body={t.papers.body}
+              open={fold === "papers"} onToggle={() => setFold(fold === "papers" ? null : "papers")}>
               <CarouselArrows prevLabel={t.papers.prev} nextLabel={t.papers.next}
                 onPrev={() => scrollCarousel(papersRef, -1)} onNext={() => scrollCarousel(papersRef, 1)} />
 
@@ -1203,6 +1256,7 @@ export default function App() {
                   </motion.article>
                 ))}
               </motion.div>
+            </Fold>
             </div>
           </section>
 

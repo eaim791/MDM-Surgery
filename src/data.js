@@ -26,6 +26,17 @@ const BEFORE_TOKEN = /(antes|before)/;
 /* Only the first cases per procedure are published. */
 const MAX_CASES = 40;
 
+/* Punto de interes de cada procedimiento dentro del marco: la foto no se recorta en
+   disco, solo se encuadra con object-position para que todas miren lo mismo. */
+const FOCO = {
+  rhinoplasty: "50% 38%", profiloplasty: "50% 42%",
+  "upper-lip-lift": "50% 55%", "eyes-expression": "50% 32%", blepharoplasty: "50% 32%",
+  "forehead-orbital": "50% 22%", cheeks: "50% 38%", "chin-jaw": "50% 58%",
+  "adams-remodeling": "50% 60%", "hair-implants": "50% 18%",
+  breast: "50% 50%", "body-remodeling": "50% 50%",
+};
+const FOCO_DEFECTO = "50% 35%";   // rostro completo con cuello
+
 /* The UI draws the MDM logo over every case photo, except the few that still carry a full,
    readable logo of their own — reframing the photos to 4:5 cropped it out of most of them.
    Add a "<slug>/<case>" key here only when a case already shows the complete logo. */
@@ -62,7 +73,8 @@ const CASES_BY_SLUG = (() => {
             before: before[k].image,
             after: after[k].image,
           }));
-          return { caseId, angles, watermark: !CASES_WITH_OWN_LOGO.has(`${slug}/${caseId}`) };
+          return { caseId, angles, focus: FOCO[slug] ?? FOCO_DEFECTO,
+                   watermark: !CASES_WITH_OWN_LOGO.has(`${slug}/${caseId}`) };
         })
         .filter((c) => c.angles.length > 0)
         .slice(0, MAX_CASES)
