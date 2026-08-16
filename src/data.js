@@ -12,6 +12,28 @@ const PAPER_IMAGES = import.meta.glob("./assets/pappers/*.{jpg,jpeg,png}", { eag
 
 const CASE_IMAGES = import.meta.glob("./assets/procedimientos/*/*/*.{jpg,jpeg,png,webp}", { eager: true, import: "default" });
 
+/* Encuadre de cada foto, calculado con revision3/encuadre.py.
+   - fotos:  [ancho, alto, izquierda, arriba] en porcentaje del recuadro. Amplia la foto
+             sobre la zona del procedimiento y deja el mismo punto de la cara en el mismo
+             lugar del recuadro en el antes y en el despues.
+   - marcos: proporcion del recuadro, la de las propias fotos del par, para que no queden
+             franjas vacias ni recortes que dejen la foto demasiado cerca.
+   - aparte: proporcion exacta de las fotos sueltas, que se muestran enteras.
+   El archivo no se toca: el lightbox sigue mostrando la foto original entera. */
+import ENCUADRES from "./encuadre.json";
+const clave = (slug, caseId, file) => `${slug}/${caseId}/${file}`.normalize("NFC");
+const encuadreDe = (slug, caseId, file) => {
+  const r = ENCUADRES.fotos[clave(slug, caseId, file)];
+  return r ? { width: `${r[0]}%`, height: `${r[1]}%`, left: `${r[2]}%`, top: `${r[3]}%`,
+               // el centro del recuadro no se mueve cuando la foto crece con el hover
+               transformOrigin: `${((50 - r[2]) / r[0]) * 100}% ${((50 - r[3]) / r[1]) * 100}%` }
+            : null;
+};
+const MARCO_DEFECTO = 4 / 5;
+const marcoDe = (slug, caseId, ...files) =>
+  files.map((f) => ENCUADRES.marcos[clave(slug, caseId, f)]).find(Boolean) ?? MARCO_DEFECTO;
+const aparteDe = (slug, caseId, file) => ENCUADRES.aparte[clave(slug, caseId, file)] ?? MARCO_DEFECTO;
+
 const imageByFile = (globObj, folder) => (file) => globObj[`./assets/${folder}/${file}`];
 const certImage = imageByFile(CERT_IMAGES, "certificados");
 const paperImage = imageByFile(PAPER_IMAGES, "pappers");
@@ -22,6 +44,7 @@ const paperImage = imageByFile(PAPER_IMAGES, "pappers");
    the UI shows as switchable angles. Both sides are sorted by name so the angles line up. */
 const AFTER_TOKEN = /(despu[eé]s|dsp|after)/;
 const BEFORE_TOKEN = /(antes|before)/;
+const APART_TOKEN = /aparte/;
 
 /* Only the first cases per procedure are published. */
 const MAX_CASES = 40;
@@ -53,11 +76,14 @@ const CASES_BY_SLUG = (() => {
     if (!match) continue;
     const [, slug, caseId, file] = match;
     const base = file.replace(/\.\w+$/, "").toLowerCase();
-    const side = AFTER_TOKEN.test(base) ? "after" : BEFORE_TOKEN.test(base) ? "before" : null;
+    /* "fotoaparte" es una foto suelta del caso: se muestra sola, sin par. */
+    const side = APART_TOKEN.test(base) ? "apart"
+               : AFTER_TOKEN.test(base) ? "after"
+               : BEFORE_TOKEN.test(base) ? "before" : null;
     if (!side) continue;
     acc[slug] ??= {};
-    acc[slug][caseId] ??= { before: [], after: [] };
-    acc[slug][caseId][side].push({ base, image });
+    acc[slug][caseId] ??= { before: [], after: [], apart: [] };
+    acc[slug][caseId][side].push({ base, image, file });
   }
 
   const byBase = (a, b) => a.base.localeCompare(b.base, undefined, { numeric: true });
@@ -69,14 +95,23 @@ const CASES_BY_SLUG = (() => {
           const before = cases[caseId].before.sort(byBase);
           const after = cases[caseId].after.sort(byBase);
           // Each angle is one before/after shot of the same patient.
-          const angles = Array.from({ length: Math.min(before.length, after.length) }, (_, k) => ({
-            before: before[k].image,
-            after: after[k].image,
-          }));
-          return { caseId, angles, focus: FOCO[slug] ?? FOCO_DEFECTO,
+          const angles = Array.from({ length: Math.min(before.length, after.length) }, (_, k) => {
+            const beforeFit = encuadreDe(slug, caseId, before[k].file);
+            const afterFit = encuadreDe(slug, caseId, after[k].file);
+            // Si falta la medida de un lado, los dos vuelven al encuadre por defecto:
+            // ampliar solo una mitad del par la dejaria descalzada con la otra.
+            const par = beforeFit && afterFit;
+            return { before: before[k].image, after: after[k].image,
+                     beforeFit: par ? beforeFit : null, afterFit: par ? afterFit : null,
+                     frame: marcoDe(slug, caseId, before[k].file, after[k].file) };
+          });
+          const apart = (cases[caseId].apart ?? []).sort(byBase)
+            .map((x) => ({ image: x.image, frame: aparteDe(slug, caseId, x.file) }));
+          return { caseId, angles, apart, focus: FOCO[slug] ?? FOCO_DEFECTO,
                    watermark: !CASES_WITH_OWN_LOGO.has(`${slug}/${caseId}`) };
         })
-        .filter((c) => c.angles.length > 0)
+        /* Un caso se publica si tiene un par antes/despues o, al menos, fotos sueltas. */
+        .filter((c) => c.angles.length > 0 || c.apart.length > 0)
         .slice(0, MAX_CASES)
         .map((c, i) => ({ ...c, n: String(i + 1).padStart(2, "0") }));
       return [slug, list];

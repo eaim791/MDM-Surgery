@@ -23,7 +23,7 @@ const XLogo = ({ size = 15 }) => (
 const CONTACT_EMAIL = "info@mdmsurgery.com";
 const INSTAGRAM_HANDLE = "@mdmsurgery";
 const DEVELOPER_NAME = "Emma A.";
-const DEVELOPER_PORTFOLIO_URL = "https://emmaporttfolio.netlify.app/";
+const DEVELOPER_PORTFOLIO_URL = "https://aimettaemma.vercel.app/";
 const FORMSPREE_ENDPOINT = "https://formspree.io/f/xnpaaroa";
 const TEST_PAGE_SIZE = 2;
 // Certificaciones internacionales que se ven de entrada; el resto queda plegado.
@@ -90,8 +90,8 @@ function Stars({ value, onChange, t, size = 15 }) {
     return (
       <div className="flex gap-0.5" role="img" aria-label={label(value)}>
         {[1, 2, 3, 4, 5].map((n) => (
-          <Star key={n} size={size} strokeWidth={1.4} aria-hidden="true"
-            className={n <= value ? "fill-[var(--ink)] text-[var(--ink)]" : "text-[var(--line)]"} />
+          <Star key={n} size={size} strokeWidth={2} aria-hidden="true"
+            className={n <= value ? "fill-[var(--ink)] text-[var(--ink)]" : "text-[var(--muted)]"} />
         ))}
       </div>
     );
@@ -258,12 +258,9 @@ export default function App() {
   const [activeSlug, setActiveSlug] = useState(PROCEDURES_WITH_CASES[0]?.slug);
   const [activeCase, setActiveCase] = useState(0);
   const [activeAngle, setActiveAngle] = useState(0);
-  const [extra, setExtra] = useState([]);
-  const [form, setForm] = useState({ initials: "", place: "", msg: "", stars: 5 });
   const [cForm, setCForm] = useState({ name: "", email: "", msg: "" });
   const [cSent, setCSent] = useState(false);
   const [cErr, setCErr] = useState("");
-  const [sent, setSent] = useState(false);
   const [testPage, setTestPage] = useState(0);
   const [lightbox, setLightbox] = useState(null);
   const [igHint, setIgHint] = useState(null);
@@ -275,7 +272,6 @@ export default function App() {
   const [fold, setFold] = useState(null);
   const [pastHero, setPastHero] = useState(false);
   const [introDone, setIntroDone] = useState(false);
-  const [formErr, setFormErr] = useState("");
   const reduce = useReducedMotion();
   const [loading, setLoading] = useState(true);
   const t = UI[lang];
@@ -449,23 +445,6 @@ export default function App() {
     });
     return () => ob.disconnect();
   }, []);
-
-  const submitTestimonial = async (e) => {
-    e.preventDefault();
-    if (!form.initials.trim() || !form.msg.trim()) { setFormErr(t.test.required); return; }
-    setFormErr("");
-    const entry = { initials: form.initials.trim().toUpperCase(), place: form.place.trim(), text: form.msg.trim(), stars: form.stars };
-    setExtra((p) => [...p, entry]);
-    setTestPage(Math.floor((TESTIMONIALS.length + extra.length) / TEST_PAGE_SIZE));
-    setForm({ initials: "", place: "", msg: "", stars: 5 });
-    setSent(true);
-    setTimeout(() => setSent(false), 6000);
-    try {
-      await submitToFormspree({ form: "testimonial", initials: entry.initials, place: entry.place, message: entry.text, stars: entry.stars });
-    } catch {
-      // Shown locally regardless; the email notification is best-effort.
-    }
-  };
 
   const Toggles = ({ compact }) => (
     <div className={`flex items-center gap-2 ${compact ? "" : "mt-4"}`}>
@@ -1014,6 +993,14 @@ export default function App() {
               const kase = cases[ci];
               const ai = Math.min(activeAngle, kase.angles.length - 1);
               const angle = kase.angles[ai];
+              /* Casos con par: arriba el antes y el despues, y las fotos sueltas debajo.
+                 Casos que solo tienen fotos sueltas: esas fotos ocupan el lugar del par. */
+              const marcos = angle
+                ? [{ caption: t.res.before, src: angle.before, fit: angle.beforeFit, frame: angle.frame },
+                   { caption: t.res.after, src: angle.after, fit: angle.afterFit, frame: angle.frame }]
+                : kase.apart.slice(0, 2).map((x, k) => ({ caption: `${t.res.angle} ${k + 1}`,
+                    src: x.image, frame: x.frame, fit: null, entera: true }));
+              const sueltas = angle ? kase.apart : kase.apart.slice(2);
               return (
                 <>
                   {/* Procedure filter */}
@@ -1069,19 +1056,21 @@ export default function App() {
 
                     {/* Before / after */}
                     <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      {[
-                        { caption: t.res.before, src: angle.before },
-                        { caption: t.res.after, src: angle.after },
-                      ].map(({ caption, src }) => (
+                      {marcos.map(({ caption, src, fit, entera, frame }) => (
                         <figure key={caption} className="overflow-hidden rounded-lg border border-[var(--line)]">
                           <button type="button"
                             onClick={() => setLightbox({ src, alt: `${proc[lang].name} · ${caption}`, watermark: kase.watermark })}
-                            className="group relative block aspect-[4/5] w-full cursor-zoom-in overflow-hidden bg-[var(--photo)]">
-                            {/* object-contain: la foto se ve entera, en su calidad original,
-                                sobre el gris del marco. Nunca se amplia para llenar el cuadro. */}
+                            style={{ aspectRatio: frame }}
+                            className="group relative block w-full cursor-zoom-in overflow-hidden bg-[var(--photo)]">
+                            {/* La foto se agranda sobre la zona del procedimiento y se apoya en
+                                el mismo punto de la cara que su par, asi el antes y el despues
+                                quedan alineados. El archivo no se recorta: al hacer click el
+                                lightbox lo muestra entero. */}
                             <img key={src} src={src} alt={`${proc[lang].name} · ${caption}`} loading="lazy"
-                              style={{ objectPosition: kase.focus }}
-                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+                              style={fit ?? (entera ? undefined : { objectPosition: kase.focus })}
+                              className={`transition-transform duration-300 group-hover:scale-[1.03] ${
+                                fit ? "absolute max-w-none object-cover"
+                                    : entera ? "h-full w-full object-contain" : "h-full w-full object-cover"}`} />
                             {kase.watermark && <Watermark />}
                             <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
                               <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
@@ -1094,29 +1083,49 @@ export default function App() {
                       ))}
                     </div>
 
-                    {/* Other shots of the same patient — the row keeps its height so the
-                        block does not resize when a case has a single photo. */}
-                    <div className="mt-4 h-[98px]">
-                      {kase.angles.length > 1 && (
-                        <>
-                          <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.angles}</p>
-                          <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto">
-                            {kase.angles.map((a, k) => (
-                              <button key={k} type="button" onClick={() => setActiveAngle(k)}
-                                aria-pressed={k === ai} aria-label={`${t.res.angle} ${k + 1}`}
-                                className={`relative h-16 w-16 flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border transition-colors duration-200 ${
-                                  k === ai ? "border-[var(--ink)]" : "border-[var(--line)] opacity-70 hover:opacity-100"}`}>
-                                <img src={a.after} alt="" aria-hidden="true" loading="lazy"
-                                  className="h-full w-full object-cover" />
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
+                    {/* Otras tomas del mismo paciente. La fila solo existe si hay mas de
+                        una: nada de alto reservado, para no dejar un hueco vacio. */}
+                    {kase.angles.length > 1 && (
+                      <div className="mt-5">
+                        <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.angles}</p>
+                        <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto">
+                          {kase.angles.map((a, k) => (
+                            <button key={k} type="button" onClick={() => setActiveAngle(k)}
+                              aria-pressed={k === ai} aria-label={`${t.res.angle} ${k + 1}`}
+                              className={`relative h-16 w-16 flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border transition-colors duration-200 ${
+                                k === ai ? "border-[var(--ink)]" : "border-[var(--line)] opacity-70 hover:opacity-100"}`}>
+                              <img src={a.after} alt="" aria-hidden="true" loading="lazy"
+                                className="h-full w-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Fotos sueltas del caso: no tienen par, se muestran solas y enteras. */}
+                    {sueltas.length > 0 && (
+                      <div className="mt-5">
+                        <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.apart}</p>
+                        <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto">
+                          {sueltas.map(({ image, frame }, k) => (
+                            <button key={k} type="button"
+                              onClick={() => setLightbox({ src: image, alt: `${proc[lang].name} · ${t.res.apart}`, watermark: kase.watermark })}
+                              aria-label={`${t.res.apart} ${k + 1}`}
+                              style={{ aspectRatio: frame }}
+                              className="group relative h-[132px] flex-shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--photo)]">
+                              <img src={image} alt="" aria-hidden="true" loading="lazy"
+                                className="h-full w-full object-cover" />
+                              <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
+                                <ZoomIn size={18} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
-                      className="group mt-2 flex items-center justify-between gap-4 rounded-lg border border-[var(--line)] px-5 py-4 transition-[border-color,box-shadow] duration-300 ease-out hover:border-[var(--rule)] hover:shadow-[0_10px_26px_var(--shadow)]">
+                      className="group mt-6 flex items-center justify-between gap-4 rounded-lg border border-[var(--line)] px-5 py-4 transition-[border-color,box-shadow] duration-300 ease-out hover:border-[var(--rule)] hover:shadow-[0_10px_26px_var(--shadow)]">
                       <span className="flex items-center gap-3">
                         <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-300 group-hover:border-[var(--rule)] group-hover:bg-[var(--chip)] group-hover:text-[var(--ink)]">
                           <Instagram size={17} strokeWidth={1.5} />
@@ -1268,7 +1277,7 @@ export default function App() {
             </motion.div>
 
             {(() => {
-              const all = [...TESTIMONIALS.map((x) => ({ initials: x.initials, place: x.place, text: x[lang], stars: x.stars })), ...extra];
+              const all = TESTIMONIALS.map((x) => ({ initials: x.initials, place: x.place, text: x[lang], stars: x.stars }));
               const totalPages = Math.max(1, Math.ceil(all.length / TEST_PAGE_SIZE));
               const page = ((testPage % totalPages) + totalPages) % totalPages;
               const visible = all.slice(page * TEST_PAGE_SIZE, page * TEST_PAGE_SIZE + TEST_PAGE_SIZE);
@@ -1312,52 +1321,6 @@ export default function App() {
               );
             })()}
 
-            {/* Form */}
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }} variants={fadeUp}
-              className="mt-10 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-8">
-              <h3 className="font-display text-xl font-normal text-[var(--ink)]">{t.test.formTitle}</h3>
-              <form onSubmit={submitTestimonial} className="mt-6 space-y-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.test.name}</span>
-                    <input type="text" value={form.initials} maxLength={8} placeholder={t.test.namePh}
-                      onChange={(e) => setForm({ ...form, initials: e.target.value })}
-                      className="mt-2 w-full rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-2.5 text-[13px] text-[var(--ink)] outline-none transition-colors focus:border-[var(--ink)]" />
-                  </label>
-                  <label className="block">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.test.place}</span>
-                    <input type="text" value={form.place} maxLength={40} placeholder={t.test.placePh}
-                      onChange={(e) => setForm({ ...form, place: e.target.value })}
-                      className="mt-2 w-full rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-2.5 text-[13px] text-[var(--ink)] outline-none transition-colors focus:border-[var(--ink)]" />
-                  </label>
-                </div>
-                <label className="block">
-                  <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.test.msg}</span>
-                  <textarea rows={4} value={form.msg} maxLength={500} placeholder={t.test.msgPh}
-                    onChange={(e) => setForm({ ...form, msg: e.target.value })}
-                    className="mt-2 w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-2.5 text-[13px] text-[var(--ink)] outline-none transition-colors focus:border-[var(--ink)]" />
-                </label>
-                <div>
-                  <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.test.rating}</span>
-                  <div className="mt-2">
-                    <Stars value={form.stars} onChange={(n) => setForm({ ...form, stars: n })} t={t} />
-                  </div>
-                </div>
-                {formErr && <p className="text-[12px] text-[#C0524F]">{formErr}</p>}
-                <div className="flex flex-wrap items-center gap-4">
-                  <button type="submit"
-                    className="cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-8 py-3 text-[10px] uppercase tracking-[0.24em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85">
-                    {t.test.send}
-                  </button>
-                  {sent && (
-                    <span className="flex items-center gap-1.5 text-[12px] text-[var(--muted)]">
-                      <Check size={14} strokeWidth={1.6} /> {t.test.thanks}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] leading-relaxed text-[var(--faint)]">{t.test.note}</p>
-              </form>
-            </motion.div>
           </section>
 
           {/* ============ LOCATIONS ============ */}
@@ -1462,7 +1425,7 @@ export default function App() {
               </div>
             </div>
             <p className="mt-10 text-[11px] tracking-wide text-[var(--faint)]">
-              © 2026 MDM Surgery — Marcelo Di Maggio &amp; Team.
+              © {new Date().getFullYear()} MDM Surgery — Marcelo Di Maggio &amp; Team.
             </p>
             <p className="mt-2 text-[11px] tracking-wide text-[var(--faint)]">
               {t.footer.madeBy}:{" "}
