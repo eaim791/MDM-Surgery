@@ -1,16 +1,16 @@
 import {
   Aperture, Scan, Triangle, Eye, Flower2, Hexagon, MoveUp, Wind,
   Focus, Circle, Smile, Activity, Feather, PersonStanding, Sparkles, Gem,
-  Receipt, Hotel, Plane, Headphones,
 } from "lucide-react";
+import { AssuranceIcon, StayIcon, PlaneIcon, InterpreterIcon } from "./icons.jsx";
 
-const ART = import.meta.glob("./assets/proc/*.png", { eager: true, import: "default" });
-const artFor = (slug) => ART[`./assets/proc/${slug}.png`];
+const ART = import.meta.glob("./assets/proc/*.webp", { eager: true, import: "default" });
+const artFor = (slug) => ART[`./assets/proc/${slug}.webp`];
 
-const CERT_IMAGES = import.meta.glob("./assets/certificados/*.{jpg,jpeg,png}", { eager: true, import: "default" });
-const PAPER_IMAGES = import.meta.glob("./assets/pappers/*.{jpg,jpeg,png}", { eager: true, import: "default" });
+const CERT_IMAGES = import.meta.glob("./assets/certificados/*.webp", { eager: true, import: "default" });
+const PAPER_IMAGES = import.meta.glob("./assets/pappers/*.webp", { eager: true, import: "default" });
 
-const CASE_IMAGES = import.meta.glob("./assets/procedimientos/*/*/*.{jpg,jpeg,png,webp}", { eager: true, import: "default" });
+const CASE_IMAGES = import.meta.glob("./assets/procedimientos/*/*/*.webp", { eager: true, import: "default" });
 
 /* Encuadre de cada foto, calculado con revision3/encuadre.py.
    - fotos:  [ancho, alto, izquierda, arriba] en porcentaje del recuadro. Amplia la foto
@@ -21,7 +21,8 @@ const CASE_IMAGES = import.meta.glob("./assets/procedimientos/*/*/*.{jpg,jpeg,pn
    - aparte: proporcion exacta de las fotos sueltas, que se muestran enteras.
    El archivo no se toca: el lightbox sigue mostrando la foto original entera. */
 import ENCUADRES from "./encuadre.json";
-const clave = (slug, caseId, file) => `${slug}/${caseId}/${file}`.normalize("NFC");
+const sinExtension = (ruta) => ruta.replace(/\.[^./]+$/, "");
+const clave = (slug, caseId, file) => sinExtension(`${slug}/${caseId}/${file}`).normalize("NFC");
 const encuadreDe = (slug, caseId, file) => {
   const r = ENCUADRES.fotos[clave(slug, caseId, file)];
   return r ? { width: `${r[0]}%`, height: `${r[1]}%`, left: `${r[2]}%`, top: `${r[3]}%`,
@@ -34,7 +35,11 @@ const marcoDe = (slug, caseId, ...files) =>
   files.map((f) => ENCUADRES.marcos[clave(slug, caseId, f)]).find(Boolean) ?? MARCO_DEFECTO;
 const aparteDe = (slug, caseId, file) => ENCUADRES.aparte[clave(slug, caseId, file)] ?? MARCO_DEFECTO;
 
-const imageByFile = (globObj, folder) => (file) => globObj[`./assets/${folder}/${file}`];
+const imageByFile = (globObj, folder) => {
+  const porNombre = Object.fromEntries(
+    Object.entries(globObj).map(([ruta, img]) => [sinExtension(ruta), img]));
+  return (file) => porNombre[sinExtension(`./assets/${folder}/${file}`)];
+};
 const certImage = imageByFile(CERT_IMAGES, "certificados");
 const paperImage = imageByFile(PAPER_IMAGES, "pappers");
 
@@ -210,10 +215,10 @@ export const AREAS = [
 ];
 
 export const INCLUDED = [
-  { icon: Receipt, es: "Todos los gastos médicos y administrativos", en: "All medical and administrative expenses" },
-  { icon: Hotel, es: "Una noche de internación con intérpretes", en: "A night in the hospital with interpreters" },
-  { icon: Plane, es: "Traslado desde y hacia el aeropuerto con asistente", en: "Pick up from and to the airport with assistant" },
-  { icon: Headphones, es: "Contacto y soporte 24/7", en: "Contact and support 24/7" },
+  { icon: AssuranceIcon, es: "Todos los gastos médicos y administrativos", en: "All medical and administrative expenses" },
+  { icon: StayIcon, es: "Una noche de internación con intérpretes", en: "A night in the hospital with interpreters" },
+  { icon: PlaneIcon, es: "Traslado desde y hacia el aeropuerto con asistente", en: "Pick up from and to the airport with assistant" },
+  { icon: InterpreterIcon, es: "Contacto y soporte 24/7", en: "Contact and support 24/7" },
 ];
 
 export const LEAD = {
@@ -270,20 +275,31 @@ export const ASSISTANTS = [
 ];
 
 export const LOCATIONS = [
-  { city: "Buenos Aires",
-    es: "El consultorio del Dr. Di Maggio está en la zona de Belgrano. Las cirugías se realizan en clínicas y hospitales de máxima complejidad médica: Trinidad Medical Center de Palermo y San Isidro, Clínica Bazterrica y Sanatorio Güemes.",
-    en: "Dr. Di Maggio's office is located in the Belgrano area. Surgeries are performed in clinics and hospitals of the highest medical complexity: Trinidad Medical Center in Palermo & San Isidro, Clínica Bazterrica and Sanatorio Güemes." },
-  { city: "Córdoba",
-    es: "El Dr. Marcelo Di Maggio trabaja junto al Dr. Roberto Martínez Rinaldi y todo el equipo profesional de MDM Surgery, enfocados en la armonización facial y corporal.",
-    en: "Dr. Marcelo Di Maggio works together with Dr. Roberto Martínez Rinaldi and all the professional members of MDM Surgery, focused on facial and body harmonization." },
-  { city: "Madrid · New York",
-    es: "El Dr. Di Maggio tiene matrícula médica en Nueva York y España, y realiza consultas y cirugías en Madrid y Nueva York. También atiende con frecuencia en San Diego, Los Ángeles y Chicago.",
-    en: "Dr. Di Maggio holds medical licenses in New York and Spain, and consults and operates in Madrid and New York. He also consults frequently in San Diego, Los Angeles and Chicago." },
+  { country: { es: "Argentina", en: "Argentina" },
+    cities: [
+      { city: { es: "Buenos Aires", en: "Buenos Aires" },
+        es: "El consultorio del Dr. Di Maggio está en la zona de Belgrano. Las cirugías se realizan en clínicas y hospitales de máxima complejidad médica: Trinidad Medical Center de Palermo y San Isidro, Clínica Bazterrica y Sanatorio Güemes.",
+        en: "Dr. Di Maggio's office is in the Belgrano area. Surgeries are performed in clinics and hospitals of the highest medical complexity: Trinidad Medical Center in Palermo & San Isidro, Clínica Bazterrica and Sanatorio Güemes." },
+      { city: { es: "Córdoba", en: "Córdoba" },
+        es: "Trabaja junto al Dr. Roberto Martínez Rinaldi y todo el equipo profesional de MDM Surgery, enfocados en la armonización facial y corporal.",
+        en: "He works together with Dr. Roberto Martínez Rinaldi and the professional team of MDM Surgery, focused on facial and body harmonization." },
+    ] },
+  { country: { es: "España", en: "Spain" },
+    cities: [
+      { city: { es: "Madrid", en: "Madrid" },
+        es: "El Dr. Di Maggio tiene matrícula médica en España y realiza consultas y cirugías en Madrid.",
+        en: "Dr. Di Maggio holds a medical license in Spain and consults and operates in Madrid." },
+    ] },
+  { country: { es: "Estados Unidos", en: "United States" },
+    cities: [
+      { city: { es: "Nueva York", en: "New York" },
+        es: "El Dr. Di Maggio tiene matrícula médica en Nueva York y realiza consultas y cirugías en la ciudad. También atiende con frecuencia en San Diego, Los Ángeles y Chicago.",
+        en: "Dr. Di Maggio holds a medical license in New York and consults and operates in the city. He also consults frequently in San Diego, Los Angeles and Chicago." },
+    ] },
 ];
 
 export const SEDES = [
-  "Buenos Aires, Argentina",
-  "Córdoba, Argentina",
+  "Buenos Aires y Córdoba, Argentina",
   "Madrid, España",
   "New York, USA",
 ];

@@ -75,6 +75,11 @@ PLAN = {
 }
 
 
+def sin_ext(f):
+    """Las claves van sin extension: cambiar de formato no invalida el encuadre."""
+    return os.path.splitext(f)[0]
+
+
 def fotos():
     for slug in sorted(os.listdir(BASE)):
         d = os.path.join(BASE, slug)
@@ -201,7 +206,7 @@ def main():
             im = Image.open(p)
         except Exception:
             continue
-        clave = f"{slug}/{caso}/{f}"
+        clave = f"{slug}/{caso}/{sin_ext(f)}"
         if slug not in PLAN:          # mamas y remodelacion corporal: sin cara que medir
             continue
         lm = landmarks(im)
@@ -268,7 +273,7 @@ def main():
         for a, b in pares([f for f, _ in archivos]):
             if a not in aspectos or b not in aspectos:
                 continue
-            ca, cb = f"{slug}/{caso}/{a}", f"{slug}/{caso}/{b}"
+            ca, cb = f"{slug}/{caso}/{sin_ext(a)}", f"{slug}/{caso}/{sin_ext(b)}"
             marcos[ca] = marcos[cb] = forma(aspectos[a], aspectos[b])
             emparejada |= {ca, cb}
             ka, kb = zoom.get(ca), zoom.get(cb)
@@ -279,7 +284,7 @@ def main():
             suelo = max(piso(aspectos[a], marcos[ca]), piso(aspectos[b], marcos[cb]))
             zoom[ca] = zoom[cb] = min(max(min(ka, kb), suelo), max(ZOOM_MAX, suelo))
         for f, _ in archivos:
-            c = f"{slug}/{caso}/{f}"
+            c = f"{slug}/{caso}/{sin_ext(f)}"
             if c in emparejada or f not in aspectos:
                 continue
             marcos[c] = forma(aspectos[f])
@@ -311,7 +316,7 @@ def main():
                     continue
                 try:
                     with Image.open(os.path.join(dc, f)) as im:
-                        proporciones[f"{slug}/{caso}/{f}"] = round(im.width / im.height, 4)
+                        proporciones[f"{slug}/{caso}/{sin_ext(f)}"] = round(im.width / im.height, 4)
                 except Exception:
                     pass
     with open(SALIDA, "w", encoding="utf-8") as fh:
@@ -323,7 +328,7 @@ def main():
 
     mp_n = sum(1 for v in crudo.values() if v[4] == "mp")
     print(f"\n{len(salida)}/{len(items)} fotos encuadradas  (mediapipe {mp_n}, yunet {len(crudo)-mp_n})")
-    faltan = [f"{s}/{c}/{f}" for s, c, f, _ in items if f"{s}/{c}/{f}" not in salida]
+    faltan = [f"{s}/{c}/{f}" for s, c, f, _ in items if f"{s}/{c}/{sin_ext(f)}" not in salida]
     print(f"sin cara: {len(faltan)}")
     for x in faltan:
         print("   ", x)

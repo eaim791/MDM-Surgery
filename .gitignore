@@ -2,3 +2,7 @@ node_modules
 dist
 *.local
 .DS_Store
+
+# Respaldo local de las imagenes originales antes de convertirlas a webp —
+# no forma parte del sitio, no hace falta subirlo al repo.
+originales/

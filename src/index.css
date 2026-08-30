@@ -4,8 +4,11 @@
   --bg: #F4F4F5;
   --surface: #FFFFFF;
   --ink: #1E2427;
-  --muted: #6E767B;
-  --faint: #9AA1A6;
+  /* --muted y --faint recalculados para pasar WCAG AA (4.5:1) sobre --surface
+     y --bg: los valores anteriores (6E767B / 9AA1A6) daban 4.21:1 y 2.62:1 —
+     ilegibles para baja visión, y --faint es el color de cada eyebrow. */
+  --muted: #5B636B;
+  --faint: #676E75;
   --line: #E3E5E7;
   --chip: #F1F2F3;
   --band: rgba(255, 255, 255, 0.85);
@@ -14,13 +17,18 @@
   --photo: #EDEEEF;
   --photo-ink: #A9AFB3;
   --shadow: rgba(30, 36, 39, 0.06);
-  --rule: rgba(30, 36, 39, 0.18);
+  --rule: rgba(30, 36, 39, 0.32);
   --scrim-core: rgba(244, 244, 245, 0.62);
   --scrim-edge: rgba(244, 244, 245, 0.14);
   --hero-body: #363E43;
   --hero-halo: rgba(244, 244, 245, 0.85);
   --contact-bg: #1E2427;
   --contact-ink: #FFFFFF;
+  /* Único acento cromático del sitio: un bronce apagado, usado a proposito en
+     pocos lugares (foco de teclado, el detalle del CTA del hero, el indicador
+     de seccion activa) y en ningun otro. */
+  --accent: #8B6F47;
+  --accent-soft: #F1E9DB;
 }
 
 .dark {
@@ -28,7 +36,7 @@
   --surface: #1D2124;
   --ink: #ECEEEF;
   --muted: #9AA2A7;
-  --faint: #767E83;
+  --faint: #858D92;
   --line: #2B3033;
   --chip: #252A2D;
   --band: rgba(21, 24, 26, 0.86);
@@ -44,6 +52,8 @@
   --hero-halo: rgba(21, 24, 26, 0.55);
   --contact-bg: #22272A;
   --contact-ink: #ECEEEF;
+  --accent: #C9A66B;
+  --accent-soft: #2C2620;
 }
 
 html {
@@ -52,8 +62,37 @@ html {
   background: var(--bg);
 }
 
+/* Foco de teclado consistente en todo el sitio: antes solo el select de
+   resultados tenia anillo propio, el resto dependia del outline nativo del
+   navegador (o lo perdia del todo en los inputs del formulario). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Textura de fondo propia — el elemento grafico que le faltaba al sitio: sin
+   esto, no habia una sola marca visual que no fuera foto, tipografia o icono
+   generico. Combina curvas organicas con trazos rectos de "medicion", en linea
+   con lo que vende la marca (precision, proporcion). Va directo en el fondo de
+   <body> — no en un div con z-index ni un pseudo-elemento — porque el fondo de
+   un elemento siempre pinta detras de sus hijos, sin depender de ningun orden
+   de apilamiento. Se ve en toda la pagina menos en el hero, donde el video
+   (opaco) tapa lo que tiene detras. Dos archivos (uno ya invertido para
+   oscuro) en vez de un filter, para no arriesgar que invierta algo mas. */
+/* fixed: la seccion de Procedimientos queda pineada en pantalla mientras el
+   riel se recorre con el scroll — con el fondo pegado al documento (el valor
+   por defecto) eso se veia como una tarjeta quieta con el fondo corriendo
+   detras. Fijo a la ventana, se queda quieto en toda la pagina por igual. */
 body {
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: url("./assets/bg-texture.webp");
+  background-repeat: repeat;
+  background-size: 760px auto;
+  background-attachment: fixed;
+}
+.dark body {
+  background-image: url("./assets/bg-texture-dark.webp");
 }
 
 @media (prefers-reduced-motion: reduce) {
