@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion, useInView, useScroll, useTransform } from "framer-motion";
+import gsap from "gsap";
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
   Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
@@ -479,6 +480,16 @@ export default function App() {
     document.documentElement.classList.toggle("dark", theme === "dark");
     localStorage.setItem("mdm-theme", theme);
   }, [theme]);
+
+  // El grano de fondo "respira": la opacidad sube y baja muy lento y en
+  // loop, para que la textura se sienta viva sin llamar la atencion. Nunca
+  // baja de 0.6 — no es un parpadeo, apenas una variacion de intensidad.
+  useEffect(() => {
+    const el = document.getElementById("bg-grain");
+    if (!el || reduce) return;
+    const tween = gsap.to(el, { opacity: 0.6, duration: 9, repeat: -1, yoyo: true, ease: "sine.inOut" });
+    return () => tween.kill();
+  }, [reduce]);
 
   // The 1.3s delay is only for the first page load; afterwards the arrow
   // reappears immediately when scrolling back up.
@@ -1332,12 +1343,7 @@ export default function App() {
                 la foto del cirujano se agranda y el grid respira mas alla del
                 max-w-5xl que envuelve todo lo demas. */}
             <motion.div id="dr-di-maggio" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}
-              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-8 md:grid-cols-[minmax(0,340px)_1fr] md:items-center lg:grid-cols-[380px_1fr] lg:gap-12 2xl:-mx-20 2xl:grid-cols-[460px_1fr]">
-              <motion.div variants={settleIn} className="overflow-hidden rounded-2xl">
-                <motion.div whileHover={{ scale: 1.05 }} transition={{ duration: 0.4, ease: "easeOut" }}>
-                  <img src={marceloPhoto} alt={LEAD.name} className="h-[26rem] w-full object-cover sm:h-[32rem]" />
-                </motion.div>
-              </motion.div>
+              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-8 md:grid-cols-[1fr_minmax(0,340px)] md:items-center lg:grid-cols-[1fr_380px] lg:gap-12 2xl:-mx-20 2xl:grid-cols-[1fr_460px]">
               <motion.div variants={fadeUp}>
                 <div className="flex flex-wrap items-baseline gap-3">
                   <h3 className="font-display text-3xl font-normal text-[var(--ink)] sm:text-4xl">{LEAD.name}</h3>
@@ -1362,6 +1368,11 @@ export default function App() {
                   <IconLink Icon={Instagram} label="Instagram" href={SOCIAL_LINKS.instagram} />
                   <IconLink Icon={Linkedin} label="LinkedIn" href={SOCIAL_LINKS.linkedin} />
                 </div>
+              </motion.div>
+              <motion.div variants={settleIn} className="overflow-hidden rounded-2xl">
+                <motion.div whileHover={{ scale: 1.05 }} transition={{ duration: 0.4, ease: "easeOut" }}>
+                  <img src={marceloPhoto} alt={LEAD.name} className="h-[26rem] w-full object-cover sm:h-[32rem]" />
+                </motion.div>
               </motion.div>
             </motion.div>
 
