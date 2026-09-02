@@ -6,3 +6,7 @@ dist
 # Respaldo local de las imagenes originales antes de convertirlas a webp —
 # no forma parte del sitio, no hace falta subirlo al repo.
 originales/
+
+# Exports del logo para uso fuera de la web (perfil de Google, redes, etc.) —
+# no lo usa el sitio, no hace falta subirlo al repo.
+brand-assets/
