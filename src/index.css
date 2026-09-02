@@ -95,6 +95,14 @@ body {
   background-image: url("./assets/bg-texture-dark.webp");
 }
 
+/* En pantallas grandes el tile de 760px repite 2-3 veces a lo ancho y se nota
+   como un empapelado — se ve solo en claro (el oscuro, mas sutil, ya lee bien
+   a este tamano), asi que el ajuste queda scoped solo ahi. */
+@media (min-width: 1536px) {
+  body { background-size: 1500px auto; }
+  .dark body { background-size: 760px auto; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after {

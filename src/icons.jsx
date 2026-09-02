@@ -95,6 +95,17 @@ export const AssuranceIcon = ({ size = 16, strokeWidth = 1.9, className }) => (
   </svg>
 );
 
+/* Sello/medalla para credenciales — distinto de AssuranceIcon (escudo, ya
+   usado para "servicios incluidos") para que cada icono siga significando
+   una sola cosa en todo el sitio. */
+export const SealIcon = ({ size = 16, strokeWidth = 1.9, className }) => (
+  <svg {...base(size, strokeWidth)} className={className} aria-hidden="true">
+    <circle cx="12" cy="9.3" r="6.1" />
+    <path d="M9.2 4.6v9.4M14.8 4.6v9.4M12 6.3v5.9" />
+    <path d="M8.6 14.7 7 21l5-2.6 5 2.6-1.6-6.3" />
+  </svg>
+);
+
 export const EnvelopeIcon = ({ size = 16, strokeWidth = 1.9, className }) => (
   <svg {...base(size, strokeWidth)} className={className} aria-hidden="true">
     <rect x="3" y="5.5" width="18" height="13" rx="1.6" />

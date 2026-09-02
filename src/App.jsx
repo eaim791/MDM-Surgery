@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion, useInView, useScroll, useTransform } from "framer-motion";
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
-  Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2,
+  Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
 } from "lucide-react";
 import {
-  SunIcon, MoonIcon, GlobeIcon, ObeliskIcon, SpireIcon, SkylineIcon, EnvelopeIcon,
+  SunIcon, MoonIcon, GlobeIcon, ObeliskIcon, SpireIcon, SkylineIcon, EnvelopeIcon, SealIcon,
 } from "./icons.jsx";
 import { UI } from "./i18n.js";
 import heroVideo from "./assets/hero-bg.mp4";
+import heroPoster from "./assets/hero-poster.webp";
+import heroPosterMobile from "./assets/hero-mobile-poster.webp";
 import marceloPhoto from "./assets/marcelodimaggio.webp";
 import {
   PROCEDURES, PROCEDURES_WITH_CASES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
@@ -376,7 +378,7 @@ export default function App() {
   const [activeSlug, setActiveSlug] = useState(PROCEDURES_WITH_CASES[0]?.slug);
   const [activeCase, setActiveCase] = useState(0);
   const [activeAngle, setActiveAngle] = useState(0);
-  const [cForm, setCForm] = useState({ name: "", email: "", msg: "" });
+  const [cForm, setCForm] = useState({ name: "", email: "", msg: "", proc: "" });
   const [cSent, setCSent] = useState(false);
   const [cSubmitting, setCSubmitting] = useState(false);
   const [cErr, setCErr] = useState("");
@@ -521,8 +523,8 @@ export default function App() {
     if (closeMenu) setOpen(false);
   };
 
-  const askAbout = (label) => {
-    setCForm((f) => ({ ...f, msg: t.contact.template.replace("{p}", label) }));
+  const askAbout = (label, slug) => {
+    setCForm((f) => ({ ...f, msg: t.contact.template.replace("{p}", label), proc: slug ?? f.proc }));
     setCErr("");
     setTimeout(() => {
       scrollTo("contact");
@@ -537,8 +539,12 @@ export default function App() {
     setCErr("");
     setCSubmitting(true);
     try {
+      const chosenProc = PROCEDURES.find((p) => p.slug === cForm.proc);
       await submitToFormspree({
         form: "contact", name: cForm.name.trim(), email: cForm.email.trim(), message: cForm.msg.trim(),
+        // El procedimiento es opcional — solo se manda si se eligio uno, para
+        // no dejar una linea vacia "Procedimiento: " en cada mail.
+        ...(chosenProc ? { procedure: chosenProc[lang].name } : {}),
         // _subject e _replyto son campos especiales que Formspree reconoce:
         // sin esto el asunto queda generico ("New submission from mdmsurgery")
         // y no se distingue de una notificacion automatica cualquiera. Con el
@@ -547,7 +553,7 @@ export default function App() {
         _replyto: cForm.email.trim(),
       });
       setCSent(true);
-      setCForm({ name: "", email: "", msg: "" });
+      setCForm({ name: "", email: "", msg: "", proc: "" });
     } catch {
       setCErr(t.contact.sendError);
     } finally {
@@ -582,13 +588,13 @@ export default function App() {
   const NAV = [
     { id: "home", label: t.nav.home },
     { id: "areas", label: t.nav.areas },
+    { id: "procedures", label: t.nav.procedures },
+    { id: "resultados", label: t.nav.resultados },
     { id: "team", label: t.nav.team, submenu: [
         { id: "dr-di-maggio", label: t.sub.lead },
         { id: "surgical-team", label: t.sub.team },
         { id: "assistants", label: t.sub.assistants },
       ] },
-    { id: "procedures", label: t.nav.procedures },
-    { id: "resultados", label: t.nav.resultados },
     { id: "press", label: t.nav.press, submenu: [
         { id: "interviews", label: t.nav.interviews },
         { id: "certs", label: t.nav.certs },
@@ -600,7 +606,7 @@ export default function App() {
   ];
 
   useEffect(() => {
-    const ids = ["home", "areas", "team", "procedures", "resultados", "press", "testimonios", "locations", "contact"];
+    const ids = ["home", "areas", "procedures", "resultados", "team", "press", "testimonios", "locations", "contact"];
     const subParent = {
       "dr-di-maggio": "team", "surgical-team": "team", "assistants": "team",
       "interviews": "press", "certs": "press", "papers": "press",
@@ -797,7 +803,7 @@ export default function App() {
         </motion.span>
         <button type="button" onClick={() => scrollTo("contact")}
           aria-label={t.contact.cta} title={t.contact.cta} aria-hidden={!fabVisible}
-          className="flex h-12 w-12 flex-shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] shadow-[0_8px_24px_var(--shadow)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90 sm:h-14 sm:w-14">
+          className="flex h-12 w-12 flex-shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--accent)]/45 bg-[var(--surface)] text-[var(--accent)] shadow-[0_8px_24px_var(--shadow)] transition-colors duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--surface)] active:scale-90 sm:h-14 sm:w-14">
           <EnvelopeIcon size={18} strokeWidth={1.9} className="sm:hidden" />
           <EnvelopeIcon size={22} strokeWidth={1.8} className="hidden sm:block" />
         </button>
@@ -833,6 +839,15 @@ export default function App() {
         <section id="home" className="relative flex min-h-screen w-full items-center overflow-hidden px-6 pb-24 pt-28 lg:items-end lg:px-10 lg:pb-28 lg:pt-24">
           {/* Background video — scoped to this section, sits inside main's lg:pl-60 so it never covers the sidebar */}
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+            {/* poster nativo no permite recorte responsivo (retrato en movil,
+                horizontal en escritorio) — en su lugar, dos imagenes fijas en
+                la misma posicion que el video: en conexiones lentas evitan el
+                fondo en blanco antes de que cargue el primer frame, y el
+                video (opaco en cuanto pinta) las tapa solo sin JS extra. */}
+            <img src={heroPosterMobile} alt="" aria-hidden="true"
+              className="absolute inset-0 h-full w-full object-cover md:hidden" />
+            <img src={heroPoster} alt="" aria-hidden="true"
+              className="absolute inset-0 hidden h-full w-full object-cover md:block" />
             {/* One video for every breakpoint — it is framed to survive the portrait crop.
                 With prefers-reduced-motion it stays on its first frame instead of looping. */}
             <video
@@ -928,7 +943,7 @@ export default function App() {
           </motion.button>
         </section>
 
-        <div className="mx-auto max-w-5xl px-6 pb-20 sm:px-10">
+        <div className="mx-auto max-w-5xl px-6 pb-20 sm:px-10 xl:max-w-6xl 2xl:max-w-7xl">
           {/* ============ AREAS ============ */}
           <section id="areas" className="scroll-mt-24 pt-24">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
@@ -948,6 +963,12 @@ export default function App() {
                   <div>
                     <h3 className="font-display text-xl font-normal text-[var(--ink)]">{a[lang].t}</h3>
                     <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-[var(--muted)]">{a[lang].d}</p>
+                    {/* Para quien es cada categoria — antes solo vivia en el
+                        parrafo introductorio de la seccion, sin distinguir
+                        una de otra. */}
+                    {a[lang].who && (
+                      <p className="mt-2 max-w-lg text-[12px] leading-relaxed text-[var(--faint)]">{a[lang].who}</p>
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -976,102 +997,7 @@ export default function App() {
             propia pausa, a todo el ancho, entre esa seccion y el equipo. */}
         <Slogan text={t.areas.slogan} />
 
-        <div className="mx-auto max-w-5xl px-6 pb-20 sm:px-10">
-          {/* ============ TEAM ============ */}
-          {/* Unica seccion que no abre con eyebrow+titulo: la cita lidera, el
-              titulo queda como rotulo de apoyo debajo. */}
-          <section id="team" className="scroll-mt-24 pt-32">
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
-              <Eyebrow>{t.team.eyebrow}</Eyebrow>
-              <p className="mt-4 max-w-3xl font-display text-[26px] font-normal italic leading-snug text-[var(--ink)] sm:text-[32px]">
-                “{t.team.quote}”
-              </p>
-              <h2 className="mt-6 font-display text-lg font-normal text-[var(--ink)]">{t.team.title}</h2>
-              <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.team.body}</p>
-            </motion.div>
-
-            {/* Unico bloque que rompe el ancho de columna del resto de la pagina:
-                la foto del cirujano se agranda y el grid respira mas alla del
-                max-w-5xl que envuelve todo lo demas. */}
-            <motion.div id="dr-di-maggio" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}
-              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-8 md:grid-cols-[minmax(0,340px)_1fr] md:items-center lg:grid-cols-[380px_1fr] lg:gap-12 2xl:-mx-20 2xl:grid-cols-[460px_1fr]">
-              <motion.div variants={settleIn} className="overflow-hidden rounded-2xl">
-                <motion.div whileHover={{ scale: 1.05 }} transition={{ duration: 0.4, ease: "easeOut" }}>
-                  <img src={marceloPhoto} alt={LEAD.name} className="h-[26rem] w-full object-cover sm:h-[32rem]" />
-                </motion.div>
-              </motion.div>
-              <motion.div variants={fadeUp}>
-                <div className="flex flex-wrap items-baseline gap-3">
-                  <h3 className="font-display text-3xl font-normal text-[var(--ink)] sm:text-4xl">{LEAD.name}</h3>
-                  <span className="text-[13px] tracking-wide text-[var(--faint)]">{LEAD[lang].years}</span>
-                </div>
-                <p className="mt-2 text-[13px] uppercase tracking-[0.12em] text-[var(--muted)] sm:text-[14px]">{LEAD[lang].role}</p>
-                <p className="mt-5 max-w-2xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{LEAD[lang].bio}</p>
-                <ul className="mt-6 space-y-2">
-                  {LEAD[lang].creds.map((c) => (
-                    <li key={c} className="flex items-start gap-2 text-[14px] text-[var(--muted)]">
-                      <span className="mt-2 h-1 w-1 flex-shrink-0 rounded-full bg-[var(--faint)]" />{c}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-6 flex flex-wrap gap-2">
-                  <IconLink Icon={EnvelopeIcon} label="Email" href={`mailto:${CONTACT_EMAIL}`} />
-                  <IconLink Icon={Facebook} label="Facebook" href={SOCIAL_LINKS.facebook} />
-                  <IconLink Icon={XLogo} label="X" href={SOCIAL_LINKS.x} />
-                  <IconLink Icon={Instagram} label="Instagram" href={SOCIAL_LINKS.instagram} />
-                  <IconLink Icon={Linkedin} label="LinkedIn" href={SOCIAL_LINKS.linkedin} />
-                </div>
-              </motion.div>
-            </motion.div>
-
-            <div id="surgical-team" className="scroll-mt-24 pt-20">
-              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
-                <Eyebrow>{t.team.specEyebrow}</Eyebrow>
-                <SectionTitle>{t.team.specTitle}</SectionTitle>
-                <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.team.specBody}</p>
-              </motion.div>
-              {/* Nomina en lista, no grid de tarjetas: son nombres y roles, no
-                  contenido que necesite quedar contenido en una caja propia. */}
-              {/* gap-x real, no solo padding: sin un corte entre columnas los
-                  bordes de dos filas vecinas quedaban pegados borde a borde y
-                  se leian como una sola linea corrida (mas visible en oscuro,
-                  donde --line tiene mas contraste). */}
-              <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
-                className="mt-10 grid grid-cols-1 border-t border-[var(--line)] sm:grid-cols-2 sm:gap-x-10">
-                {SPECIALISTS.map((sp) => (
-                  <motion.div key={sp.name} variants={fadeUp}
-                    className="flex items-center gap-4 border-b border-[var(--line)] py-5">
-                    <PhotoBox label={initialsOf(sp.name)} className="h-11 w-11 flex-shrink-0 rounded-full" textClass="text-sm" />
-                    <div className="min-w-0">
-                      <h3 className="font-display text-lg font-normal text-[var(--ink)]">{sp.name}</h3>
-                      <p className="mt-0.5 text-[12px] leading-relaxed text-[var(--muted)]">{sp[lang]}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            </div>
-
-            <div id="assistants" className="scroll-mt-24 pt-20">
-              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
-                <Eyebrow>{t.team.asstEyebrow}</Eyebrow>
-                <SectionTitle>{t.team.asstTitle}</SectionTitle>
-              </motion.div>
-              <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}
-                className="mt-10 grid grid-cols-1 divide-y divide-[var(--line)] border-t border-[var(--line)] sm:grid-cols-3 sm:divide-y-0 sm:divide-x sm:border-t-0">
-                {ASSISTANTS.map((a) => (
-                  <motion.div key={a.name} variants={fadeUp}
-                    className="flex items-center gap-4 py-5 sm:px-6 sm:first:pl-0 sm:last:pr-0">
-                    <PhotoBox label={initialsOf(a.name)} className="h-11 w-11 flex-shrink-0 rounded-full" textClass="text-sm" />
-                    <div className="min-w-0">
-                      <h3 className="font-display text-lg font-normal text-[var(--ink)]">{a.name}</h3>
-                      <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted)]">{a[lang]}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            </div>
-          </section>
-
+        <div className="mx-auto max-w-5xl px-6 pb-20 sm:px-10 xl:max-w-6xl 2xl:max-w-7xl">
           {/* ============ PROCEDURES ============ */}
           {/* El riel de tarjetas queda trabado en pantalla (position: sticky
               dentro de un wrapper mas alto que el viewport) mientras el scroll
@@ -1128,8 +1054,8 @@ export default function App() {
                         </dl>
 
                         <div className="mt-auto space-y-2.5 pt-1">
-                          <button type="button" onClick={() => askAbout(x[lang].name)}
-                            className="w-full cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-4 py-3.5 text-[11px] uppercase tracking-[0.16em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85 active:scale-[0.98]">
+                          <button type="button" onClick={() => askAbout(x[lang].name, x.slug)}
+                            className="w-full cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-3.5 text-[11px] uppercase tracking-[0.16em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85 active:scale-[0.98]">
                             {t.proc.ask}
                           </button>
                           <button type="button" onClick={() => goToResult(x.slug)}
@@ -1208,9 +1134,11 @@ export default function App() {
                           className="pointer-events-none absolute -inset-2 rounded-lg border-2 border-[var(--accent)]" />
                       )}
                       <label htmlFor="res-filtro" className="sr-only">{t.res.filter}</label>
+                      <SlidersHorizontal size={13} strokeWidth={2} aria-hidden="true"
+                        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--accent)]" />
                       <select id="res-filtro" value={proc.slug}
                         onChange={(e) => { setActiveSlug(e.target.value); setActiveCase(0); setActiveAngle(0); }}
-                        className="relative w-full max-w-full cursor-pointer appearance-none truncate rounded-md border-[1.5px] border-[var(--accent)] bg-[var(--accent-soft)] py-2.5 pl-4 pr-9 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--ink)] transition-opacity duration-200 hover:opacity-85">
+                        className="relative w-full max-w-full cursor-pointer appearance-none truncate rounded-md border-[1.5px] border-[var(--accent)] bg-[var(--accent-soft)] py-2.5 pl-9 pr-9 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--ink)] transition-opacity duration-200 hover:opacity-85">
                         {PROCEDURES_WITH_CASES.map((x) => (
                           <option key={x.slug} value={x.slug}>{x[lang].name}</option>
                         ))}
@@ -1219,17 +1147,29 @@ export default function App() {
                         className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ink)]" />
                     </div>
                     <div className="mt-3 flex h-[34px] items-center gap-3">
-                      <div ref={casesRef} className="no-scrollbar flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-                        {cases.map((c, k) => (
-                          <button key={c.n} type="button" aria-pressed={k === ci}
-                            onClick={() => { setActiveCase(k); setActiveAngle(0); }}
-                            className={`flex-shrink-0 cursor-pointer rounded-full border px-4 py-1.5 text-[11px] uppercase tracking-[0.16em] transition-colors duration-200 active:scale-95 ${
-                              k === ci
-                                ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]"
-                                : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"}`}>
-                            {t.res.case} {c.n}
-                          </button>
-                        ))}
+                      {/* Con menos de 10 casos no hay flechas, pero si igual no
+                          entran todos en el ancho visible se puede arrastrar —
+                          sin ninguna pista, eso no se nota. El degrade a la
+                          derecha (visible solo cuando el contenido de verdad
+                          desborda, porque min-w-0 deja que el flex se achique
+                          antes que el degrade) avisa que hay mas para el lado. */}
+                      <div className="relative min-w-0 flex-1">
+                        <div ref={casesRef} className="no-scrollbar flex items-center gap-2 overflow-x-auto">
+                          {cases.map((c, k) => (
+                            <button key={c.n} type="button" aria-pressed={k === ci}
+                              onClick={() => { setActiveCase(k); setActiveAngle(0); }}
+                              className={`flex-shrink-0 cursor-pointer rounded-full border px-4 py-1.5 text-[11px] uppercase tracking-[0.16em] transition-colors duration-200 active:scale-95 ${
+                                k === ci
+                                  ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]"
+                                  : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"}`}>
+                              {t.res.case} {c.n}
+                            </button>
+                          ))}
+                        </div>
+                        {cases.length > 1 && cases.length < 10 && (
+                          <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8"
+                            style={{ background: "linear-gradient(to right, transparent, var(--surface))" }} />
+                        )}
                       </div>
                       {cases.length >= 10 && (
                         <div className="flex flex-shrink-0 items-center gap-1.5">
@@ -1330,10 +1270,110 @@ export default function App() {
                       <ArrowRight size={18} strokeWidth={1.4}
                         className="flex-shrink-0 text-[var(--faint)] transition-[transform,color] duration-300 ease-out group-hover:translate-x-1.5 group-hover:text-[var(--ink)]" />
                     </a>
+
+                    <p className="mt-5 text-[11px] leading-relaxed text-[var(--faint)]">{t.res.disclaimer}</p>
                   </div>
                 </>
               );
             })()}
+          </section>
+
+          {/* ============ TEAM ============ */}
+          {/* Unica seccion que no abre con eyebrow+titulo: la cita lidera, el
+              titulo queda como rotulo de apoyo debajo. */}
+          <section id="team" className="scroll-mt-24 pt-32">
+            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+              <Eyebrow>{t.team.eyebrow}</Eyebrow>
+              <p className="mt-4 max-w-3xl font-display text-[26px] font-normal italic leading-snug text-[var(--ink)] sm:text-[32px]">
+                “{t.team.quote}”
+              </p>
+              <h2 className="mt-6 font-display text-lg font-normal text-[var(--ink)]">{t.team.title}</h2>
+              <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.team.body}</p>
+            </motion.div>
+
+            {/* Unico bloque que rompe el ancho de columna del resto de la pagina:
+                la foto del cirujano se agranda y el grid respira mas alla del
+                max-w-5xl que envuelve todo lo demas. */}
+            <motion.div id="dr-di-maggio" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}
+              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-8 md:grid-cols-[minmax(0,340px)_1fr] md:items-center lg:grid-cols-[380px_1fr] lg:gap-12 2xl:-mx-20 2xl:grid-cols-[460px_1fr]">
+              <motion.div variants={settleIn} className="overflow-hidden rounded-2xl">
+                <motion.div whileHover={{ scale: 1.05 }} transition={{ duration: 0.4, ease: "easeOut" }}>
+                  <img src={marceloPhoto} alt={LEAD.name} className="h-[26rem] w-full object-cover sm:h-[32rem]" />
+                </motion.div>
+              </motion.div>
+              <motion.div variants={fadeUp}>
+                <div className="flex flex-wrap items-baseline gap-3">
+                  <h3 className="font-display text-3xl font-normal text-[var(--ink)] sm:text-4xl">{LEAD.name}</h3>
+                  <span className="text-[13px] tracking-wide text-[var(--faint)]">{LEAD[lang].years}</span>
+                </div>
+                <p className="mt-2 text-[13px] uppercase tracking-[0.12em] text-[var(--muted)] sm:text-[14px]">{LEAD[lang].role}</p>
+                <p className="mt-5 max-w-2xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{LEAD[lang].bio}</p>
+                {/* Sello en vez del punto liso: son las credenciales que mas
+                    pesan para la confianza, justo donde se presenta al
+                    doctor — vale la pena que se noten de un vistazo. */}
+                <ul className="mt-6 space-y-2.5">
+                  {LEAD[lang].creds.map((c) => (
+                    <li key={c} className="flex items-start gap-2.5 text-[14px] text-[var(--muted)]">
+                      <SealIcon size={14} strokeWidth={1.7} className="mt-0.5 flex-shrink-0 text-[var(--accent)]" />{c}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-6 flex flex-wrap gap-2">
+                  <IconLink Icon={EnvelopeIcon} label="Email" href={`mailto:${CONTACT_EMAIL}`} />
+                  <IconLink Icon={Facebook} label="Facebook" href={SOCIAL_LINKS.facebook} />
+                  <IconLink Icon={XLogo} label="X" href={SOCIAL_LINKS.x} />
+                  <IconLink Icon={Instagram} label="Instagram" href={SOCIAL_LINKS.instagram} />
+                  <IconLink Icon={Linkedin} label="LinkedIn" href={SOCIAL_LINKS.linkedin} />
+                </div>
+              </motion.div>
+            </motion.div>
+
+            <div id="surgical-team" className="scroll-mt-24 pt-20">
+              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+                <Eyebrow>{t.team.specEyebrow}</Eyebrow>
+                <SectionTitle>{t.team.specTitle}</SectionTitle>
+                <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.team.specBody}</p>
+              </motion.div>
+              {/* Nomina en lista, no grid de tarjetas: son nombres y roles, no
+                  contenido que necesite quedar contenido en una caja propia. */}
+              {/* gap-x real, no solo padding: sin un corte entre columnas los
+                  bordes de dos filas vecinas quedaban pegados borde a borde y
+                  se leian como una sola linea corrida (mas visible en oscuro,
+                  donde --line tiene mas contraste). */}
+              <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
+                className="mt-10 grid grid-cols-1 border-t border-[var(--line)] sm:grid-cols-2 sm:gap-x-10">
+                {SPECIALISTS.map((sp) => (
+                  <motion.div key={sp.name} variants={fadeUp}
+                    className="flex items-center gap-4 border-b border-[var(--line)] py-5">
+                    <PhotoBox label={initialsOf(sp.name)} className="h-11 w-11 flex-shrink-0 rounded-full" textClass="text-sm" />
+                    <div className="min-w-0">
+                      <h3 className="font-display text-lg font-normal text-[var(--ink)]">{sp.name}</h3>
+                      <p className="mt-0.5 text-[12px] leading-relaxed text-[var(--muted)]">{sp[lang]}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+
+            <div id="assistants" className="scroll-mt-24 pt-20">
+              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+                <Eyebrow>{t.team.asstEyebrow}</Eyebrow>
+                <SectionTitle>{t.team.asstTitle}</SectionTitle>
+              </motion.div>
+              <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}
+                className="mt-10 grid grid-cols-1 divide-y divide-[var(--line)] border-t border-[var(--line)] sm:grid-cols-3 sm:divide-y-0 sm:divide-x sm:border-t-0">
+                {ASSISTANTS.map((a) => (
+                  <motion.div key={a.name} variants={fadeUp}
+                    className="flex items-center gap-4 py-5 sm:px-6 sm:first:pl-0 sm:last:pr-0">
+                    <PhotoBox label={initialsOf(a.name)} className="h-11 w-11 flex-shrink-0 rounded-full" textClass="text-sm" />
+                    <div className="min-w-0">
+                      <h3 className="font-display text-lg font-normal text-[var(--ink)]">{a.name}</h3>
+                      <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted)]">{a[lang]}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
           </section>
 
           {/* ============ TRAYECTORIA & PRENSA ============ */}
@@ -1382,7 +1422,10 @@ export default function App() {
                     className="grid grid-cols-1 gap-x-8 gap-y-2 border-b border-[var(--line)] py-6 sm:grid-cols-[5rem_1fr_auto] sm:items-baseline">
                     <span className="font-display text-[15px] text-[var(--faint)]">{c.year}</span>
                     <div>
-                      <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{c.institution}</p>
+                      <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">
+                        <SealIcon size={13} strokeWidth={1.7} className="flex-shrink-0 text-[var(--accent)]" />
+                        {c.institution}
+                      </p>
                       <h3 className="mt-2 font-display text-[19px] font-normal leading-snug text-[var(--ink)] sm:text-[21px]">
                         {c[lang].title}
                       </h3>
@@ -1470,7 +1513,7 @@ export default function App() {
             </motion.div>
 
             {(() => {
-              const all = TESTIMONIALS.map((x) => ({ initials: x.initials, place: x.place, text: x[lang], stars: x.stars }));
+              const all = TESTIMONIALS.map((x) => ({ initials: x.initials, place: x.place, stars: x.stars, ...x[lang] }));
               const totalPages = Math.max(1, Math.ceil(all.length / TEST_PAGE_SIZE));
               const page = ((testPage % totalPages) + totalPages) % totalPages;
               const visible = all.slice(page * TEST_PAGE_SIZE, page * TEST_PAGE_SIZE + TEST_PAGE_SIZE);
@@ -1492,6 +1535,14 @@ export default function App() {
                         </div>
                         <div className="mt-4"><Stars value={x.stars ?? 5} t={t} /></div>
                         <blockquote className="mt-3 text-[13px] leading-relaxed italic text-[var(--muted)]">“{x.text}”</blockquote>
+                        {/* Procedimiento + tiempo transcurrido: un testimonio suelto
+                            sin ese contexto pesa mucho menos que uno anclado a un
+                            caso y un momento concretos. */}
+                        {(x.proc || x.time) && (
+                          <p className="mt-3 text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
+                            {[x.proc, x.time].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
                       </motion.figure>
                     ))}
                   </motion.div>
@@ -1554,6 +1605,7 @@ export default function App() {
               <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--contact-ink)] opacity-50">{t.contact.eyebrow}</p>
               <h2 className="mt-3 font-display text-3xl font-normal text-[var(--contact-ink)] sm:text-4xl">{t.contact.title}</h2>
               <p className="mt-4 max-w-md text-[14px] leading-relaxed text-[var(--contact-ink)] opacity-70">{t.contact.body}</p>
+              <p className="mt-3 max-w-md text-[13px] leading-relaxed text-[var(--contact-ink)] opacity-60">{t.contact.process}</p>
               <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-[var(--contact-ink)] opacity-80">
                 <a href={`mailto:${CONTACT_EMAIL}`} className="transition-opacity hover:opacity-100">{CONTACT_EMAIL}</a>
                 <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="transition-opacity hover:opacity-100">{INSTAGRAM_HANDLE}</a>
@@ -1573,6 +1625,17 @@ export default function App() {
                       className="mt-2 w-full rounded-lg border border-[var(--contact-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--contact-ink)] transition-colors placeholder:text-[var(--contact-ink)]/35 focus:border-[var(--contact-ink)]" />
                   </label>
                 </div>
+                <label className="block">
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--contact-ink)] opacity-60">{t.contact.fProc}</span>
+                  <select value={cForm.proc}
+                    onChange={(e) => setCForm({ ...cForm, proc: e.target.value })}
+                    className="mt-2 w-full cursor-pointer rounded-lg border border-[var(--contact-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--contact-ink)] transition-colors focus:border-[var(--contact-ink)]">
+                    <option value="" className="text-[var(--contact-bg)]">{t.contact.fProcPh}</option>
+                    {PROCEDURES.map((p) => (
+                      <option key={p.slug} value={p.slug} className="text-[var(--contact-bg)]">{p[lang].name}</option>
+                    ))}
+                  </select>
+                </label>
                 <label className="block">
                   <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--contact-ink)] opacity-60">{t.contact.fMsg}</span>
                   <textarea id="contact-msg" rows={4} value={cForm.msg} placeholder={t.contact.fMsgPh} maxLength={800}
