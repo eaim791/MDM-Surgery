@@ -537,7 +537,15 @@ export default function App() {
     setCErr("");
     setCSubmitting(true);
     try {
-      await submitToFormspree({ form: "contact", name: cForm.name.trim(), email: cForm.email.trim(), message: cForm.msg.trim() });
+      await submitToFormspree({
+        form: "contact", name: cForm.name.trim(), email: cForm.email.trim(), message: cForm.msg.trim(),
+        // _subject e _replyto son campos especiales que Formspree reconoce:
+        // sin esto el asunto queda generico ("New submission from mdmsurgery")
+        // y no se distingue de una notificacion automatica cualquiera. Con el
+        // nombre real en el asunto, se nota que es una consulta de alguien.
+        _subject: `Consulta web de ${cForm.name.trim()}`,
+        _replyto: cForm.email.trim(),
+      });
       setCSent(true);
       setCForm({ name: "", email: "", msg: "" });
     } catch {
