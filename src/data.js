@@ -268,7 +268,7 @@ export const SPECIALISTS = [
   { name: "Dra. Natalia Sio", es: "Anestesia", en: "Anesthesia" },
   { name: "Dr. Juan Cruz Dobarro", es: "Cirugía Plástica, Estética y Reconstructiva", en: "Plastic, Aesthetic & Reconstructive Surgery" },
   { name: "Dr. Roberto Martinez", es: "Cirugía Plástica, Estética y Reconstructiva", en: "Plastic, Aesthetic & Reconstructive Surgery" },
-  { name: "Dr. Alejandro Beltrami y equipo", es: "Cirugía Plástica, Estética y Reconstructiva", en: "Plastic, Aesthetic & Reconstructive Surgery" },
+  { name: "Dr. Alejandro Beltrami", es: "Cirugía Plástica, Estética y Reconstructiva · junto a su equipo", en: "Plastic, Aesthetic & Reconstructive Surgery · with his team" },
   { name: "Dra. Laura Adduci", es: "Neurocirugía", en: "Neurosurgery" },
   { name: "Dr. Agustín Mendilharzu", es: "Otorrinolaringología", en: "ENT" },
   { name: "Dr. Daniel Roscher", es: "Cirugía Ortognática", en: "Orthognathic Surgery" },

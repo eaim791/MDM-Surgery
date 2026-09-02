@@ -25,11 +25,22 @@ const XLogo = ({ size = 15 }) => (
   </svg>
 );
 
-const CONTACT_EMAIL = "info@mdmsurgery.com";
+// Partido en dos en vez de un string literal completo, y el "@dominio" se
+// pinta en pantalla via CSS (ver .email-domain en index.css) en vez de texto
+// real — asi el mail no queda como una cadena continua ni en el bundle ni en
+// el DOM renderizado, que es lo primero que buscan las extensiones "mail
+// extractor". El href de los mailto: si necesita el mail completo para
+// funcionar, no hay forma de evitar eso sin romper el link para personas.
+const EMAIL_USER = "info";
+const EMAIL_DOMAIN = "mdmsurgery.com";
+const CONTACT_EMAIL = `${EMAIL_USER}@${EMAIL_DOMAIN}`;
 const INSTAGRAM_HANDLE = "@mdmsurgery";
 const DEVELOPER_NAME = "Emma A.";
 const DEVELOPER_PORTFOLIO_URL = "https://aimettaemma.vercel.app/";
 const FORMSPREE_ENDPOINT = "https://formspree.io/f/xnpaaroa";
+// Ningun humano completa nombre, email y mensaje en menos de esto — un envio
+// mas rapido es un bot que llena el formulario por script.
+const MIN_FILL_MS = 3000;
 const TEST_PAGE_SIZE = 2;
 // Certificaciones internacionales que se ven de entrada; el resto queda plegado.
 const CERTS_PREVIEW = 3;
@@ -220,7 +231,7 @@ function Wordmark({ size = 48, tagline = true, className = "" }) {
 }
 
 function CarouselArrows({ onPrev, onNext, prevLabel, nextLabel }) {
-  const btn = "flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90";
+  const btn = "flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90";
   return (
     <div className="mt-6 flex justify-end gap-3">
       <button type="button" onClick={onPrev} aria-label={prevLabel} title={prevLabel} className={btn}>
@@ -378,10 +389,14 @@ export default function App() {
   const [activeSlug, setActiveSlug] = useState(PROCEDURES_WITH_CASES[0]?.slug);
   const [activeCase, setActiveCase] = useState(0);
   const [activeAngle, setActiveAngle] = useState(0);
-  const [cForm, setCForm] = useState({ name: "", email: "", msg: "", proc: "" });
+  const [cForm, setCForm] = useState({ name: "", email: "", msg: "", proc: "", _gotcha: "" });
   const [cSent, setCSent] = useState(false);
   const [cSubmitting, setCSubmitting] = useState(false);
   const [cErr, setCErr] = useState("");
+  // Momento en que se monta el formulario — un envio a menos de MIN_FILL_MS
+  // de este instante es fisicamente imposible para una persona llenando dos
+  // campos a mano, asi que se trata como bot sin recurrir a un captcha.
+  const contactMountedAt = useRef(Date.now());
   const [testPage, setTestPage] = useState(0);
   const [lightbox, setLightbox] = useState(null);
   const [igHint, setIgHint] = useState(null);
@@ -536,6 +551,16 @@ export default function App() {
   const submitEnquiry = async (e) => {
     e.preventDefault();
     if (!cForm.name.trim() || !cForm.email.trim() || !cForm.msg.trim()) { setCErr(t.contact.required); return; }
+    // Honeypot: campo invisible para una persona pero que un bot que llena
+    // todos los inputs del formulario si completa. Si vino lleno, se simula
+    // un envio exitoso sin pegarle a Formspree — asi el bot no aprende que
+    // fue detectado y no gasta cupo de envios real.
+    if (cForm._gotcha) {
+      setCSent(true);
+      setCForm({ name: "", email: "", msg: "", proc: "", _gotcha: "" });
+      return;
+    }
+    if (Date.now() - contactMountedAt.current < MIN_FILL_MS) { setCErr(t.contact.tooFast); return; }
     setCErr("");
     setCSubmitting(true);
     try {
@@ -551,9 +576,13 @@ export default function App() {
         // nombre real en el asunto, se nota que es una consulta de alguien.
         _subject: `Consulta web de ${cForm.name.trim()}`,
         _replyto: cForm.email.trim(),
+        // Se reenvia vacio a Formspree para que su propio filtro de spam
+        // tambien lo revise del lado servidor, por si alguien le pega
+        // directo al endpoint sin pasar por este formulario.
+        _gotcha: "",
       });
       setCSent(true);
-      setCForm({ name: "", email: "", msg: "", proc: "" });
+      setCForm({ name: "", email: "", msg: "", proc: "", _gotcha: "" });
     } catch {
       setCErr(t.contact.sendError);
     } finally {
@@ -1175,13 +1204,13 @@ export default function App() {
                         <div className="flex flex-shrink-0 items-center gap-1.5">
                           <button type="button" aria-label={t.res.prevCase} title={t.res.prevCase}
                             onClick={() => scrollCarousel(casesRef, -1)}
-                            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90">
-                            <ArrowLeft size={14} strokeWidth={1.5} />
+                            className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90">
+                            <ArrowLeft size={16} strokeWidth={1.5} />
                           </button>
                           <button type="button" aria-label={t.res.nextCase} title={t.res.nextCase}
                             onClick={() => scrollCarousel(casesRef, 1)}
-                            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90">
-                            <ArrowRight size={14} strokeWidth={1.5} />
+                            className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90">
+                            <ArrowRight size={16} strokeWidth={1.5} />
                           </button>
                         </div>
                       )}
@@ -1550,13 +1579,13 @@ export default function App() {
                     <div className="mt-5 flex items-center justify-end gap-3">
                       <button type="button" onClick={() => setTestPage((p) => p - 1)}
                         aria-label={t.test.prev} title={t.test.prev}
-                        className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-[var(--rule)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90">
+                        className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-[var(--rule)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90">
                         <ArrowLeft size={16} strokeWidth={1.9} />
                       </button>
                       <span className="text-[11px] tracking-wide text-[var(--faint)]">{page + 1} / {totalPages}</span>
                       <button type="button" onClick={() => setTestPage((p) => p + 1)}
                         aria-label={t.test.next} title={t.test.next}
-                        className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-[var(--rule)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90">
+                        className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-[var(--rule)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90">
                         <ArrowRight size={16} strokeWidth={1.9} />
                       </button>
                     </div>
@@ -1607,10 +1636,20 @@ export default function App() {
               <p className="mt-4 max-w-md text-[14px] leading-relaxed text-[var(--contact-ink)] opacity-70">{t.contact.body}</p>
               <p className="mt-3 max-w-md text-[13px] leading-relaxed text-[var(--contact-ink)] opacity-60">{t.contact.process}</p>
               <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-[var(--contact-ink)] opacity-80">
-                <a href={`mailto:${CONTACT_EMAIL}`} className="transition-opacity hover:opacity-100">{CONTACT_EMAIL}</a>
+                <a href={`mailto:${CONTACT_EMAIL}`} aria-label={CONTACT_EMAIL}
+                  className="email-domain transition-opacity hover:opacity-100">{EMAIL_USER}</a>
                 <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="transition-opacity hover:opacity-100">{INSTAGRAM_HANDLE}</a>
               </div>
               <form onSubmit={submitEnquiry} className="mt-8 max-w-xl space-y-4">
+                {/* Honeypot: invisible para una persona (fuera de pantalla, afuera
+                    del tab order, oculto de lectores de pantalla), pero un bot que
+                    completa cada input del formulario lo llena igual. Sin display:none
+                    a proposito — algunos bots ya lo reconocen como trampa y lo saltean. */}
+                <div aria-hidden="true" className="absolute -left-[9999px] top-auto h-0 w-0 overflow-hidden">
+                  <label htmlFor="contact-company">No completar este campo</label>
+                  <input type="text" id="contact-company" name="_gotcha" tabIndex={-1} autoComplete="off"
+                    value={cForm._gotcha} onChange={(e) => setCForm({ ...cForm, _gotcha: e.target.value })} />
+                </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <label className="block">
                     <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--contact-ink)] opacity-60">{t.contact.fName}</span>
@@ -1701,8 +1740,9 @@ export default function App() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   {SOCIALS.map((s) => <IconLink key={s.key} Icon={s.Icon} label={s.label} href={s.href} />)}
                 </div>
-                <a href={`mailto:${CONTACT_EMAIL}`} className="mt-4 block text-[13px] text-[var(--muted)] transition-colors hover:text-[var(--ink)]">
-                  {CONTACT_EMAIL}
+                <a href={`mailto:${CONTACT_EMAIL}`} aria-label={CONTACT_EMAIL}
+                  className="email-domain mt-4 block text-[13px] text-[var(--muted)] transition-colors hover:text-[var(--ink)]">
+                  {EMAIL_USER}
                 </a>
                 <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer"
                   className="mt-1 block text-[13px] text-[var(--muted)] transition-colors hover:text-[var(--ink)]">
