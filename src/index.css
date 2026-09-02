@@ -22,8 +22,6 @@
   --scrim-edge: rgba(244, 244, 245, 0.14);
   --hero-body: #363E43;
   --hero-halo: rgba(244, 244, 245, 0.85);
-  --contact-bg: #1E2427;
-  --contact-ink: #FFFFFF;
   /* Único acento cromático del sitio: un azul pizarra, usado a proposito en
      pocos lugares (foco de teclado, el detalle del CTA del hero, el indicador
      de seccion activa) y en ningun otro. Reemplaza al bronce anterior, que
@@ -51,8 +49,6 @@
   --scrim-edge: rgba(21, 24, 26, 0.22);
   --hero-body: #CDD4D8;
   --hero-halo: rgba(21, 24, 26, 0.55);
-  --contact-bg: #22272A;
-  --contact-ink: #ECEEEF;
   --accent: #8FA8BE;
   --accent-soft: #1F2830;
 }

@@ -356,7 +356,7 @@ function Slogan({ text }) {
           // JS llegara a fallar (carrera con la carga de fuente, texto muy
           // largo en otro idioma, etc.), el texto envuelve en vez de
           // desbordar la pantalla — mejor una segunda linea que un corte.
-          className="origin-center whitespace-normal text-center font-display italic text-[34px] font-normal leading-snug text-[var(--ink)] sm:whitespace-nowrap sm:text-[44px]"
+          className="origin-center whitespace-normal text-center font-slogan italic text-[36px] font-medium leading-snug text-[var(--ink)] sm:whitespace-nowrap sm:text-[46px]"
         >
           {words.map((w, i) => (
             <motion.span key={i} variants={word} className="inline-block">
@@ -438,8 +438,15 @@ export default function App() {
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [lang]);
+  // Extra scroll despues de terminar el paneo, antes de que se suelte el pin:
+  // sin esto la ultima tarjeta llega justo cuando la seccion se libera, y da
+  // la sensacion de que no da tiempo a mirarla. Proporcional al paneo (listas
+  // con mas tarjetas piden mas aire), con un piso para que nunca sea instantaneo.
+  const procHold = Math.max(300, procPanDistance * 0.4);
+  const procTotalScroll = procPanDistance + procHold;
   const { scrollYProgress: procScroll } = useScroll({ target: procWrapRef, offset: ["start start", "end end"] });
-  const procX = useTransform(procScroll, [0, 1], [0, -procPanDistance]);
+  const procPanProgress = procTotalScroll > 0 ? procPanDistance / procTotalScroll : 1;
+  const procX = useTransform(procScroll, [0, procPanProgress, 1], [0, -procPanDistance, -procPanDistance]);
   const [loading, setLoading] = useState(true);
   const t = UI[lang];
 
@@ -747,6 +754,7 @@ export default function App() {
     <div className="min-h-screen font-sans text-[var(--muted)] antialiased transition-colors duration-300">
       <style>{`
         .font-display { font-family: 'Playfair Display', Georgia, serif; }
+        .font-slogan { font-family: 'Cormorant Garamond', Georgia, serif; }
         .font-sans { font-family: 'Inter', system-ui, sans-serif; }
       `}</style>
 
@@ -1035,7 +1043,7 @@ export default function App() {
               no se infla el alto: el riel vuelve a ser un scroll horizontal
               comun, arrastrable con el dedo o el mouse. */}
           <section id="procedures" className="scroll-mt-24">
-            <div ref={procWrapRef} style={reduce ? undefined : { height: procStickyHeight ? `${procStickyHeight + procPanDistance}px` : "100vh" }}>
+            <div ref={procWrapRef} style={reduce ? undefined : { height: procStickyHeight ? `${procStickyHeight + procTotalScroll}px` : "100vh" }}>
               {/* Altura exacta del contenido medida por ref, no min-h-screen:
                   con min-h-screen, si el titulo+riel median menos que la
                   pantalla el pin seguia sosteniendose sobre puro espacio
@@ -1055,7 +1063,7 @@ export default function App() {
                 <div ref={procViewportRef}
                   className={`-mx-6 mt-10 px-6 sm:-mx-10 sm:px-10 ${reduce ? "no-scrollbar overflow-x-auto" : "overflow-hidden"}`}>
                   <motion.div ref={procRailRef} style={{ x: reduce ? 0 : procX }}
-                    className={`flex items-stretch gap-5 pb-2 sm:gap-6 ${reduce ? "snap-x snap-mandatory scroll-pl-6 sm:scroll-pl-10" : ""}`}>
+                    className={`flex items-stretch gap-5 pb-2 pr-6 sm:gap-6 sm:pr-10 ${reduce ? "snap-x snap-mandatory scroll-pl-6 sm:scroll-pl-10" : ""}`}>
                     {PROCEDURES.map((x) => (
                       <div key={x.slug}
                         className={`flex w-[320px] flex-shrink-0 flex-col gap-5 border border-[var(--line)] bg-[var(--surface)] p-7 text-left sm:w-[380px] sm:p-8 ${reduce ? "snap-start" : ""}`}>
@@ -1630,17 +1638,19 @@ export default function App() {
           {/* ============ CONTACT ============ */}
           <section id="contact" className="scroll-mt-24 pt-24">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}
-              className="max-w-3xl rounded-2xl bg-[var(--contact-bg)] px-8 py-12 sm:px-12">
-              <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--contact-ink)] opacity-50">{t.contact.eyebrow}</p>
-              <h2 className="mt-3 font-display text-3xl font-normal text-[var(--contact-ink)] sm:text-4xl">{t.contact.title}</h2>
-              <p className="mt-4 max-w-md text-[14px] leading-relaxed text-[var(--contact-ink)] opacity-70">{t.contact.body}</p>
-              <p className="mt-3 max-w-md text-[13px] leading-relaxed text-[var(--contact-ink)] opacity-60">{t.contact.process}</p>
-              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-[var(--contact-ink)] opacity-80">
-                <a href={`mailto:${CONTACT_EMAIL}`} aria-label={CONTACT_EMAIL}
-                  className="email-domain transition-opacity hover:opacity-100">{EMAIL_USER}</a>
-                <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="transition-opacity hover:opacity-100">{INSTAGRAM_HANDLE}</a>
+              className="grid grid-cols-1 gap-10 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-8 sm:p-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:gap-14 md:p-12">
+              <div>
+                <Eyebrow>{t.contact.eyebrow}</Eyebrow>
+                <SectionTitle size="text-2xl sm:text-3xl">{t.contact.title}</SectionTitle>
+                <p className="mt-4 max-w-md text-[14px] leading-relaxed text-[var(--muted)]">{t.contact.body}</p>
+                <p className="mt-3 max-w-md text-[13px] leading-relaxed text-[var(--faint)]">{t.contact.process}</p>
+                <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-[var(--muted)]">
+                  <a href={`mailto:${CONTACT_EMAIL}`} aria-label={CONTACT_EMAIL}
+                    className="email-domain transition-colors hover:text-[var(--ink)]">{EMAIL_USER}</a>
+                  <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--ink)]">{INSTAGRAM_HANDLE}</a>
+                </div>
               </div>
-              <form onSubmit={submitEnquiry} className="mt-8 max-w-xl space-y-4">
+              <form onSubmit={submitEnquiry} className="space-y-4">
                 {/* Honeypot: invisible para una persona (fuera de pantalla, afuera
                     del tab order, oculto de lectores de pantalla), pero un bot que
                     completa cada input del formulario lo llena igual. Sin display:none
@@ -1652,44 +1662,44 @@ export default function App() {
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <label className="block">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--contact-ink)] opacity-60">{t.contact.fName}</span>
+                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fName}</span>
                     <input type="text" value={cForm.name} placeholder={t.contact.fNamePh} maxLength={60}
                       onChange={(e) => setCForm({ ...cForm, name: e.target.value })}
-                      className="mt-2 w-full rounded-lg border border-[var(--contact-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--contact-ink)] transition-colors placeholder:text-[var(--contact-ink)]/35 focus:border-[var(--contact-ink)]" />
+                      className="mt-2 w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
                   </label>
                   <label className="block">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--contact-ink)] opacity-60">{t.contact.fEmail}</span>
+                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fEmail}</span>
                     <input type="email" value={cForm.email} placeholder={t.contact.fEmailPh} maxLength={90}
                       onChange={(e) => setCForm({ ...cForm, email: e.target.value })}
-                      className="mt-2 w-full rounded-lg border border-[var(--contact-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--contact-ink)] transition-colors placeholder:text-[var(--contact-ink)]/35 focus:border-[var(--contact-ink)]" />
+                      className="mt-2 w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
                   </label>
                 </div>
                 <label className="block">
-                  <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--contact-ink)] opacity-60">{t.contact.fProc}</span>
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fProc}</span>
                   <select value={cForm.proc}
                     onChange={(e) => setCForm({ ...cForm, proc: e.target.value })}
-                    className="mt-2 w-full cursor-pointer rounded-lg border border-[var(--contact-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--contact-ink)] transition-colors focus:border-[var(--contact-ink)]">
-                    <option value="" className="text-[var(--contact-bg)]">{t.contact.fProcPh}</option>
+                    className="mt-2 w-full cursor-pointer rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors focus:border-[var(--ink)]">
+                    <option value="" className="text-[var(--surface)]">{t.contact.fProcPh}</option>
                     {PROCEDURES.map((p) => (
-                      <option key={p.slug} value={p.slug} className="text-[var(--contact-bg)]">{p[lang].name}</option>
+                      <option key={p.slug} value={p.slug} className="text-[var(--surface)]">{p[lang].name}</option>
                     ))}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--contact-ink)] opacity-60">{t.contact.fMsg}</span>
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fMsg}</span>
                   <textarea id="contact-msg" rows={4} value={cForm.msg} placeholder={t.contact.fMsgPh} maxLength={800}
                     onChange={(e) => setCForm({ ...cForm, msg: e.target.value })}
-                    className="mt-2 w-full resize-y rounded-lg border border-[var(--contact-ink)]/25 bg-transparent px-3 py-2.5 text-[13px] text-[var(--contact-ink)] transition-colors placeholder:text-[var(--contact-ink)]/35 focus:border-[var(--contact-ink)]" />
+                    className="mt-2 w-full resize-y rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
                 </label>
                 {cErr && <p className="text-[12px] text-[#E0908D]">{cErr}</p>}
                 <div className="flex flex-wrap items-center gap-4">
                   <button type="submit" disabled={cSubmitting}
-                    className="flex cursor-pointer items-center gap-2.5 bg-[var(--contact-ink)] px-8 py-3.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--contact-bg)] transition-opacity duration-200 hover:opacity-85 active:scale-[0.98] disabled:cursor-wait disabled:opacity-70">
+                    className="flex cursor-pointer items-center gap-2.5 border border-[var(--accent)] bg-[var(--accent)] px-8 py-3.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85 active:scale-[0.98] disabled:cursor-wait disabled:opacity-70">
                     {cSubmitting && <Loader2 size={14} strokeWidth={2} className="animate-spin" />}
                     {cSubmitting ? t.contact.sending : t.contact.send}
                   </button>
                 </div>
-                <p className="text-[11px] leading-relaxed text-[var(--contact-ink)] opacity-45">{t.contact.note}</p>
+                <p className="text-[11px] leading-relaxed text-[var(--faint)]">{t.contact.note}</p>
               </form>
             </motion.div>
           </section>

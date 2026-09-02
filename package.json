@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.3.0",
     "@fontsource/inter": "^5.0.0",
     "@fontsource/playfair-display": "^5.0.0",
     "framer-motion": "^11.3.0",
