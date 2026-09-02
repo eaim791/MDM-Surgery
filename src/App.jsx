@@ -1630,7 +1630,7 @@ export default function App() {
           {/* ============ CONTACT ============ */}
           <section id="contact" className="scroll-mt-24 pt-24">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}
-              className="rounded-2xl bg-[var(--contact-bg)] px-8 py-12 sm:px-12">
+              className="max-w-3xl rounded-2xl bg-[var(--contact-bg)] px-8 py-12 sm:px-12">
               <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--contact-ink)] opacity-50">{t.contact.eyebrow}</p>
               <h2 className="mt-3 font-display text-3xl font-normal text-[var(--contact-ink)] sm:text-4xl">{t.contact.title}</h2>
               <p className="mt-4 max-w-md text-[14px] leading-relaxed text-[var(--contact-ink)] opacity-70">{t.contact.body}</p>
