@@ -379,6 +379,48 @@ function ScrollSideDecor() {
   );
 }
 
+// Fondo de lineas arquitectonicas: reemplaza el grano de papel — mismo lugar
+// (fixed, detras de todo salvo el hero, cuyo video opaco lo tapa) pero con
+// mas presencia: trazos grandes tipo plano tecnico/curvas de nivel, en vez
+// de una textura casi imperceptible. Se dibujan solas en loop muy lento con
+// GSAP (stroke-dashoffset); con prefers-reduced-motion quedan fijas, ya
+// trazadas, en vez de sacarse del todo — son el elemento grafico elegido,
+// no solo una animacion de mas.
+const BG_LINES_PATHS = [
+  "M -50,150 C 300,50 700,300 1000,120 S 1500,50 1650,200",
+  "M -50,350 C 400,250 800,480 1150,320 S 1550,280 1650,420",
+  "M -50,550 C 350,650 750,420 1100,600 S 1500,680 1650,560",
+  "M -50,700 C 450,780 850,600 1200,750 S 1550,820 1650,720",
+  "M -50,50 C 250,180 600,-20 950,140 S 1400,220 1650,80",
+];
+function BackgroundLines({ reduce }) {
+  const pathRefs = useRef([]);
+  useEffect(() => {
+    if (reduce) return;
+    const tweens = pathRefs.current.filter(Boolean).map((p, i) => {
+      const len = p.getTotalLength();
+      p.style.strokeDasharray = len;
+      p.style.strokeDashoffset = len;
+      return gsap.to(p.style, {
+        strokeDashoffset: 0, duration: 5.5, delay: i * 0.5,
+        repeat: -1, repeatDelay: 2.2, yoyo: true, ease: "power2.inOut",
+      });
+    });
+    return () => tweens.forEach((t) => t.kill());
+  }, [reduce]);
+
+  return (
+    <div id="bg-lines" aria-hidden="true">
+      <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+        {BG_LINES_PATHS.map((d, i) => (
+          <path key={i} ref={(el) => (pathRefs.current[i] = el)} d={d}
+            style={{ opacity: [0.5, 0.32, 0.42, 0.28, 0.38][i] }} />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 /* ---------------------------------- APP ----------------------------------- */
 
 export default function App() {
@@ -487,16 +529,6 @@ export default function App() {
     document.documentElement.classList.toggle("dark", theme === "dark");
     localStorage.setItem("mdm-theme", theme);
   }, [theme]);
-
-  // El grano de fondo "respira": la opacidad sube y baja muy lento y en
-  // loop, para que la textura se sienta viva sin llamar la atencion. Nunca
-  // baja de 0.6 — no es un parpadeo, apenas una variacion de intensidad.
-  useEffect(() => {
-    const el = document.getElementById("bg-grain");
-    if (!el || reduce) return;
-    const tween = gsap.to(el, { opacity: 0.6, duration: 9, repeat: -1, yoyo: true, ease: "sine.inOut" });
-    return () => tween.kill();
-  }, [reduce]);
 
   // The 1.3s delay is only for the first page load; afterwards the arrow
   // reappears immediately when scrolling back up.
@@ -775,6 +807,7 @@ export default function App() {
         .font-slogan { font-family: 'Cormorant Garamond', Georgia, serif; }
         .font-sans { font-family: 'Inter', system-ui, sans-serif; }
       `}</style>
+      <BackgroundLines reduce={reduce} />
 
       <AnimatePresence>
         {loading && (
@@ -1359,7 +1392,12 @@ export default function App() {
                 la foto del cirujano se agranda y el grid respira mas alla del
                 max-w-5xl que envuelve todo lo demas. */}
             <motion.div id="dr-di-maggio" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}
-              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-8 md:grid-cols-[1fr_minmax(0,340px)] md:items-center md:gap-6 lg:grid-cols-[1fr_380px] lg:gap-8 2xl:-mx-20 2xl:grid-cols-[1fr_460px]">
+              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-8 md:grid-cols-[minmax(0,340px)_1fr] md:items-center md:gap-6 lg:grid-cols-[380px_1fr] lg:gap-8 2xl:-mx-20 2xl:grid-cols-[460px_1fr]">
+              <motion.div variants={settleIn} className="overflow-hidden rounded-2xl">
+                <motion.div whileHover={{ scale: 1.05 }} transition={{ duration: 0.4, ease: "easeOut" }}>
+                  <img src={marceloPhoto} alt={LEAD.name} className="h-[26rem] w-full object-cover sm:h-[32rem]" />
+                </motion.div>
+              </motion.div>
               <motion.div variants={fadeUp}>
                 <div className="flex flex-wrap items-baseline gap-3">
                   <h3 className="font-display text-3xl font-normal text-[var(--ink)] sm:text-4xl">{LEAD.name}</h3>
@@ -1384,11 +1422,6 @@ export default function App() {
                   <IconLink Icon={Instagram} label="Instagram" href={SOCIAL_LINKS.instagram} />
                   <IconLink Icon={Linkedin} label="LinkedIn" href={SOCIAL_LINKS.linkedin} />
                 </div>
-              </motion.div>
-              <motion.div variants={settleIn} className="overflow-hidden rounded-2xl">
-                <motion.div whileHover={{ scale: 1.05 }} transition={{ duration: 0.4, ease: "easeOut" }}>
-                  <img src={marceloPhoto} alt={LEAD.name} className="h-[26rem] w-full object-cover sm:h-[32rem]" />
-                </motion.div>
               </motion.div>
             </motion.div>
 
