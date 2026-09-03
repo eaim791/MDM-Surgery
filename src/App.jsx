@@ -1341,30 +1341,32 @@ export default function App() {
           </section>
 
           {/* ============ TEAM ============ */}
-          {/* Unica seccion que no abre con eyebrow+titulo: la cita lidera, el
-              titulo queda como rotulo de apoyo debajo. */}
+          {/* Mismo patron que el resto del sitio (eyebrow + SectionTitle
+              compartido) — la cita ya no compite en tamano con el titulo,
+              queda como bajada chica entre el eyebrow y el titulo, mas cerca
+              de un epigrafe editorial que de un segundo titular. */}
           <section id="team" className="scroll-mt-24 pt-32">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
               <Eyebrow>{t.team.eyebrow}</Eyebrow>
-              <p className="mt-4 max-w-3xl font-display text-[32px] font-normal italic leading-snug text-[var(--ink)] sm:text-[42px]">
+              <p className="mt-3 max-w-xl font-display text-[17px] italic leading-snug text-[var(--muted)] sm:text-[19px]">
                 “{t.team.quote}”
               </p>
-              <h2 className="mt-6 font-display text-xl font-normal text-[var(--ink)] sm:text-2xl">{t.team.title}</h2>
-              <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[var(--muted)] sm:text-[16px]">{t.team.body}</p>
+              <SectionTitle>{t.team.title}</SectionTitle>
+              <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.team.body}</p>
             </motion.div>
 
             {/* Unico bloque que rompe el ancho de columna del resto de la pagina:
                 la foto del cirujano se agranda y el grid respira mas alla del
                 max-w-5xl que envuelve todo lo demas. */}
             <motion.div id="dr-di-maggio" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}
-              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-8 md:grid-cols-[1fr_minmax(0,340px)] md:items-center lg:grid-cols-[1fr_380px] lg:gap-12 2xl:-mx-20 2xl:grid-cols-[1fr_460px]">
+              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-8 md:grid-cols-[1fr_minmax(0,340px)] md:items-center md:gap-6 lg:grid-cols-[1fr_380px] lg:gap-8 2xl:-mx-20 2xl:grid-cols-[1fr_460px]">
               <motion.div variants={fadeUp}>
                 <div className="flex flex-wrap items-baseline gap-3">
                   <h3 className="font-display text-3xl font-normal text-[var(--ink)] sm:text-4xl">{LEAD.name}</h3>
                   <span className="text-[13px] tracking-wide text-[var(--faint)]">{LEAD[lang].years}</span>
                 </div>
                 <p className="mt-2 text-[13px] uppercase tracking-[0.12em] text-[var(--muted)] sm:text-[14px]">{LEAD[lang].role}</p>
-                <p className="mt-5 max-w-3xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{LEAD[lang].bio}</p>
+                <p className="mt-5 max-w-4xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{LEAD[lang].bio}</p>
                 {/* Sello en vez del punto liso: son las credenciales que mas
                     pesan para la confianza, justo donde se presenta al
                     doctor — vale la pena que se noten de un vistazo. */}
