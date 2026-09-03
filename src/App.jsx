@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion, useInView, useScroll, useTransform } from "framer-motion";
-import gsap from "gsap";
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
   Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
@@ -339,33 +338,21 @@ function Slogan({ text }) {
   };
   const words = text.split(" ");
 
-  // Trazo a mano alzada + flor que se dibujan justo despues de la ultima
-  // palabra, una vez que el texto ya aparecio — como si la pluma terminara
-  // la frase y garabateara despues. Un solo dibujo (sin loop) en el acento
-  // del sitio; con reduccion de movimiento queda ya trazado, fijo.
-  const doodleRefs = useRef([]);
-  useEffect(() => {
-    if (!show) return;
-    if (reduce) return;
-    const delayBase = 0.15 * words.length + 0.5;
-    const tweens = doodleRefs.current.filter(Boolean).map((p, i) => {
-      const len = p.getTotalLength();
-      p.style.strokeDasharray = len;
-      p.style.strokeDashoffset = len;
-      return gsap.to(p.style, {
-        strokeDashoffset: 0, duration: i === 0 ? 1.1 : 0.5,
-        delay: delayBase + (i === 0 ? 0 : 1.1 + i * 0.12),
-        ease: "power2.inOut",
-      });
-    });
-    return () => tweens.forEach((t) => t.kill());
-  }, [show, reduce, words.length]);
+  // Trazo a mano alzada por debajo de toda la frase (arranca en "La", como
+  // subrayandola) + flor al final, una vez que el texto ya aparecio — como
+  // si la pluma trazara la frase completa y despues garabateara. Dibujado
+  // 100% CSS (@keyframes en index.css, ver .doodle-flourish/-circle/-petal):
+  // nada de JS calculando largos de trazo y armando animaciones a mano, que
+  // dependia de que el efecto de React corriera una sola vez limpiamente
+  // (en desarrollo/StrictMode se monta dos veces, y eso podia dejarlo
+  // clavado en el estado oculto). La clase "doodle-show" es lo unico que
+  // JS controla — arranca el CSS, no lo reemplaza.
   const FLOWER_PETALS = [
-    "M80,30 Q76.9,21.5 80,18 Q83.1,21.5 80,30",
-    "M80,30 Q87.1,24.5 91.4,26.3 Q89.0,30.3 80,30",
-    "M80,30 Q87.5,35.0 87.1,39.7 Q82.5,38.6 80,30",
-    "M80,30 Q77.5,38.6 72.9,39.7 Q72.5,35.0 80,30",
-    "M80,30 Q71.0,30.3 68.6,26.3 Q72.9,24.5 80,30",
+    "M22,22 Q19.8,15.9 22,13 Q24.2,15.9 22,22",
+    "M22,22 Q27.1,18.0 30.6,19.2 Q28.5,22.2 22,22",
+    "M22,22 Q27.4,25.6 27.3,29.3 Q23.8,28.2 22,22",
+    "M22,22 Q20.2,28.2 16.7,29.3 Q16.6,25.6 22,22",
+    "M22,22 Q15.5,22.2 13.4,19.2 Q16.9,18.0 22,22",
   ];
 
   // Ya no es una cita chica entre dos filetes al final de una seccion: es su
@@ -388,25 +375,37 @@ function Slogan({ text }) {
           // desbordar la pantalla — mejor una segunda linea que un corte.
           className="origin-center whitespace-normal text-center font-slogan italic text-[36px] font-medium leading-snug text-[var(--ink)] sm:whitespace-nowrap sm:text-[46px]"
         >
+          <span className={`relative inline-block pb-3 sm:pb-4 ${show ? "doodle-show" : ""}`}>
           {words.map((w, i) => (
             <motion.span key={i} variants={word} className="inline-block">
               {w}
               {i < words.length - 1 ? " " : ""}
             </motion.span>
           ))}
-          <svg aria-hidden="true" viewBox="0 0 100 60"
-            className="ml-2 inline-block h-[0.9em] w-[1.5em] align-middle sm:h-[1em] sm:w-[1.7em]"
-            style={{ overflow: "visible" }}>
-            <path ref={(el) => (doodleRefs.current[0] = el)}
-              d="M 0,38 C 10,15 20,50 30,20 S 50,45 62,28"
-              fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
-            <circle ref={(el) => (doodleRefs.current[1] = el)}
-              cx="80" cy="30" r="2" fill="none" stroke="var(--accent)" strokeWidth="1.6" />
-            {FLOWER_PETALS.map((d, i) => (
-              <path key={i} ref={(el) => (doodleRefs.current[i + 2] = el)}
-                d={d} fill="none" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            ))}
-          </svg>
+            {/* Subrayado a mano alzada: arranca debajo de "La" (borde
+                izquierdo del bloque de texto) y recorre toda la frase — por
+                eso este SVG se estira sin mantener proporcion (el trazo
+                curvo tolera bien el estiramiento no uniforme, a diferencia
+                de la flor). Dos SVG en vez de uno: la flor necesita
+                mantener sus proporciones sea cual sea el ancho del texto. */}
+            <svg aria-hidden="true" viewBox="0 0 1000 100" preserveAspectRatio="none"
+              className="pointer-events-none absolute left-0 top-full h-[0.4em] w-[calc(100%-2em)] sm:h-[0.45em]"
+              style={{ overflow: "visible" }}>
+              <path className="doodle-flourish"
+                d="M 0,50 C 80,20 160,80 240,45 S 400,15 480,55 S 640,85 720,40 S 860,20 1000,50"
+                fill="none" stroke="var(--accent)" strokeWidth="6" strokeLinecap="round" />
+            </svg>
+            <svg aria-hidden="true" viewBox="0 0 44 44"
+              className="pointer-events-none absolute right-0 top-full h-[1em] w-[1em] -translate-y-[0.15em] sm:h-[1.1em] sm:w-[1.1em]"
+              style={{ overflow: "visible" }}>
+              <circle className="doodle-circle"
+                cx="22" cy="22" r="1.8" fill="none" stroke="var(--accent)" strokeWidth="1.6" />
+              {FLOWER_PETALS.map((d, i) => (
+                <path key={i} className="doodle-petal" style={{ animationDelay: `${3.7 + i * 0.12}s` }}
+                  d={d} fill="none" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              ))}
+            </svg>
+          </span>
         </motion.p>
       </div>
     </section>
@@ -435,31 +434,23 @@ const BG_LINES_PATHS = [
   "M -50,700 C 450,780 850,600 1200,750 S 1550,820 1650,720",
   "M -50,50 C 250,180 600,-20 950,140 S 1400,220 1650,80",
 ];
-function BackgroundLines({ reduce }) {
-  const pathRefs = useRef([]);
-  useEffect(() => {
-    // Se dibuja UNA vez al cargar y se queda trazada — nada de yoyo/repeat:
-    // con eso, la mitad del ciclo la linea iba borrandose hasta desaparecer
-    // del todo, y si el usuario miraba la pagina justo en esa mitad el fondo
-    // parecia no estar. Asi siempre termina visible y se queda asi.
-    if (reduce) return;
-    const tweens = pathRefs.current.filter(Boolean).map((p, i) => {
-      const len = p.getTotalLength();
-      p.style.strokeDasharray = len;
-      p.style.strokeDashoffset = len;
-      return gsap.to(p.style, {
-        strokeDashoffset: 0, duration: 3, delay: i * 0.35, ease: "power2.inOut",
-      });
-    });
-    return () => tweens.forEach((t) => t.kill());
-  }, [reduce]);
-
+function BackgroundLines() {
+  // Dibujado 100% CSS (@keyframes en index.css), no JS/GSAP: una animacion
+  // manejada a mano (medir cada trazo con getTotalLength, crear tweens,
+  // limpiarlos) depende de que React monte el efecto una sola vez — en
+  // desarrollo (StrictMode) lo monta dos veces, y en cualquier entorno con
+  // el hilo de JS ocupado/en pausa un rAF que no llega a correr deja todo
+  // clavado en el estado "oculto" para siempre. Una animacion CSS la corre
+  // el motor de render directamente: no le importa si React remonta el
+  // componente ni si el JS de la pagina esta ocupado en otra cosa. El valor
+  // de dasharray/dashoffset (2000) es mayor al largo real de cualquier
+  // trazo — no hace falta medirlo exacto, solo que sobre.
   return (
     <div id="bg-lines" aria-hidden="true">
       <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
         {BG_LINES_PATHS.map((d, i) => (
-          <path key={i} ref={(el) => (pathRefs.current[i] = el)} d={d}
-            style={{ opacity: [0.5, 0.32, 0.42, 0.28, 0.38][i] }} />
+          <path key={i} d={d} className="bg-line"
+            style={{ opacity: [0.5, 0.32, 0.42, 0.28, 0.38][i], animationDelay: `${i * 0.35}s` }} />
         ))}
       </svg>
     </div>
@@ -566,7 +557,7 @@ export default function App() {
   }, [fabVisible, reduce]);
 
   useEffect(() => {
-    const id = setTimeout(() => setLoading(false), reduce ? 0 : 850);
+    const id = setTimeout(() => setLoading(false), reduce ? 0 : 720);
     return () => clearTimeout(id);
   }, [reduce]);
 
@@ -852,19 +843,31 @@ export default function App() {
         .font-slogan { font-family: 'Cormorant Garamond', Georgia, serif; }
         .font-sans { font-family: 'Inter', system-ui, sans-serif; }
       `}</style>
-      <BackgroundLines reduce={reduce} />
+      <BackgroundLines />
 
       <AnimatePresence>
         {loading && (
-          <motion.div key="loader" exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : 0.4, ease: "easeInOut" }}
+          <motion.div key="loader" exit={{ opacity: 0, filter: "blur(6px)" }}
+            transition={{ duration: reduce ? 0 : 0.4, ease: "easeInOut" }}
             className="fixed inset-0 z-[200] flex items-center justify-center bg-[var(--bg)]">
-            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: reduce ? 0 : 0.4, ease: "easeOut" }} className="flex flex-col items-center">
-              <Wordmark size={64} />
-              <motion.span initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
-                transition={{ duration: reduce ? 0 : 0.5, ease: "easeInOut", delay: reduce ? 0 : 0.15 }}
-                className="mt-4 h-px w-14 origin-center bg-[var(--ink)]" />
-            </motion.div>
+            <div className="relative flex items-center justify-center">
+              {/* Anillo que se contrae: entra grande y va cerrando hacia el
+                  centro en dos tiempos — primero se asienta a tamano
+                  "normal" (mismo gesto que una gota cayendo y frenando de
+                  golpe), despues sigue cerrando y se disuelve, como si se
+                  encogiera hasta desaparecer justo donde queda el logo. */}
+              <motion.svg viewBox="0 0 100 100" aria-hidden="true"
+                className="absolute h-24 w-24 sm:h-28 sm:w-28"
+                initial={{ scale: 2.6, opacity: 0 }}
+                animate={reduce ? { scale: 0.6, opacity: 0 } : { scale: [2.6, 1, 0.6], opacity: [0, 1, 0] }}
+                transition={reduce ? { duration: 0 } : { duration: 0.62, times: [0, 0.6, 1], ease: ["easeOut", "easeIn"] }}>
+                <circle cx="50" cy="50" r="46" fill="none" stroke="var(--accent)" strokeWidth="3" />
+              </motion.svg>
+              <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: reduce ? 0 : 0.3, delay: reduce ? 0 : 0.38, ease: "easeOut" }}>
+                <Wordmark size={64} />
+              </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
