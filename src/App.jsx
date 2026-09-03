@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useReducedMotion, useInView, useScroll, useTra
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
   Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   SunIcon, MoonIcon, GlobeIcon, ObeliskIcon, SpireIcon, SkylineIcon, EnvelopeIcon, SealIcon,
@@ -290,6 +291,51 @@ function PhotoBox({ label, className = "", textClass = "text-2xl" }) {
   );
 }
 
+// Publicacion real de Instagram embebida entre los testimonios de texto —
+// usa el script oficial de Instagram (embed.js), que reemplaza el
+// <blockquote> por un iframe con el post real (foto/video, likes, caption).
+// El script se carga una sola vez para todo el sitio aunque haya varias
+// publicaciones embebidas (varios testimonios de Instagram a la vez): si
+// ya esta cargado, o cargandose, solo hace falta pedirle que procese los
+// <blockquote> nuevos.
+let instagramScriptState = "idle"; // "idle" | "loading" | "ready"
+function loadInstagramEmbedScript(onReady) {
+  if (instagramScriptState === "ready") { onReady(); return; }
+  if (instagramScriptState === "loading") {
+    document.getElementById("ig-embed-script")?.addEventListener("load", onReady, { once: true });
+    return;
+  }
+  instagramScriptState = "loading";
+  const script = document.createElement("script");
+  script.id = "ig-embed-script";
+  script.src = "https://www.instagram.com/embed.js";
+  script.async = true;
+  script.addEventListener("load", () => { instagramScriptState = "ready"; onReady(); });
+  document.body.appendChild(script);
+}
+function InstagramEmbed({ url, loadingLabel }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    loadInstagramEmbedScript(() => window.instgrm?.Embeds?.process());
+  }, [url]);
+
+  return (
+    <div ref={ref} className="ig-embed-wrap flex min-h-[220px] items-center justify-center">
+      <blockquote className="instagram-media" data-instgrm-permalink={url} data-instgrm-version="14"
+        style={{ margin: 0, width: "100%", minWidth: "100%" }}>
+        {/* Instagram reemplaza todo esto por el iframe real una vez que
+            embed.js procesa el bloque — hasta entonces (o si el script no
+            llega a cargar) queda este enlace, nunca un recuadro vacio. */}
+        <a href={url} target="_blank" rel="noopener noreferrer"
+          className="flex min-h-[220px] w-full items-center justify-center gap-2 p-6 text-center text-[13px] text-[var(--muted)]">
+          <Instagram size={16} strokeWidth={1.6} className="flex-shrink-0" />
+          {loadingLabel}
+        </a>
+      </blockquote>
+    </div>
+  );
+}
+
 /* Bloque plegable para las tres partes de Trayectoria & Prensa. */
 function Fold({ id, eyebrow, title, body, open, onToggle, children }) {
   // Este acordeon vive directo sobre el fondo con textura de la pagina (no
@@ -455,10 +501,8 @@ function LoaderWordmark() {
 // reveal: se ve como si una mano estuviera escribiendo con tinta real.
 function HandwrittenText({ text, className, duration, ready: forceReady, onMeasure }) {
   const textRef = useRef(null);
-  const pathRef = useRef(null);
   const maskId = useId();
   const [box, setBox] = useState({ x: 0, y: 0, width: 280, height: 50 });
-  const [dash, setDash] = useState(500);
   const [measured, setMeasured] = useState(false);
 
   useEffect(() => {
@@ -478,23 +522,31 @@ function HandwrittenText({ text, className, duration, ready: forceReady, onMeasu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
 
-  useEffect(() => {
-    const p = pathRef.current;
-    if (!p) return;
-    const len = p.getTotalLength();
-    if (len > 0) setDash(len);
-  }, [box]);
-
   const pad = box.height * 0.75;
   const midY = box.y + box.height * 0.58;
   const x0 = box.x - pad * 0.4;
   const x1 = box.x + box.width + pad * 0.4;
   const span = x1 - x0;
   const d = `M ${x0},${midY} Q ${x0 + span * 0.28},${midY - box.height * 0.16} ${x0 + span * 0.52},${midY + box.height * 0.1} T ${x1},${midY}`;
+  // Largo del trazo de la mascara estimado a mano (no leido del DOM con
+  // pathRef.getTotalLength()): ese metodo necesitaba que el <path> ya
+  // estuviera pintado con el "d" real, osea una SEGUNDA pasada de render
+  // (medir el texto -> pintar el path -> recien ahi medir el path y guardar
+  // su largo). Durante ese primer frame intermedio el "d" ya era el nuevo
+  // (mas largo) pero el stroke-dasharray/-dashoffset todavia tenian el
+  // largo VIEJO (mas corto) — con un trazo mas corto que el propio path,
+  // el patron de dasharray se repite en vez de tapar el trazo entero, y
+  // por un frame se veia la frase completa "flasheando" antes de
+  // esconderse y recien ahi arrancar la animacion de verdad. Esta curva es
+  // casi una linea recta con un vaiven chico, asi que el largo real esta
+  // siempre muy cerca de "span" — una estimacion con margen (calculada acá
+  // mismo, en el mismo render que "box") alcanza y evita esa segunda
+  // pasada por completo: no hay ningun frame donde el largo este mal.
+  const dash = Math.max(span * 1.1, 40);
   // El gatillo externo (siempre true para el loading; "esta en pantalla"
   // para el slogan) Y la propia medicion tienen que estar listos — si el
-  // gatillo llega antes de medir el trazo real, la animacion arrancaria con
-  // el largo de reserva y saltaria al largo real a mitad de camino.
+  // gatillo llega antes de medir el ancho real, la animacion arrancaria con
+  // el ancho de reserva y saltaria al ancho real a mitad de camino.
   const externalReady = forceReady === undefined ? true : forceReady;
   const ready = externalReady && measured;
 
@@ -504,7 +556,7 @@ function HandwrittenText({ text, className, duration, ready: forceReady, onMeasu
       className={`${className} ${ready ? "handwritten-ready" : ""}`} style={{ overflow: "visible" }}>
       <defs>
         <mask id={maskId} maskUnits="userSpaceOnUse">
-          <path ref={pathRef} d={d} fill="none" stroke="#fff" strokeLinecap="round"
+          <path d={d} fill="none" stroke="#fff" strokeLinecap="round"
             strokeWidth={box.height * 1.7 || 60} className="handwritten-reveal"
             style={{ "--pen-duration": `${duration}s`, strokeDasharray: dash, strokeDashoffset: dash }} />
         </mask>
@@ -564,12 +616,10 @@ export default function App() {
   const procRailRef = useRef(null);
   const [procPanDistance, setProcPanDistance] = useState(0);
   const [procStickyHeight, setProcStickyHeight] = useState(0);
-  // Si se hace click varias veces seguidas en "cambiar idioma" estando
-  // adentro de la seccion, cada click dispara su propia correccion de
-  // scroll diferida a un frame — sin cancelar la anterior, la de un click
-  // viejo podia pisar la de uno mas nuevo (o pelearse con ella) y terminar
-  // en cualquier lado. Solo la ultima programada debe llegar a correr.
-  const procScrollFixRaf = useRef(null);
+  // Listener de "salio del pin" que una remedicion diferida deja pendiente
+  // (ver mas abajo) — se cancela si otra remedicion arranca antes de que
+  // llegue a disparar.
+  const procDeferredCleanup = useRef(null);
   useEffect(() => {
     // El wrapper tiene que medir exactamente lo que el contenido fijo ocupa
     // mas lo que hay que scrollear para el paneo — antes usaba min-h-screen
@@ -581,17 +631,35 @@ export default function App() {
       const rail = procRailRef.current, viewport = procViewportRef.current, sticky = procStickyRef.current, wrap = procWrapRef.current;
       if (!rail || !viewport || !sticky || !wrap) return;
 
+      if (procDeferredCleanup.current) { procDeferredCleanup.current(); procDeferredCleanup.current = null; }
+
       // Si el usuario esta scrolleado DENTRO de este wrapper (pin activo) en
-      // el momento de remedir, un cambio de alto (texto de otro idioma, que
-      // mide distinto) corre el scroll absoluto a un punto arbitrario de la
-      // pagina — el bug real detras de "cambio de idioma en Procedimientos y
-      // termino en Contacto o en MDM & Equipo". Se guarda en que fraccion
-      // del alto del wrapper estaba antes de remedir, para reubicarlo en esa
-      // misma fraccion despues (no en el mismo pixel absoluto, que ya no
-      // significa lo mismo con el wrapper mas alto o mas bajo).
-      const beforeRect = wrap.getBoundingClientRect();
-      const wasInside = beforeRect.top <= 0 && beforeRect.bottom >= 0 && beforeRect.height > 0;
-      const progress = wasInside ? Math.min(1, Math.max(0, -beforeRect.top / beforeRect.height)) : null;
+      // el momento de remedir, cambiarle el alto ahora mismo (texto de otro
+      // idioma, que mide distinto) es lo que rompia todo: framer-motion
+      // sigue con el scroll-tracking de este wrapper enganchado en ese
+      // instante, contra limites que acaban de cambiar debajo — a veces el
+      // scroll saltaba a un punto arbitrario de la pagina (Contacto, MDM &
+      // Equipo), a veces el paneo se quedaba clavado en la card donde
+      // estaba, sin reaccionar mas al scroll real por mas que se siguiera
+      // scrolleando. Ninguna correccion posterior (recalcular scroll,
+      // redisparar eventos) resulto confiable para los dos casos a la vez.
+      // La salida robusta es no tocarle el alto mientras esta adentro: se
+      // deja la medicion vieja tal cual (como mucho un par de cards quedan
+      // con el paneo levemente corto para ese idioma) y se reintenta recien
+      // cuando el usuario sale del wrapper por su cuenta scrolleando.
+      const rect = wrap.getBoundingClientRect();
+      const wasInside = rect.top <= 0 && rect.bottom >= 0 && rect.height > 0;
+      if (wasInside) {
+        const onScroll = () => {
+          const r = wrap.getBoundingClientRect();
+          const stillInside = r.top <= 0 && r.bottom >= 0 && r.height > 0;
+          if (!stillInside) { cleanup(); measure(); }
+        };
+        const cleanup = () => { window.removeEventListener("scroll", onScroll); procDeferredCleanup.current = null; };
+        window.addEventListener("scroll", onScroll, { passive: true });
+        procDeferredCleanup.current = cleanup;
+        return;
+      }
 
       // El riel no arranca pegado al borde izquierdo del viewport: queda
       // corrido hacia adentro por el padding propio del viewport (px-6/
@@ -602,29 +670,6 @@ export default function App() {
       const railInset = rail.getBoundingClientRect().left - viewport.getBoundingClientRect().left;
       setProcPanDistance(Math.max(0, rail.scrollWidth - viewport.clientWidth + railInset));
       setProcStickyHeight(sticky.offsetHeight);
-
-      if (progress !== null) {
-        // Si un click anterior (cambio de idioma, resize) todavia tiene una
-        // correccion sin aplicar, se descarta: solo la programada por esta
-        // misma llamada a measure() tiene que llegar a correr.
-        if (procScrollFixRaf.current != null) cancelAnimationFrame(procScrollFixRaf.current);
-        // Recien despues de que React aplique el nuevo alto al wrapper (el
-        // siguiente frame pintado) tiene sentido volver a medir su rect —
-        // antes de eso todavia mide con el alto viejo.
-        procScrollFixRaf.current = requestAnimationFrame(() => {
-          procScrollFixRaf.current = null;
-          const afterRect = wrap.getBoundingClientRect();
-          const wrapTopAbs = window.scrollY + afterRect.top;
-          // behavior:"instant", no la forma de dos argumentos: el sitio tiene
-          // scroll-behavior:smooth en <html>, y esa forma vieja lo respeta —
-          // la correccion terminaba siendo un scroll ANIMADO (visible, y que
-          // un click siguiente podia interrumpir a mitad de camino) en vez
-          // del salto invisible que se buscaba. Ese scroll interrumpido a
-          // mitad de una animacion, seguido de otro click, era el bug real
-          // detras de "a veces se bugea la pagina" con varios clicks seguidos.
-          window.scrollTo({ top: Math.round(wrapTopAbs + progress * afterRect.height), left: 0, behavior: "instant" });
-        });
-      }
     };
     measure();
     // La tipografia carga async — si measure() corre antes de que termine de
@@ -636,7 +681,7 @@ export default function App() {
     window.addEventListener("resize", measure);
     return () => {
       window.removeEventListener("resize", measure);
-      if (procScrollFixRaf.current != null) cancelAnimationFrame(procScrollFixRaf.current);
+      if (procDeferredCleanup.current) { procDeferredCleanup.current(); procDeferredCleanup.current = null; }
     };
   }, [lang]);
   // Extra scroll despues de terminar el paneo, antes de que se suelte el pin:
@@ -1651,11 +1696,15 @@ export default function App() {
           <section id="team" className="scroll-mt-24 pt-32">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
               <Eyebrow>{t.team.eyebrow}</Eyebrow>
-              <p className="mt-3 max-w-xl font-display text-[17px] italic leading-snug text-[var(--muted)] sm:text-[19px]">
+              {/* Subidos de 17/19px y 14px: como bajada chica entre el eyebrow
+                  y el titulo quedaban mas chicos que el resto del sitio, y a
+                  ese tamano se leian mal — sobre todo la cita, que ya de por
+                  si usa cursiva. */}
+              <p className="mt-3 max-w-xl font-display text-[20px] italic leading-snug text-[var(--muted)] sm:text-[23px]">
                 “{t.team.quote}”
               </p>
               <SectionTitle>{t.team.title}</SectionTitle>
-              <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.team.body}</p>
+              <p className="mt-5 max-w-2xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{t.team.body}</p>
             </motion.div>
 
             {/* Unico bloque que rompe el ancho de columna del resto de la pagina:
@@ -1671,7 +1720,10 @@ export default function App() {
               <motion.div variants={fadeUp}>
                 <div className="flex flex-wrap items-baseline gap-3">
                   <h3 className="font-display text-3xl font-normal text-[var(--ink)] sm:text-4xl">{LEAD.name}</h3>
-                  <span className="text-[13px] tracking-wide text-[var(--faint)]">{LEAD[lang].years}</span>
+                  {/* Destello periodico: un brillo pasa rapido por la frase
+                      y despues hace una pausa larga antes de repetir — como
+                      un reflejo de luz, no un parpadeo constante. */}
+                  <span className="years-shine text-[13px] tracking-wide">{LEAD[lang].years}</span>
                 </div>
                 <p className="mt-2 text-[13px] uppercase tracking-[0.12em] text-[var(--muted)] sm:text-[14px]">{LEAD[lang].role}</p>
                 <p className="mt-5 max-w-4xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{LEAD[lang].bio}</p>
@@ -1880,7 +1932,9 @@ export default function App() {
             </motion.div>
 
             {(() => {
-              const all = TESTIMONIALS.map((x) => ({ initials: x.initials, place: x.place, stars: x.stars, ...x[lang] }));
+              const all = TESTIMONIALS.map((x) => (
+                x.type ? x : { initials: x.initials, place: x.place, stars: x.stars, ...x[lang] }
+              ));
               const totalPages = Math.max(1, Math.ceil(all.length / TEST_PAGE_SIZE));
               const page = ((testPage % totalPages) + totalPages) % totalPages;
               const visible = all.slice(page * TEST_PAGE_SIZE, page * TEST_PAGE_SIZE + TEST_PAGE_SIZE);
@@ -1888,30 +1942,55 @@ export default function App() {
                 <>
                   <motion.div key={page} variants={container} initial="hidden" animate="visible"
                     className="mt-10 grid grid-cols-1 gap-x-4 gap-y-10 sm:grid-cols-2">
-                    {visible.map((x, i) => (
-                      <motion.figure key={`${x.initials}-${page}-${i}`} variants={fadeUp}
-                        className="border border-[var(--line)] bg-[var(--surface)] p-6">
-                        <div className="flex items-center gap-3">
-                          <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full">
-                            <PhotoBox label={x.initials} className="h-full w-full" textClass="text-sm" />
+                    {visible.map((x, i) => {
+                      const key = x.type === "instagram" ? x.url : x.type === "placeholder" ? `placeholder-${page}-${i}` : `${x.initials}-${page}-${i}`;
+                      if (x.type === "instagram") {
+                        return (
+                          <motion.div key={key} variants={fadeUp}
+                            className="overflow-hidden border border-[var(--line)] bg-[var(--surface)]">
+                            <InstagramEmbed url={x.url} loadingLabel={t.test.igLoading} />
+                          </motion.div>
+                        );
+                      }
+                      if (x.type === "placeholder") {
+                        // Recuadro reservado para cuando se suba una foto o video
+                        // real de un paciente — mismo tamano que las demas cards,
+                        // pero claramente "todavia no hay nada aca" (borde
+                        // punteado) en vez de una card vacia que parezca un bug.
+                        return (
+                          <motion.div key={key} variants={fadeUp}
+                            className="flex min-h-[220px] flex-col items-center justify-center gap-2 border border-dashed border-[var(--line)] p-6 text-center">
+                            <ImageIcon size={22} strokeWidth={1.4} className="text-[var(--faint)]" />
+                            <p className="font-display text-[15px] font-normal text-[var(--muted)]">{t.test.placeholderTitle}</p>
+                            <p className="text-[12px] text-[var(--faint)]">{t.test.placeholderBody}</p>
+                          </motion.div>
+                        );
+                      }
+                      return (
+                        <motion.figure key={key} variants={fadeUp}
+                          className="border border-[var(--line)] bg-[var(--surface)] p-6">
+                          <div className="flex items-center gap-3">
+                            <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full">
+                              <PhotoBox label={x.initials} className="h-full w-full" textClass="text-sm" />
+                            </div>
+                            <figcaption>
+                              <p className="font-display text-[16px] font-normal text-[var(--ink)]">{x.initials}</p>
+                              {x.place && <p className="text-[11px] text-[var(--faint)]">{x.place}</p>}
+                            </figcaption>
                           </div>
-                          <figcaption>
-                            <p className="font-display text-[16px] font-normal text-[var(--ink)]">{x.initials}</p>
-                            {x.place && <p className="text-[11px] text-[var(--faint)]">{x.place}</p>}
-                          </figcaption>
-                        </div>
-                        <div className="mt-4"><Stars value={x.stars ?? 5} t={t} /></div>
-                        <blockquote className="mt-3 text-[13px] leading-relaxed italic text-[var(--muted)]">“{x.text}”</blockquote>
-                        {/* Procedimiento + tiempo transcurrido: un testimonio suelto
-                            sin ese contexto pesa mucho menos que uno anclado a un
-                            caso y un momento concretos. */}
-                        {(x.proc || x.time) && (
-                          <p className="mt-3 text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
-                            {[x.proc, x.time].filter(Boolean).join(" · ")}
-                          </p>
-                        )}
-                      </motion.figure>
-                    ))}
+                          <div className="mt-4"><Stars value={x.stars ?? 5} t={t} /></div>
+                          <blockquote className="mt-3 text-[13px] leading-relaxed italic text-[var(--muted)]">“{x.text}”</blockquote>
+                          {/* Procedimiento + tiempo transcurrido: un testimonio suelto
+                              sin ese contexto pesa mucho menos que uno anclado a un
+                              caso y un momento concretos. */}
+                          {(x.proc || x.time) && (
+                            <p className="mt-3 text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
+                              {[x.proc, x.time].filter(Boolean).join(" · ")}
+                            </p>
+                          )}
+                        </motion.figure>
+                      );
+                    })}
                   </motion.div>
                   {totalPages > 1 && (
                     <div className="mt-5 flex items-center justify-end gap-3">

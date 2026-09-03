@@ -122,6 +122,27 @@ html {
   .slogan-write { font-size: 64px; }
 }
 
+/* "+25 años de experiencia": un brillo recorre la frase y despues hace una
+   pausa larga antes de repetir, como un reflejo de luz pasando — no un
+   parpadeo constante. background-clip:text pinta el texto con el propio
+   gradiente (--faint en reposo, --accent al pasar el brillo) y lo desliza
+   con background-position; el 18% inicial del ciclo es el pase (rapido),
+   el resto es la pausa. */
+.years-shine {
+  background-image: linear-gradient(100deg,
+    var(--faint) 35%, var(--accent) 50%, var(--faint) 65%);
+  background-size: 300% 100%;
+  background-position: 200% 0;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: years-shine 4.5s ease-out infinite;
+}
+@keyframes years-shine {
+  0% { background-position: 200% 0; }
+  18%, 100% { background-position: -120% 0; }
+}
+
 /* Garabato del slogan (ver Slogan en App.jsx): igual que el fondo, dibujado
    100% CSS. Sin la clase .doodle-show (que React agrega recien cuando la
    seccion entra en pantalla) quedan en su punto de partida — ocultos — sin

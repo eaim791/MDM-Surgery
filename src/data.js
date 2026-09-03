@@ -425,10 +425,17 @@ export const PAPERS = PAPER_LIST.map((p, i) => ({
   en: { ref: p.refEn ?? p.ref },
 }));
 
-/* PLACEHOLDER: textos inventados a la espera de testimonios reales de
-   pacientes — misma estructura (iniciales + ciudad + procedimiento + tiempo
-   transcurrido) para poder reemplazarlos uno a uno sin tocar el componente. */
+/* Testimonios: la mayoria son texto (PLACEHOLDER inventado a la espera de
+   testimonios reales de pacientes — misma estructura de iniciales/ciudad/
+   procedimiento/tiempo transcurrido para poder reemplazarlos uno a uno sin
+   tocar el componente), pero tambien puede haber una publicacion de
+   Instagram embebida ({ type: "instagram", url }) o un recuadro vacio
+   reservado para una foto o video que todavia no se subio
+   ({ type: "placeholder" }) — agregar mas de cualquiera de los dos tipos
+   en cualquier lugar de esta lista alcanza, el carrusel de Testimonios
+   los agrega solos. */
 export const TESTIMONIALS = [
+  { type: "instagram", url: "https://www.instagram.com/maeru.jpg/p/DPj77imEpSZ/" },
   { initials: "M.G.", place: "Buenos Aires", stars: 5,
     es: { proc: "Rinoplastia", time: "8 meses después",
           text: "Mi experiencia fue maravillosa. El acompañamiento antes y después de la cirugía fue constante." },
@@ -469,6 +476,8 @@ export const TESTIMONIALS = [
           text: "Lo que más valoro es que nunca sentí que me estaban vendiendo algo — el Dr. Di Maggio te dice lo que conviene, no lo que querés escuchar." },
     en: { proc: "Facial Rejuvenation", time: "7 months later",
           text: "What I value most is that I never felt like I was being sold something — Dr. Di Maggio tells you what's right, not what you want to hear." } },
+  { type: "placeholder" },
+  { type: "placeholder" },
 ];
 
 /* Only the cases that actually have a before/after pair on disk. */
