@@ -19,6 +19,39 @@ import {
 
 /* --------------------------------- HELPERS -------------------------------- */
 
+// Sonido de click sintetizado con Web Audio (sin archivo de audio) — un
+// "tock" corto y suave, pitch descendente con ataque/decaimiento rapido en
+// vez de un beep plano. Un click de boton ya es el gesto del usuario que los
+// navegadores piden antes de permitir audio, asi que esto si puede sonar
+// (a diferencia de un sonido automatico al cargar la pagina, que no puede).
+// El AudioContext se crea recien al primer click, no antes.
+let clickAudioCtx = null;
+function playClickSound() {
+  try {
+    if (!clickAudioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      clickAudioCtx = new Ctx();
+    }
+    if (clickAudioCtx.state === "suspended") clickAudioCtx.resume();
+    const t = clickAudioCtx.currentTime;
+    const osc = clickAudioCtx.createOscillator();
+    const gain = clickAudioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(1080, t);
+    osc.frequency.exponentialRampToValueAtTime(680, t + 0.05);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.05, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    osc.connect(gain).connect(clickAudioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.1);
+  } catch {
+    // Web Audio puede fallar (bloqueado, no soportado) — el click igual
+    // funciona, solo se pierde el sonido.
+  }
+}
+
 const XLogo = ({ size = 15 }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -330,14 +363,6 @@ function Slogan({ text }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
 
-  // Cada palabra se desenfoca desde un poco de blur y sube en fila — un
-  // gesto propio, distinto del resto del sitio (nada mas usa blur).
-  const word = {
-    hidden: { opacity: 0, y: 10, filter: "blur(6px)" },
-    visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } },
-  };
-  const words = text.split(" ");
-
   // Trazo a mano alzada por debajo de toda la frase (arranca en "La", como
   // subrayandola) + flor al final, una vez que el texto ya aparecio — como
   // si la pluma trazara la frase completa y despues garabateara. Dibujado
@@ -362,9 +387,6 @@ function Slogan({ text }) {
       <div ref={wrapRef} className="mx-auto max-w-5xl px-6">
         <motion.p
           ref={textRef}
-          initial="hidden"
-          animate={show ? "visible" : "hidden"}
-          variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.07 } } }}
           // scale via el prop corto de motion, no style={{transform:`scale(${scale})`}}:
           // motion.p reescribe su propio transform en cada frame, asi que un transform
           // manual se perdia (texto vuelto a su ancho real, roto en movil).
@@ -376,12 +398,15 @@ function Slogan({ text }) {
           className="origin-center whitespace-normal text-center font-slogan italic text-[36px] font-medium leading-snug text-[var(--ink)] sm:whitespace-nowrap sm:text-[46px]"
         >
           <span className={`relative inline-block pb-3 sm:pb-4 ${show ? "doodle-show" : ""}`}>
-          {words.map((w, i) => (
-            <motion.span key={i} variants={word} className="inline-block">
-              {w}
-              {i < words.length - 1 ? " " : ""}
-            </motion.span>
-          ))}
+            {/* El texto se "escribe" con un barrido de clip-path en vez del
+                stagger palabra por palabra de antes — a mano alzada glifo
+                por glifo no es viable con texto real, pero un barrido
+                izquierda a derecha sobre esta tipografia cursiva da la
+                misma sensacion de "se esta escribiendo", arrancando junto
+                con el trazo de abajo. clip-path no afecta el layout, asi
+                que fit() sigue midiendo el ancho real del texto aunque
+                todavia no se haya revelado. */}
+            <span className="slogan-write">{text}</span>
             {/* Subrayado a mano alzada: arranca debajo de "La" (borde
                 izquierdo del bloque de texto) y recorre toda la frase — por
                 eso este SVG se estira sin mantener proporcion (el trazo
@@ -401,7 +426,7 @@ function Slogan({ text }) {
               <circle className="doodle-circle"
                 cx="22" cy="22" r="1.8" fill="none" stroke="var(--accent)" strokeWidth="1.6" />
               {FLOWER_PETALS.map((d, i) => (
-                <path key={i} className="doodle-petal" style={{ animationDelay: `${3.7 + i * 0.12}s` }}
+                <path key={i} className="doodle-petal" style={{ animationDelay: `${2.15 + i * 0.12}s` }}
                   d={d} fill="none" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               ))}
             </svg>
@@ -420,42 +445,6 @@ function ScrollSideDecor() {
   );
 }
 
-// Fondo de lineas arquitectonicas: reemplaza el grano de papel — mismo lugar
-// (fixed, detras de todo salvo el hero, cuyo video opaco lo tapa) pero con
-// mas presencia: trazos grandes tipo plano tecnico/curvas de nivel, en vez
-// de una textura casi imperceptible. Se dibujan solas en loop muy lento con
-// GSAP (stroke-dashoffset); con prefers-reduced-motion quedan fijas, ya
-// trazadas, en vez de sacarse del todo — son el elemento grafico elegido,
-// no solo una animacion de mas.
-const BG_LINES_PATHS = [
-  "M -50,150 C 300,50 700,300 1000,120 S 1500,50 1650,200",
-  "M -50,350 C 400,250 800,480 1150,320 S 1550,280 1650,420",
-  "M -50,550 C 350,650 750,420 1100,600 S 1500,680 1650,560",
-  "M -50,700 C 450,780 850,600 1200,750 S 1550,820 1650,720",
-  "M -50,50 C 250,180 600,-20 950,140 S 1400,220 1650,80",
-];
-function BackgroundLines() {
-  // Dibujado 100% CSS (@keyframes en index.css), no JS/GSAP: una animacion
-  // manejada a mano (medir cada trazo con getTotalLength, crear tweens,
-  // limpiarlos) depende de que React monte el efecto una sola vez — en
-  // desarrollo (StrictMode) lo monta dos veces, y en cualquier entorno con
-  // el hilo de JS ocupado/en pausa un rAF que no llega a correr deja todo
-  // clavado en el estado "oculto" para siempre. Una animacion CSS la corre
-  // el motor de render directamente: no le importa si React remonta el
-  // componente ni si el JS de la pagina esta ocupado en otra cosa. El valor
-  // de dasharray/dashoffset (2000) es mayor al largo real de cualquier
-  // trazo — no hace falta medirlo exacto, solo que sobre.
-  return (
-    <div id="bg-lines" aria-hidden="true">
-      <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
-        {BG_LINES_PATHS.map((d, i) => (
-          <path key={i} d={d} className="bg-line"
-            style={{ opacity: [0.5, 0.32, 0.42, 0.28, 0.38][i], animationDelay: `${i * 0.35}s` }} />
-        ))}
-      </svg>
-    </div>
-  );
-}
 
 /* ---------------------------------- APP ----------------------------------- */
 
@@ -472,6 +461,10 @@ export default function App() {
   const [cSent, setCSent] = useState(false);
   const [cSubmitting, setCSubmitting] = useState(false);
   const [cErr, setCErr] = useState("");
+  // Ventana emergente con el mismo formulario de Contacto, abierta desde el
+  // CTA del hero y el CTA flotante — asi la consulta arranca sin forzar el
+  // scroll hasta el final de la pagina.
+  const [contactModalOpen, setContactModalOpen] = useState(false);
   // Momento en que se monta el formulario — un envio a menos de MIN_FILL_MS
   // de este instante es fisicamente imposible para una persona llenando dos
   // campos a mano, asi que se trata como bot sin recurrir a un captcha.
@@ -596,6 +589,25 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
+  useEffect(() => {
+    if (!contactModalOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") setContactModalOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [contactModalOpen]);
+
+  // Sonido de click delegado: un solo listener para todos los botones del
+  // sitio en vez de engancharlo boton por boton. Se ignoran los que ya
+  // vienen deshabilitados (el de "enviando..." del formulario).
+  useEffect(() => {
+    const onClick = (e) => {
+      const btn = e.target.closest("button");
+      if (btn && !btn.disabled) playClickSound();
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
+
   // The "visit our Instagram" note next to a procedure without photos: it fades out on
   // the next mouse move (after a short grace period, so the click itself doesn't kill it),
   // on scroll, or on its own after a few seconds.
@@ -650,6 +662,7 @@ export default function App() {
     // fue detectado y no gasta cupo de envios real.
     if (cForm._gotcha) {
       setCSent(true);
+      setContactModalOpen(false);
       setCForm({ name: "", email: "", msg: "", proc: "", _gotcha: "" });
       return;
     }
@@ -675,6 +688,7 @@ export default function App() {
         _gotcha: "",
       });
       setCSent(true);
+      setContactModalOpen(false);
       setCForm({ name: "", email: "", msg: "", proc: "", _gotcha: "" });
     } catch {
       setCErr(t.contact.sendError);
@@ -834,6 +848,77 @@ export default function App() {
     </div>
   );
 
+  // Contenido del recuadro de Contacto (info + formulario), compartido entre
+  // la seccion fija del final de la pagina y la ventana emergente que abren
+  // el CTA del hero y el CTA flotante — misma marca, mismo formulario, un
+  // solo lugar donde mantenerlo.
+  const contactFields = (
+    <>
+      <div>
+        <Eyebrow>{t.contact.eyebrow}</Eyebrow>
+        <SectionTitle size="text-2xl sm:text-3xl">{t.contact.title}</SectionTitle>
+        <p className="mt-4 max-w-md text-[14px] leading-relaxed text-[var(--muted)]">{t.contact.body}</p>
+        <p className="mt-3 max-w-md text-[13px] leading-relaxed text-[var(--faint)]">{t.contact.process}</p>
+        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-[var(--muted)]">
+          <a href={`mailto:${CONTACT_EMAIL}`} aria-label={CONTACT_EMAIL}
+            className="email-domain transition-colors hover:text-[var(--ink)]">{EMAIL_USER}</a>
+          <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--ink)]">{INSTAGRAM_HANDLE}</a>
+        </div>
+      </div>
+      <form onSubmit={submitEnquiry} className="space-y-4">
+        {/* Honeypot: invisible para una persona (fuera de pantalla, afuera
+            del tab order, oculto de lectores de pantalla), pero un bot que
+            completa cada input del formulario lo llena igual. Sin display:none
+            a proposito — algunos bots ya lo reconocen como trampa y lo saltean. */}
+        <div aria-hidden="true" className="absolute -left-[9999px] top-auto h-0 w-0 overflow-hidden">
+          <label htmlFor="contact-company">No completar este campo</label>
+          <input type="text" id="contact-company" name="_gotcha" tabIndex={-1} autoComplete="off"
+            value={cForm._gotcha} onChange={(e) => setCForm({ ...cForm, _gotcha: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fName}</span>
+            <input type="text" value={cForm.name} placeholder={t.contact.fNamePh} maxLength={60}
+              onChange={(e) => setCForm({ ...cForm, name: e.target.value })}
+              className="mt-2 w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+          </label>
+          <label className="block">
+            <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fEmail}</span>
+            <input type="email" value={cForm.email} placeholder={t.contact.fEmailPh} maxLength={90}
+              onChange={(e) => setCForm({ ...cForm, email: e.target.value })}
+              className="mt-2 w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+          </label>
+        </div>
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fProc}</span>
+          <select value={cForm.proc}
+            onChange={(e) => setCForm({ ...cForm, proc: e.target.value })}
+            className="mt-2 w-full cursor-pointer rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors focus:border-[var(--ink)]">
+            <option value="" className="text-[var(--surface)]">{t.contact.fProcPh}</option>
+            {PROCEDURES.map((p) => (
+              <option key={p.slug} value={p.slug} className="text-[var(--surface)]">{p[lang].name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fMsg}</span>
+          <textarea id="contact-msg" rows={4} value={cForm.msg} placeholder={t.contact.fMsgPh} maxLength={800}
+            onChange={(e) => setCForm({ ...cForm, msg: e.target.value })}
+            className="mt-2 w-full resize-y rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+        </label>
+        {cErr && <p className="text-[12px] text-[#E0908D]">{cErr}</p>}
+        <div className="flex flex-wrap items-center gap-4">
+          <button type="submit" disabled={cSubmitting}
+            className="flex cursor-pointer items-center gap-2.5 border border-[var(--accent)] bg-[var(--accent)] px-8 py-3.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85 active:scale-[0.98] disabled:cursor-wait disabled:opacity-70">
+            {cSubmitting && <Loader2 size={14} strokeWidth={2} className="animate-spin" />}
+            {cSubmitting ? t.contact.sending : t.contact.send}
+          </button>
+        </div>
+        <p className="text-[11px] leading-relaxed text-[var(--faint)]">{t.contact.note}</p>
+      </form>
+    </>
+  );
+
   /* Sin bg propio: el fondo (y la textura de body::before) vienen de html/body,
      para que la textura se vea a traves de este contenedor en vez de quedar tapada. */
   return (
@@ -843,31 +928,21 @@ export default function App() {
         .font-slogan { font-family: 'Cormorant Garamond', Georgia, serif; }
         .font-sans { font-family: 'Inter', system-ui, sans-serif; }
       `}</style>
-      <BackgroundLines />
 
       <AnimatePresence>
         {loading && (
           <motion.div key="loader" exit={{ opacity: 0, filter: "blur(6px)" }}
             transition={{ duration: reduce ? 0 : 0.4, ease: "easeInOut" }}
             className="fixed inset-0 z-[200] flex items-center justify-center bg-[var(--bg)]">
-            <div className="relative flex items-center justify-center">
-              {/* Anillo que se contrae: entra grande y va cerrando hacia el
-                  centro en dos tiempos — primero se asienta a tamano
-                  "normal" (mismo gesto que una gota cayendo y frenando de
-                  golpe), despues sigue cerrando y se disuelve, como si se
-                  encogiera hasta desaparecer justo donde queda el logo. */}
-              <motion.svg viewBox="0 0 100 100" aria-hidden="true"
-                className="absolute h-24 w-24 sm:h-28 sm:w-28"
-                initial={{ scale: 2.6, opacity: 0 }}
-                animate={reduce ? { scale: 0.6, opacity: 0 } : { scale: [2.6, 1, 0.6], opacity: [0, 1, 0] }}
-                transition={reduce ? { duration: 0 } : { duration: 0.62, times: [0, 0.6, 1], ease: ["easeOut", "easeIn"] }}>
-                <circle cx="50" cy="50" r="46" fill="none" stroke="var(--accent)" strokeWidth="3" />
-              </motion.svg>
-              <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: reduce ? 0 : 0.3, delay: reduce ? 0 : 0.38, ease: "easeOut" }}>
-                <Wordmark size={64} />
-              </motion.div>
-            </div>
+            {/* Silueta a mano alzada: "MDM Surgery & Team" se escribe con el
+                mismo barrido de clip-path que el slogan, en la misma cursiva
+                — sin anillo ni logo compuesto, un solo trazo que se lee
+                mientras se dibuja. 100% CSS (ver .loader-write en
+                index.css), asi que no depende de que ningun JS termine a
+                tiempo para verse. */}
+            <p aria-hidden="true" className="loader-write font-slogan italic">
+              MDM Surgery &amp; Team
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -937,13 +1012,36 @@ export default function App() {
           className="whitespace-nowrap rounded-full bg-[var(--ink)] px-3.5 py-2 text-[11px] text-[var(--surface)] shadow-[0_4px_14px_var(--shadow)]">
           {t.contact.fabMessages[fabMsgIndex]}
         </motion.span>
-        <button type="button" onClick={() => scrollTo("contact")}
+        <button type="button" onClick={() => setContactModalOpen(true)}
           aria-label={t.contact.cta} title={t.contact.cta} aria-hidden={!fabVisible}
           className="flex h-12 w-12 flex-shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--accent)]/45 bg-[var(--surface)] text-[var(--accent)] shadow-[0_8px_24px_var(--shadow)] transition-colors duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--surface)] active:scale-90 sm:h-14 sm:w-14">
           <EnvelopeIcon size={18} strokeWidth={1.9} className="sm:hidden" />
           <EnvelopeIcon size={22} strokeWidth={1.8} className="hidden sm:block" />
         </button>
       </motion.div>
+
+      {/* Ventana emergente de contacto — el mismo recuadro de la seccion
+          Contacto (misma info, mismo formulario), abierta desde el CTA del
+          hero y el CTA flotante para no forzar el scroll hasta el final de
+          la pagina. Se cierra con la X, con Escape o clickeando afuera. */}
+      <AnimatePresence>
+        {contactModalOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setContactModalOpen(false)} role="dialog" aria-modal="true"
+            className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-6">
+            <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative my-10 grid w-full max-w-3xl grid-cols-1 gap-10 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-8 shadow-[0_20px_60px_var(--shadow)] sm:p-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:gap-14 md:p-12">
+              <button type="button" onClick={() => setContactModalOpen(false)} aria-label={t.contact.close}
+                className="absolute right-5 top-5 cursor-pointer text-[var(--muted)] transition-colors hover:text-[var(--ink)] active:scale-90">
+                <X size={20} />
+              </button>
+              {contactFields}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Lightbox — certificates & papers */}
       <AnimatePresence>
@@ -1055,7 +1153,7 @@ export default function App() {
                   a la izquierda del texto y entra en escena solo en este boton.
                   Relleno solido en --accent: es la unica accion de conversion real
                   del hero y antes competia mal, en outline fino, contra la foto. */}
-              <button onClick={() => scrollTo("contact")}
+              <button onClick={() => setContactModalOpen(true)}
                 className="group inline-flex cursor-pointer items-center gap-0 border border-[var(--accent)] bg-[var(--accent)] px-9 py-4 font-sans text-[10px] font-medium uppercase text-[var(--surface)] shadow-[0_4px_20px_var(--shadow)] transition-opacity duration-200 hover:opacity-90 active:scale-[0.97] sm:text-[11px]"
                 style={{ letterSpacing: "0.28em" }}>
                 <ArrowRight size={13} strokeWidth={1.8}
@@ -1177,6 +1275,9 @@ export default function App() {
                           </h3>
                         </div>
                         <p className="text-[15px] leading-relaxed text-[var(--muted)]">{x[lang].desc}</p>
+                        {x[lang].who && (
+                          <p className="text-[12px] leading-relaxed text-[var(--faint)]">{x[lang].who}</p>
+                        )}
 
                         <dl className="space-y-2.5 border-t border-[var(--line)] pt-5 text-[14px]">
                           <div className="flex justify-between gap-4">
@@ -1747,68 +1848,7 @@ export default function App() {
           <section id="contact" className="scroll-mt-24 pt-24">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}
               className="grid grid-cols-1 gap-10 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-8 sm:p-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:gap-14 md:p-12">
-              <div>
-                <Eyebrow>{t.contact.eyebrow}</Eyebrow>
-                <SectionTitle size="text-2xl sm:text-3xl">{t.contact.title}</SectionTitle>
-                <p className="mt-4 max-w-md text-[14px] leading-relaxed text-[var(--muted)]">{t.contact.body}</p>
-                <p className="mt-3 max-w-md text-[13px] leading-relaxed text-[var(--faint)]">{t.contact.process}</p>
-                <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-[var(--muted)]">
-                  <a href={`mailto:${CONTACT_EMAIL}`} aria-label={CONTACT_EMAIL}
-                    className="email-domain transition-colors hover:text-[var(--ink)]">{EMAIL_USER}</a>
-                  <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--ink)]">{INSTAGRAM_HANDLE}</a>
-                </div>
-              </div>
-              <form onSubmit={submitEnquiry} className="space-y-4">
-                {/* Honeypot: invisible para una persona (fuera de pantalla, afuera
-                    del tab order, oculto de lectores de pantalla), pero un bot que
-                    completa cada input del formulario lo llena igual. Sin display:none
-                    a proposito — algunos bots ya lo reconocen como trampa y lo saltean. */}
-                <div aria-hidden="true" className="absolute -left-[9999px] top-auto h-0 w-0 overflow-hidden">
-                  <label htmlFor="contact-company">No completar este campo</label>
-                  <input type="text" id="contact-company" name="_gotcha" tabIndex={-1} autoComplete="off"
-                    value={cForm._gotcha} onChange={(e) => setCForm({ ...cForm, _gotcha: e.target.value })} />
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fName}</span>
-                    <input type="text" value={cForm.name} placeholder={t.contact.fNamePh} maxLength={60}
-                      onChange={(e) => setCForm({ ...cForm, name: e.target.value })}
-                      className="mt-2 w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
-                  </label>
-                  <label className="block">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fEmail}</span>
-                    <input type="email" value={cForm.email} placeholder={t.contact.fEmailPh} maxLength={90}
-                      onChange={(e) => setCForm({ ...cForm, email: e.target.value })}
-                      className="mt-2 w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
-                  </label>
-                </div>
-                <label className="block">
-                  <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fProc}</span>
-                  <select value={cForm.proc}
-                    onChange={(e) => setCForm({ ...cForm, proc: e.target.value })}
-                    className="mt-2 w-full cursor-pointer rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors focus:border-[var(--ink)]">
-                    <option value="" className="text-[var(--surface)]">{t.contact.fProcPh}</option>
-                    {PROCEDURES.map((p) => (
-                      <option key={p.slug} value={p.slug} className="text-[var(--surface)]">{p[lang].name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fMsg}</span>
-                  <textarea id="contact-msg" rows={4} value={cForm.msg} placeholder={t.contact.fMsgPh} maxLength={800}
-                    onChange={(e) => setCForm({ ...cForm, msg: e.target.value })}
-                    className="mt-2 w-full resize-y rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
-                </label>
-                {cErr && <p className="text-[12px] text-[#E0908D]">{cErr}</p>}
-                <div className="flex flex-wrap items-center gap-4">
-                  <button type="submit" disabled={cSubmitting}
-                    className="flex cursor-pointer items-center gap-2.5 border border-[var(--accent)] bg-[var(--accent)] px-8 py-3.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85 active:scale-[0.98] disabled:cursor-wait disabled:opacity-70">
-                    {cSubmitting && <Loader2 size={14} strokeWidth={2} className="animate-spin" />}
-                    {cSubmitting ? t.contact.sending : t.contact.send}
-                  </button>
-                </div>
-                <p className="text-[11px] leading-relaxed text-[var(--faint)]">{t.contact.note}</p>
-              </form>
+              {contactFields}
             </motion.div>
           </section>
 

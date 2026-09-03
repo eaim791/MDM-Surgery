@@ -28,6 +28,10 @@
      leia demasiado marron. */
   --accent: #3D5266;
   --accent-soft: #E6EBEF;
+  /* Mismo azul de --accent, con alfa ya incluido — hace falta como rgba()
+     porque un radial-gradient no puede tomar el alfa de otra variable HSL/HEX
+     por si solo. Se usa para el resplandor de fondo (ver html, mas abajo). */
+  --accent-glow: rgba(61, 82, 102, 0.16);
 }
 
 .dark {
@@ -51,12 +55,30 @@
   --hero-halo: rgba(21, 24, 26, 0.55);
   --accent: #8FA8BE;
   --accent-soft: #1F2830;
+  --accent-glow: rgba(143, 168, 190, 0.16);
 }
 
+/* Fondo de campo de color difuminado: dos resplandores grandes en el acento
+   del sitio. Van directo en el background de html (no en un div propio)
+   a proposito — asi quedan en el "canvas" real de la pagina, la capa mas de
+   atras que existe, pintada antes que cualquier otra cosa sin excepcion. Un
+   div propio (fixed, z-index negativo) parecia deberia lograr lo mismo, pero
+   cualquier caja opaca en el flujo normal de la pagina (y hasta el propio
+   background-color de body, si lo tiene) se pinta despues y lo tapa entero
+   — esa fue la causa real de "el fondo no se ve", repetida con cada variante
+   de fondo probada antes de esta. Con esto en el canvas, no hay capa que lo
+   pueda tapar salvo un elemento que de verdad este encima (una card, el
+   video del hero) — que es exactamente lo que se busca. background-attachment
+   fixed lo deja quieto en pantalla en vez de scrollear con el contenido. */
 html {
   color-scheme: light;
   scroll-behavior: smooth;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 8% 0%, var(--accent-glow) 0%, transparent 55%),
+    radial-gradient(circle at 100% 100%, var(--accent-glow) 0%, transparent 50%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 /* Foco de teclado consistente en todo el sitio: antes solo el select de
@@ -68,50 +90,45 @@ html {
   border-radius: 2px;
 }
 
-/* Fondo de lineas arquitectonicas — el elemento grafico que le faltaba al
-   sitio: sin esto, no habia una sola marca visual que no fuera foto,
-   tipografia o icono generico. SVG inline (no imagen) — nitido a cualquier
-   tamano de pantalla. Vive en #bg-lines, un div fijo aparte (no el fondo de
-   <body>) porque el dibujado en loop (ver App.jsx) anima cada trazo con
-   GSAP — animar la opacidad de <body> se llevaria puesto todo el contenido
-   con el. Se ve en toda la pagina menos en el hero, donde el video (opaco)
-   tapa lo que tiene detras. El color usa --accent directamente: como esa
-   variable ya cambia sola entre claro y oscuro, no hace falta una variante
-   aparte por tema. */
-body {
-  background-color: var(--bg);
+/* Pantalla de carga: "MDM Surgery & Team" escrito con el mismo barrido de
+   clip-path que el slogan (ver mas abajo), arrancando apenas monta —
+   arranca siempre, no hace falta gatillo de scroll como en el slogan. La
+   media query de movimiento reducido ya fuerza duracion casi cero en toda
+   animacion del sitio, asi que no hace falta un chequeo aparte aca. */
+.loader-write {
+  font-size: 30px;
+  font-weight: 500;
+  color: var(--ink);
+  clip-path: inset(0 100% 0 0);
+  animation: loader-write-reveal 0.55s cubic-bezier(0.65, 0, 0.35, 1) forwards;
 }
-#bg-lines {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
+@media (min-width: 640px) {
+  .loader-write { font-size: 38px; }
 }
-#bg-lines svg {
-  width: 100%;
-  height: 100%;
+@keyframes loader-write-reveal {
+  to { clip-path: inset(0 0% 0 0); }
 }
-#bg-lines path {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-dasharray: 2000;
-  stroke-dashoffset: 2000;
-  animation: bg-line-draw 3s ease-out forwards;
-}
-@keyframes bg-line-draw {
-  to { stroke-dashoffset: 0; }
+
+/* Texto del slogan "escrito" con un barrido de clip-path — ver el comentario
+   junto a .slogan-write en App.jsx. Igual que el garabato de abajo: sin la
+   clase .doodle-show (que React agrega recien cuando la seccion entra en
+   pantalla) queda en su punto de partida, sin revelar nada. */
+.slogan-write { display: inline-block; clip-path: inset(0 100% 0 0); }
+.doodle-show .slogan-write { animation: slogan-write-reveal 1.6s cubic-bezier(0.65, 0, 0.35, 1) forwards; }
+@keyframes slogan-write-reveal {
+  to { clip-path: inset(0 0% 0 0); }
 }
 
 /* Garabato del slogan (ver Slogan en App.jsx): igual que el fondo, dibujado
    100% CSS. Sin la clase .doodle-show (que React agrega recien cuando la
    seccion entra en pantalla) quedan en su punto de partida — ocultos — sin
-   ninguna animacion corriendo; al agregarse la clase arranca el dibujado. */
+   ninguna animacion corriendo; al agregarse la clase arranca el dibujado.
+   Arranca casi junto con el barrido del texto de arriba (0.15s de diferencia,
+   como si la pluma no se despegara del papel al terminar de escribir). */
 .doodle-flourish { stroke-dasharray: 1600; stroke-dashoffset: 1600; }
 .doodle-circle, .doodle-petal { stroke-dasharray: 40; stroke-dashoffset: 40; }
-.doodle-show .doodle-flourish { animation: doodle-draw 1.9s 1.7s ease-out forwards; }
-.doodle-show .doodle-circle { animation: doodle-draw 0.5s 3.6s ease-out forwards; }
+.doodle-show .doodle-flourish { animation: doodle-draw 1.9s 0.15s ease-out forwards; }
+.doodle-show .doodle-circle { animation: doodle-draw 0.5s 2.05s ease-out forwards; }
 .doodle-show .doodle-petal { animation: doodle-draw 0.5s ease-out forwards; }
 @keyframes doodle-draw {
   to { stroke-dashoffset: 0; }
