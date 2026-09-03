@@ -332,8 +332,15 @@ function Slogan({ text }) {
   // the observer effect, so a remount (StrictMode) or a fast scroll could leave the words
   // stuck at opacity 0. A ref-based check re-evaluates and can't strand the text invisible.
   const wrapRef = useRef(null);
-  const textRef = useRef(null);
+  const svgTextRef = useRef(null);
   const [scale, setScale] = useState(1);
+  // Ancho real del texto (para que el <svg> que lo envuelve mida justo lo que
+  // ocupa, como haria un <span> normal) y largo estimado del trazo de tinta
+  // de toda la frase (para stroke-dasharray/-dashoffset del <text>, mas abajo)
+  // — ambos se miden, no se adivinan, porque cambian con el idioma y con la
+  // fuente real una vez que termina de cargar.
+  const [textWidth, setTextWidth] = useState(400);
+  const [dash, setDash] = useState(1200);
   const reduce = useReducedMotion();
   const inView = useInView(wrapRef, { once: true, amount: 0.4 });
   const show = inView || reduce;
@@ -344,14 +351,20 @@ function Slogan({ text }) {
   // contra el espacio disponible y se achica lo justo y necesario.
   useEffect(() => {
     const fit = () => {
-      const text_ = textRef.current, wrap = wrapRef.current;
-      if (!text_ || !wrap) return;
-      // transform: scale() no afecta el layout — scrollWidth ya da el ancho
-      // real del texto sin escalar, no hace falta "deshacer" nada.
-      setScale(Math.min(1, wrap.clientWidth / text_.scrollWidth));
+      const svgText = svgTextRef.current, wrap = wrapRef.current;
+      if (!svgText || !wrap) return;
+      const len = svgText.getComputedTextLength();
+      if (len > 0) {
+        setScale(Math.min(1, wrap.clientWidth / len));
+        setTextWidth(len);
+        // La cursiva tiene mucho trazo curvo y enlazado por caracter — el
+        // perimetro real de tinta que hay que recorrer es bastante mayor
+        // que el simple ancho de avance del texto (getComputedTextLength).
+        setDash(len * 2.6);
+      }
     };
     fit();
-    // La tipografia (Playfair Display Italic) carga async — si fit() mide
+    // La tipografia (Cormorant Garamond Italic) carga async — si fit() mide
     // antes de que termine de cargar, lo hace con las metricas de la fuente
     // de reemplazo, mas angosta, y el numero queda corto una vez que la
     // fuente real entra (el texto se pasa de largo en movil, que es donde
@@ -386,7 +399,6 @@ function Slogan({ text }) {
     <section aria-hidden="true" className="overflow-hidden bg-[var(--chip)] py-20 sm:py-28">
       <div ref={wrapRef} className="mx-auto max-w-5xl px-6">
         <motion.p
-          ref={textRef}
           // scale via el prop corto de motion, no style={{transform:`scale(${scale})`}}:
           // motion.p reescribe su propio transform en cada frame, asi que un transform
           // manual se perdia (texto vuelto a su ancho real, roto en movil).
@@ -398,15 +410,21 @@ function Slogan({ text }) {
           className="origin-center whitespace-normal text-center font-slogan italic text-[36px] font-medium leading-snug text-[var(--ink)] sm:whitespace-nowrap sm:text-[46px]"
         >
           <span className={`relative inline-block pb-3 sm:pb-4 ${show ? "doodle-show" : ""}`}>
-            {/* El texto se "escribe" con un barrido de clip-path en vez del
-                stagger palabra por palabra de antes — a mano alzada glifo
-                por glifo no es viable con texto real, pero un barrido
-                izquierda a derecha sobre esta tipografia cursiva da la
-                misma sensacion de "se esta escribiendo", arrancando junto
-                con el trazo de abajo. clip-path no afecta el layout, asi
-                que fit() sigue midiendo el ancho real del texto aunque
-                todavia no se haya revelado. */}
-            <span className="slogan-write">{text}</span>
+            {/* El texto se "escribe" con el mismo mecanismo que el trazo de
+                abajo: <text> sin relleno, solo trazo, con stroke-dasharray/
+                -dashoffset recorriendo el contorno de la tinta — no un
+                barrido de clip-path (eso se ve como una cortina, no como
+                una pluma escribiendo). getComputedTextLength() mide el
+                ancho real de avance del texto (para el <svg> que lo
+                envuelve, igual que haria un <span>) y tambien de ahi sale
+                la estimacion del largo total de trazo a recorrer. */}
+            <svg aria-hidden="true" width={textWidth} height="1.3em"
+              className="slogan-write-svg" style={{ overflow: "visible" }}>
+              <text ref={svgTextRef} x="0" y="0.95em" className="slogan-write-path"
+                style={{ strokeDasharray: dash, strokeDashoffset: dash }}>
+                {text}
+              </text>
+            </svg>
             {/* Subrayado a mano alzada: arranca debajo de "La" (borde
                 izquierdo del bloque de texto) y recorre toda la frase — por
                 eso este SVG se estira sin mantener proporcion (el trazo
@@ -442,6 +460,39 @@ function ScrollSideDecor() {
   return (
     <>
     </>
+  );
+}
+
+// Silueta de la pantalla de carga: "MDM Surgery & Team" a mano alzada con
+// boligrafo, mismo mecanismo que el slogan (ver Slogan mas arriba) — <text>
+// sin relleno, solo trazo, con stroke-dasharray/-dashoffset recorriendo el
+// contorno de la tinta en vez de un barrido de clip-path (que se ve como una
+// cortina corriendose, no como una pluma escribiendo). Arranca siempre al
+// montar, sin gatillo de scroll.
+function LoaderWordmark() {
+  const svgTextRef = useRef(null);
+  const [textWidth, setTextWidth] = useState(280);
+  const [dash, setDash] = useState(900);
+
+  useEffect(() => {
+    const measure = () => {
+      const el = svgTextRef.current;
+      if (!el) return;
+      const len = el.getComputedTextLength();
+      if (len > 0) { setTextWidth(len); setDash(len * 2.6); }
+    };
+    measure();
+    document.fonts?.ready?.then(measure);
+  }, []);
+
+  return (
+    <svg aria-hidden="true" width={textWidth} height="1.3em"
+      className="font-slogan italic" style={{ overflow: "visible" }}>
+      <text ref={svgTextRef} x="0" y="0.95em" className="loader-write-path"
+        style={{ strokeDasharray: dash, strokeDashoffset: dash }}>
+        MDM Surgery &amp; Team
+      </text>
+    </svg>
   );
 }
 
@@ -501,8 +552,21 @@ export default function App() {
     // vacio antes de soltar, y el subtitulo de abajo se sentia "lejos" de las
     // tarjetas aunque el margen entre ambos fuera chico.
     const measure = () => {
-      const rail = procRailRef.current, viewport = procViewportRef.current, sticky = procStickyRef.current;
-      if (!rail || !viewport || !sticky) return;
+      const rail = procRailRef.current, viewport = procViewportRef.current, sticky = procStickyRef.current, wrap = procWrapRef.current;
+      if (!rail || !viewport || !sticky || !wrap) return;
+
+      // Si el usuario esta scrolleado DENTRO de este wrapper (pin activo) en
+      // el momento de remedir, un cambio de alto (texto de otro idioma, que
+      // mide distinto) corre el scroll absoluto a un punto arbitrario de la
+      // pagina — el bug real detras de "cambio de idioma en Procedimientos y
+      // termino en Contacto o en MDM & Equipo". Se guarda en que fraccion
+      // del alto del wrapper estaba antes de remedir, para reubicarlo en esa
+      // misma fraccion despues (no en el mismo pixel absoluto, que ya no
+      // significa lo mismo con el wrapper mas alto o mas bajo).
+      const beforeRect = wrap.getBoundingClientRect();
+      const wasInside = beforeRect.top <= 0 && beforeRect.bottom >= 0 && beforeRect.height > 0;
+      const progress = wasInside ? Math.min(1, Math.max(0, -beforeRect.top / beforeRect.height)) : null;
+
       // El riel no arranca pegado al borde izquierdo del viewport: queda
       // corrido hacia adentro por el padding propio del viewport (px-6/
       // px-10, para alinear con el titulo de arriba). scrollWidth - clientWidth
@@ -512,8 +576,25 @@ export default function App() {
       const railInset = rail.getBoundingClientRect().left - viewport.getBoundingClientRect().left;
       setProcPanDistance(Math.max(0, rail.scrollWidth - viewport.clientWidth + railInset));
       setProcStickyHeight(sticky.offsetHeight);
+
+      if (progress !== null) {
+        // Recien despues de que React aplique el nuevo alto al wrapper (el
+        // siguiente frame pintado) tiene sentido volver a medir su rect —
+        // antes de eso todavia mide con el alto viejo.
+        requestAnimationFrame(() => {
+          const afterRect = wrap.getBoundingClientRect();
+          const wrapTopAbs = window.scrollY + afterRect.top;
+          window.scrollTo(0, Math.round(wrapTopAbs + progress * afterRect.height));
+        });
+      }
     };
     measure();
+    // La tipografia carga async — si measure() corre antes de que termine de
+    // cargar, mide el riel con las metricas de la fuente de reemplazo (mas
+    // angosta) y el paneo queda corto para siempre salvo que dispare un
+    // resize: la ultima tarjeta (Remodelacion Corporal) quedaba recortada
+    // de forma intermitente, justo el bug reportado.
+    document.fonts?.ready?.then(measure);
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [lang]);
@@ -550,7 +631,10 @@ export default function App() {
   }, [fabVisible, reduce]);
 
   useEffect(() => {
-    const id = setTimeout(() => setLoading(false), reduce ? 0 : 720);
+    // 880ms: el trazo a boligrafo de "MDM Surgery & Team" tarda 0.85s en
+    // dibujarse (ver LoaderWordmark) — con menos, el fade se lleva puesto
+    // el final del trazo antes de que termine de escribirse.
+    const id = setTimeout(() => setLoading(false), reduce ? 0 : 880);
     return () => clearTimeout(id);
   }, [reduce]);
 
@@ -934,15 +1018,11 @@ export default function App() {
           <motion.div key="loader" exit={{ opacity: 0, filter: "blur(6px)" }}
             transition={{ duration: reduce ? 0 : 0.4, ease: "easeInOut" }}
             className="fixed inset-0 z-[200] flex items-center justify-center bg-[var(--bg)]">
-            {/* Silueta a mano alzada: "MDM Surgery & Team" se escribe con el
-                mismo barrido de clip-path que el slogan, en la misma cursiva
-                — sin anillo ni logo compuesto, un solo trazo que se lee
-                mientras se dibuja. 100% CSS (ver .loader-write en
-                index.css), asi que no depende de que ningun JS termine a
-                tiempo para verse. */}
-            <p aria-hidden="true" className="loader-write font-slogan italic">
-              MDM Surgery &amp; Team
-            </p>
+            {/* Silueta a mano alzada: "MDM Surgery & Team" se escribe con
+                boligrafo, en la misma cursiva del slogan — sin anillo ni
+                logo compuesto, un solo trazo que se lee mientras se dibuja.
+                Ver LoaderWordmark, arriba. */}
+            <LoaderWordmark />
           </motion.div>
         )}
       </AnimatePresence>

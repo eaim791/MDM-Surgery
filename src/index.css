@@ -90,40 +90,41 @@ html {
   border-radius: 2px;
 }
 
-/* Pantalla de carga: "MDM Surgery & Team" escrito con el mismo barrido de
-   clip-path que el slogan (ver mas abajo), arrancando apenas monta —
-   arranca siempre, no hace falta gatillo de scroll como en el slogan. La
-   media query de movimiento reducido ya fuerza duracion casi cero en toda
-   animacion del sitio, asi que no hace falta un chequeo aparte aca. */
-.loader-write {
-  font-size: 30px;
+/* Pantalla de carga: "MDM Surgery & Team" escrito a mano alzada con boligrafo
+   — <text> sin relleno, solo trazo, con stroke-dasharray/-dashoffset
+   recorriendo el contorno de la tinta (ver LoaderWordmark en App.jsx, que
+   mide el trazo real con getComputedTextLength() y fija dasharray/dashoffset
+   por estilo inline). Arranca apenas monta, no hace falta gatillo de scroll
+   como en el slogan. La media query de movimiento reducido, mas abajo, ya
+   fuerza duracion casi cero en toda animacion del sitio. */
+.loader-write-path {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.3;
+  font-size: 32px;
   font-weight: 500;
-  color: var(--ink);
-  clip-path: inset(0 100% 0 0);
-  animation: loader-write-reveal 0.55s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  animation: pen-draw 0.85s cubic-bezier(0.65, 0, 0.35, 1) forwards;
 }
 @media (min-width: 640px) {
-  .loader-write { font-size: 38px; }
-}
-@keyframes loader-write-reveal {
-  to { clip-path: inset(0 0% 0 0); }
+  .loader-write-path { font-size: 40px; }
 }
 
-/* Texto del slogan "escrito" con un barrido de clip-path — ver el comentario
-   junto a .slogan-write en App.jsx. Igual que el garabato de abajo: sin la
-   clase .doodle-show (que React agrega recien cuando la seccion entra en
-   pantalla) queda en su punto de partida, sin revelar nada. */
-.slogan-write { display: inline-block; clip-path: inset(0 100% 0 0); }
-.doodle-show .slogan-write { animation: slogan-write-reveal 1.6s cubic-bezier(0.65, 0, 0.35, 1) forwards; }
-@keyframes slogan-write-reveal {
-  to { clip-path: inset(0 0% 0 0); }
+/* Texto del slogan, escrito con el mismo mecanismo — ver el comentario junto
+   al <svg> en App.jsx. currentColor toma var(--ink) del texto que lo rodea.
+   Igual que el garabato de abajo: sin la clase .doodle-show (que React
+   agrega recien cuando la seccion entra en pantalla) queda en su punto de
+   partida, sin revelar nada. */
+.slogan-write-path { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.doodle-show .slogan-write-path { animation: pen-draw 1.9s cubic-bezier(0.65, 0, 0.35, 1) forwards; }
+@keyframes pen-draw {
+  to { stroke-dashoffset: 0; }
 }
 
 /* Garabato del slogan (ver Slogan en App.jsx): igual que el fondo, dibujado
    100% CSS. Sin la clase .doodle-show (que React agrega recien cuando la
    seccion entra en pantalla) quedan en su punto de partida — ocultos — sin
    ninguna animacion corriendo; al agregarse la clase arranca el dibujado.
-   Arranca casi junto con el barrido del texto de arriba (0.15s de diferencia,
+   Arranca casi junto con el trazo del texto de arriba (0.15s de diferencia,
    como si la pluma no se despegara del papel al terminar de escribir). */
 .doodle-flourish { stroke-dasharray: 1600; stroke-dashoffset: 1600; }
 .doodle-circle, .doodle-petal { stroke-dasharray: 40; stroke-dashoffset: 40; }
