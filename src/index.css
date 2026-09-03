@@ -125,22 +125,31 @@ html {
 /* "+25 años de experiencia": un brillo recorre la frase y despues hace una
    pausa larga antes de repetir, como un reflejo de luz pasando — no un
    parpadeo constante. background-clip:text pinta el texto con el propio
-   gradiente (--faint en reposo, --accent al pasar el brillo) y lo desliza
-   con background-position; el 18% inicial del ciclo es el pase (rapido),
-   el resto es la pausa. */
+   gradiente y lo desliza con background-position; el 18% inicial del ciclo
+   es el pase (rapido), el resto es la pausa. El primer intento iba de
+   --faint a --accent — dos tonos con brillo (luminosidad) casi igual, solo
+   distinto matiz, asi que el "destello" no se notaba casi nada. Ahora pasa
+   por --ink (el color mas oscuro/marcado del sitio, bien lejos de --faint)
+   con --accent enmarcandolo — un salto de contraste real, no solo de tinte. */
 .years-shine {
+  /* inline-block a proposito: background-clip:text sobre un <span> puramente
+     inline (el default) calcula el area de fondo distinto segun el motor
+     — un gotcha conocido de esta tecnica que puede dejar el degrade mal
+     alineado o directamente sin verse en algunos casos. */
+  display: inline-block;
   background-image: linear-gradient(100deg,
-    var(--faint) 35%, var(--accent) 50%, var(--faint) 65%);
+    var(--faint) 25%, var(--accent) 42%, var(--ink) 50%, var(--accent) 58%, var(--faint) 75%);
   background-size: 300% 100%;
   background-position: 200% 0;
   background-clip: text;
   -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   color: transparent;
   animation: years-shine 4.5s ease-out infinite;
 }
 @keyframes years-shine {
   0% { background-position: 200% 0; }
-  18%, 100% { background-position: -120% 0; }
+  20%, 100% { background-position: -120% 0; }
 }
 
 /* Garabato del slogan (ver Slogan en App.jsx): igual que el fondo, dibujado

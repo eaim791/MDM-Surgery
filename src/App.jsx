@@ -313,21 +313,54 @@ function loadInstagramEmbedScript(onReady) {
   script.addEventListener("load", () => { instagramScriptState = "ready"; onReady(); });
   document.body.appendChild(script);
 }
-function InstagramEmbed({ url, loadingLabel }) {
-  const ref = useRef(null);
+function InstagramEmbed({ url, loadingLabel, fallbackLabel }) {
+  const wrapRef = useRef(null);
+  // "loading" mientras se espera al iframe real; "failed" si a los pocos
+  // segundos todavia no aparecio (script bloqueado, sin conexion a
+  // Instagram, el post ya no existe, etc.) — sin esto, un embed que nunca
+  // termina de cargar se queda diciendo "Cargando…" para siempre, que es
+  // peor que mostrar directo un enlace a la publicacion.
+  const [status, setStatus] = useState("loading");
+
   useEffect(() => {
+    setStatus("loading");
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    // Instagram no avisa cuando termina de procesar un <blockquote> puntual
+    // (Embeds.process() es "mejor esfuerzo" para toda la pagina) — el unico
+    // indicio confiable de que ESTE embed en particular ya es el iframe
+    // real es que el iframe efectivamente aparezca adentro de su wrapper.
+    const observer = new MutationObserver(() => {
+      if (wrap.querySelector("iframe")) { setStatus("ready"); observer.disconnect(); }
+    });
+    observer.observe(wrap, { childList: true, subtree: true });
     loadInstagramEmbedScript(() => window.instgrm?.Embeds?.process());
+    const timeout = setTimeout(() => {
+      if (!wrap.querySelector("iframe")) setStatus("failed");
+    }, 6000);
+    return () => { observer.disconnect(); clearTimeout(timeout); };
   }, [url]);
 
+  if (status === "failed") {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer"
+        className="flex min-h-[340px] w-full flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-[var(--muted)]">
+        <Instagram size={22} strokeWidth={1.5} className="flex-shrink-0 text-[var(--faint)]" />
+        {fallbackLabel}
+      </a>
+    );
+  }
+
   return (
-    <div ref={ref} className="ig-embed-wrap flex min-h-[220px] items-center justify-center">
+    <div ref={wrapRef} className="ig-embed-wrap flex min-h-[340px] items-center justify-center">
       <blockquote className="instagram-media" data-instgrm-permalink={url} data-instgrm-version="14"
         style={{ margin: 0, width: "100%", minWidth: "100%" }}>
         {/* Instagram reemplaza todo esto por el iframe real una vez que
             embed.js procesa el bloque — hasta entonces (o si el script no
-            llega a cargar) queda este enlace, nunca un recuadro vacio. */}
+            llega a cargar, ver el estado "failed" arriba) queda este
+            enlace, nunca un recuadro vacio. */}
         <a href={url} target="_blank" rel="noopener noreferrer"
-          className="flex min-h-[220px] w-full items-center justify-center gap-2 p-6 text-center text-[13px] text-[var(--muted)]">
+          className="flex min-h-[340px] w-full items-center justify-center gap-2 p-6 text-center text-[13px] text-[var(--muted)]">
           <Instagram size={16} strokeWidth={1.6} className="flex-shrink-0" />
           {loadingLabel}
         </a>
@@ -1948,21 +1981,24 @@ export default function App() {
                         return (
                           <motion.div key={key} variants={fadeUp}
                             className="overflow-hidden border border-[var(--line)] bg-[var(--surface)]">
-                            <InstagramEmbed url={x.url} loadingLabel={t.test.igLoading} />
+                            <InstagramEmbed url={x.url} loadingLabel={t.test.igLoading} fallbackLabel={t.test.igViewPost} />
                           </motion.div>
                         );
                       }
                       if (x.type === "placeholder") {
                         // Recuadro reservado para cuando se suba una foto o video
-                        // real de un paciente — mismo tamano que las demas cards,
-                        // pero claramente "todavia no hay nada aca" (borde
-                        // punteado) en vez de una card vacia que parezca un bug.
+                        // real de un paciente — bastante mas alto que una card de
+                        // texto (mismo alto minimo que el embed de Instagram) para
+                        // que una foto o un video vertical entren comodos y no
+                        // angostos — pero claramente "todavia no hay nada aca"
+                        // (borde punteado) en vez de una card vacia que parezca
+                        // un bug.
                         return (
                           <motion.div key={key} variants={fadeUp}
-                            className="flex min-h-[220px] flex-col items-center justify-center gap-2 border border-dashed border-[var(--line)] p-6 text-center">
-                            <ImageIcon size={22} strokeWidth={1.4} className="text-[var(--faint)]" />
-                            <p className="font-display text-[15px] font-normal text-[var(--muted)]">{t.test.placeholderTitle}</p>
-                            <p className="text-[12px] text-[var(--faint)]">{t.test.placeholderBody}</p>
+                            className="flex min-h-[340px] flex-col items-center justify-center gap-3 border border-dashed border-[var(--line)] p-6 text-center">
+                            <ImageIcon size={28} strokeWidth={1.3} className="text-[var(--faint)]" />
+                            <p className="font-display text-[17px] font-normal text-[var(--muted)]">{t.test.placeholderTitle}</p>
+                            <p className="text-[13px] text-[var(--faint)]">{t.test.placeholderBody}</p>
                           </motion.div>
                         );
                       }
