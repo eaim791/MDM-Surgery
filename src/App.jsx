@@ -432,7 +432,14 @@ export default function App() {
     const measure = () => {
       const rail = procRailRef.current, viewport = procViewportRef.current, sticky = procStickyRef.current;
       if (!rail || !viewport || !sticky) return;
-      setProcPanDistance(Math.max(0, rail.scrollWidth - viewport.clientWidth));
+      // El riel no arranca pegado al borde izquierdo del viewport: queda
+      // corrido hacia adentro por el padding propio del viewport (px-6/
+      // px-10, para alinear con el titulo de arriba). scrollWidth - clientWidth
+      // por si solo ignora ese corrimiento y el paneo se queda corto exactamente
+      // por esa distancia — la ultima tarjeta terminaba tapada por el recorte
+      // en vez de con el margen de aire que deja el pr-6/pr-10 del riel.
+      const railInset = rail.getBoundingClientRect().left - viewport.getBoundingClientRect().left;
+      setProcPanDistance(Math.max(0, rail.scrollWidth - viewport.clientWidth + railInset));
       setProcStickyHeight(sticky.offsetHeight);
     };
     measure();
@@ -440,10 +447,10 @@ export default function App() {
     return () => window.removeEventListener("resize", measure);
   }, [lang]);
   // Extra scroll despues de terminar el paneo, antes de que se suelte el pin:
-  // sin esto la ultima tarjeta llega justo cuando la seccion se libera, y da
-  // la sensacion de que no da tiempo a mirarla. Proporcional al paneo (listas
-  // con mas tarjetas piden mas aire), con un piso para que nunca sea instantaneo.
-  const procHold = Math.max(300, procPanDistance * 0.4);
+  // sin esto la ultima tarjeta llega justo cuando la seccion se libera. Un
+  // empujon chico y fijo alcanza — no hace falta que escale con la cantidad
+  // de tarjetas, que se sentia demasiado largo.
+  const procHold = 220;
   const procTotalScroll = procPanDistance + procHold;
   const { scrollYProgress: procScroll } = useScroll({ target: procWrapRef, offset: ["start start", "end end"] });
   const procPanProgress = procTotalScroll > 0 ? procPanDistance / procTotalScroll : 1;
@@ -1074,7 +1081,7 @@ export default function App() {
                 <div ref={procViewportRef}
                   className={`-mx-6 mt-10 px-6 sm:-mx-10 sm:px-10 ${reduce ? "no-scrollbar overflow-x-auto" : "overflow-hidden"}`}>
                   <motion.div ref={procRailRef} style={{ x: reduce ? 0 : procX }}
-                    className={`flex items-stretch gap-5 pb-2 pr-6 sm:gap-6 sm:pr-10 ${reduce ? "snap-x snap-mandatory scroll-pl-6 sm:scroll-pl-10" : ""}`}>
+                    className={`flex items-stretch gap-5 pb-2 sm:gap-6 ${reduce ? "snap-x snap-mandatory scroll-pl-6 sm:scroll-pl-10" : ""}`}>
                     {PROCEDURES.map((x) => (
                       <div key={x.slug}
                         className={`flex w-[320px] flex-shrink-0 flex-col gap-5 border border-[var(--line)] bg-[var(--surface)] p-7 text-left sm:w-[380px] sm:p-8 ${reduce ? "snap-start" : ""}`}>
@@ -1125,6 +1132,13 @@ export default function App() {
                         </div>
                       </div>
                     ))}
+                    {/* Espaciador real, no padding: el padding final de un
+                        contenedor flex no siempre se cuenta en su scrollWidth
+                        (depende del motor de render), asi que el paneo se
+                        quedaba corto y la ultima tarjeta terminaba pegada al
+                        borde de recorte en vez de con aire de sobra. Un
+                        elemento de verdad si cuenta, siempre. */}
+                    <div aria-hidden="true" className="w-6 flex-shrink-0 sm:w-10" />
                   </motion.div>
                 </div>
 
@@ -1332,11 +1346,11 @@ export default function App() {
           <section id="team" className="scroll-mt-24 pt-32">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
               <Eyebrow>{t.team.eyebrow}</Eyebrow>
-              <p className="mt-4 max-w-3xl font-display text-[26px] font-normal italic leading-snug text-[var(--ink)] sm:text-[32px]">
+              <p className="mt-4 max-w-3xl font-display text-[32px] font-normal italic leading-snug text-[var(--ink)] sm:text-[42px]">
                 “{t.team.quote}”
               </p>
-              <h2 className="mt-6 font-display text-lg font-normal text-[var(--ink)]">{t.team.title}</h2>
-              <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.team.body}</p>
+              <h2 className="mt-6 font-display text-xl font-normal text-[var(--ink)] sm:text-2xl">{t.team.title}</h2>
+              <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[var(--muted)] sm:text-[16px]">{t.team.body}</p>
             </motion.div>
 
             {/* Unico bloque que rompe el ancho de columna del resto de la pagina:
@@ -1350,7 +1364,7 @@ export default function App() {
                   <span className="text-[13px] tracking-wide text-[var(--faint)]">{LEAD[lang].years}</span>
                 </div>
                 <p className="mt-2 text-[13px] uppercase tracking-[0.12em] text-[var(--muted)] sm:text-[14px]">{LEAD[lang].role}</p>
-                <p className="mt-5 max-w-2xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{LEAD[lang].bio}</p>
+                <p className="mt-5 max-w-3xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{LEAD[lang].bio}</p>
                 {/* Sello en vez del punto liso: son las credenciales que mas
                     pesan para la confianza, justo donde se presenta al
                     doctor — vale la pena que se noten de un vistazo. */}
