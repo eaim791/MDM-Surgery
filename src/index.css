@@ -106,10 +106,16 @@ html {
 .loader-write-path {
   fill: none;
   stroke: var(--ink);
-  stroke-width: 0.9;
+  stroke-width: 1.1;
   font-size: 32px;
   font-weight: 300;
   animation: pen-draw 0.85s ease-out forwards;
+  /* Un trazo tan fino sin esto renderiza con antialiasing de subpixel (tipo
+     ClearType) en vez de escala de grises — a este grosor, eso se ve como
+     un flequillo de colores (rojo/verde/violeta) alrededor de cada letra
+     en vez de una linea limpia. Fuerza escala de grises en su lugar. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 @media (min-width: 640px) {
   .loader-write-path { font-size: 40px; }
@@ -121,7 +127,17 @@ html {
    que el garabato de abajo: sin la clase .doodle-show (que React agrega
    recien cuando la seccion entra en pantalla) queda en su punto de
    partida, sin revelar nada. */
-.slogan-write-path { fill: none; stroke: currentColor; stroke-width: 1; font-weight: 300; }
+/* -webkit-font-smoothing/-moz-osx-font-smoothing: ver el comentario junto a
+   .loader-write-path — mismo trazo fino, mismo riesgo de flequillo de color
+   por antialiasing de subpixel sin esto. */
+.slogan-write-path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 .doodle-show .slogan-write-path { animation: pen-draw 1.9s ease-out forwards; }
 @keyframes pen-draw {
   to { stroke-dashoffset: 0; }
