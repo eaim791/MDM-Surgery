@@ -95,27 +95,34 @@ html {
    recorriendo el contorno de la tinta (ver LoaderWordmark en App.jsx, que
    mide el trazo real con getComputedTextLength() y fija dasharray/dashoffset
    por estilo inline). Arranca apenas monta, no hace falta gatillo de scroll
-   como en el slogan. La media query de movimiento reducido, mas abajo, ya
-   fuerza duracion casi cero en toda animacion del sitio. */
+   como en el slogan. Peso 300 (no el 500 que usa el resto del sitio para
+   esta tipografia) a proposito: 500 tiene el trazo de cada letra
+   demasiado grueso, y el contorno de una letra gruesa dibujado con
+   stroke-only se ve como una letra hueca de molde, no como una linea de
+   pluma — con 300 el propio glifo ya es fino, asi que trazarlo da el
+   mismo trazo delicado que .doodle-flourish (misma curva ease-out).
+   La media query de movimiento reducido, mas abajo, ya fuerza duracion
+   casi cero en toda animacion del sitio. */
 .loader-write-path {
   fill: none;
   stroke: var(--ink);
-  stroke-width: 1.3;
+  stroke-width: 0.9;
   font-size: 32px;
-  font-weight: 500;
-  animation: pen-draw 0.85s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  font-weight: 300;
+  animation: pen-draw 0.85s ease-out forwards;
 }
 @media (min-width: 640px) {
   .loader-write-path { font-size: 40px; }
 }
 
-/* Texto del slogan, escrito con el mismo mecanismo — ver el comentario junto
-   al <svg> en App.jsx. currentColor toma var(--ink) del texto que lo rodea.
-   Igual que el garabato de abajo: sin la clase .doodle-show (que React
-   agrega recien cuando la seccion entra en pantalla) queda en su punto de
+/* Texto del slogan, escrito con el mismo mecanismo y el mismo peso liviano
+   — ver el comentario junto al <svg> en App.jsx y el de arriba sobre el
+   peso 300. currentColor toma var(--ink) del texto que lo rodea. Igual
+   que el garabato de abajo: sin la clase .doodle-show (que React agrega
+   recien cuando la seccion entra en pantalla) queda en su punto de
    partida, sin revelar nada. */
-.slogan-write-path { fill: none; stroke: currentColor; stroke-width: 1.5; }
-.doodle-show .slogan-write-path { animation: pen-draw 1.9s cubic-bezier(0.65, 0, 0.35, 1) forwards; }
+.slogan-write-path { fill: none; stroke: currentColor; stroke-width: 1; font-weight: 300; }
+.doodle-show .slogan-write-path { animation: pen-draw 1.9s ease-out forwards; }
 @keyframes pen-draw {
   to { stroke-dashoffset: 0; }
 }
