@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useId } from "react";
 import { motion, AnimatePresence, useReducedMotion, useInView, useScroll, useTransform } from "framer-motion";
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
@@ -332,49 +332,26 @@ function Slogan({ text }) {
   // the observer effect, so a remount (StrictMode) or a fast scroll could leave the words
   // stuck at opacity 0. A ref-based check re-evaluates and can't strand the text invisible.
   const wrapRef = useRef(null);
-  const svgTextRef = useRef(null);
   const [scale, setScale] = useState(1);
-  // Ancho real del texto (para que el <svg> que lo envuelve mida justo lo que
-  // ocupa, como haria un <span> normal) y largo estimado del trazo de tinta
-  // de toda la frase (para stroke-dasharray/-dashoffset del <text>, mas abajo)
-  // — ambos se miden, no se adivinan, porque cambian con el idioma y con la
-  // fuente real una vez que termina de cargar.
-  const [textWidth, setTextWidth] = useState(400);
-  const [dash, setDash] = useState(1200);
+  // Ancho real del texto (el HandwrittenText de abajo lo mide con getBBox y
+  // lo reporta por onMeasure) contra el espacio disponible — en vez de
+  // adivinar un tamano de fuente que a veces alcanza y a veces no, la
+  // frase se escala lo justo y necesario para entrar en un solo renglon.
+  const [textWidth, setTextWidth] = useState(500);
   const reduce = useReducedMotion();
   const inView = useInView(wrapRef, { once: true, amount: 0.4 });
   const show = inView || reduce;
 
-  // El slogan tiene que entrar siempre en un solo renglon, en cualquier
-  // idioma y cualquier ancho de pantalla — en vez de adivinar un tamano de
-  // fuente que a veces alcanza y a veces no, se mide el ancho real del texto
-  // contra el espacio disponible y se achica lo justo y necesario.
   useEffect(() => {
     const fit = () => {
-      const svgText = svgTextRef.current, wrap = wrapRef.current;
-      if (!svgText || !wrap) return;
-      const len = svgText.getComputedTextLength();
-      if (len > 0) {
-        setScale(Math.min(1, wrap.clientWidth / len));
-        setTextWidth(len);
-        // La cursiva tiene mucho trazo curvo y enlazado por caracter — el
-        // perimetro real de tinta que hay que recorrer es bastante mayor
-        // que el simple ancho de avance del texto (getComputedTextLength).
-        setDash(len * 2.6);
-      }
+      const wrap = wrapRef.current;
+      if (!wrap || !textWidth) return;
+      setScale(Math.min(1, wrap.clientWidth / textWidth));
     };
     fit();
-    // La tipografia (Cormorant Garamond Italic) carga async — si fit() mide
-    // antes de que termine de cargar, lo hace con las metricas de la fuente
-    // de reemplazo, mas angosta, y el numero queda corto una vez que la
-    // fuente real entra (el texto se pasa de largo en movil, que es donde
-    // menos margen hay). Se vuelve a medir en cuanto las fuentes confirman
-    // que cargaron.
-    document.fonts?.ready?.then(fit);
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text]);
+  }, [textWidth]);
 
   // Trazo a mano alzada por debajo de toda la frase (arranca en "La", como
   // subrayandola) + flor al final, una vez que el texto ya aparecio — como
@@ -411,20 +388,12 @@ function Slogan({ text }) {
         >
           <span className={`relative inline-block pb-3 sm:pb-4 ${show ? "doodle-show" : ""}`}>
             {/* El texto se "escribe" con el mismo mecanismo que el trazo de
-                abajo: <text> sin relleno, solo trazo, con stroke-dasharray/
-                -dashoffset recorriendo el contorno de la tinta — no un
-                barrido de clip-path (eso se ve como una cortina, no como
-                una pluma escribiendo). getComputedTextLength() mide el
-                ancho real de avance del texto (para el <svg> que lo
-                envuelve, igual que haria un <span>) y tambien de ahi sale
-                la estimacion del largo total de trazo a recorrer. */}
-            <svg aria-hidden="true" width={textWidth} height="1.3em"
-              className="slogan-write-svg" style={{ overflow: "visible" }}>
-              <text ref={svgTextRef} x="0" y="0.95em" className="slogan-write-path"
-                style={{ strokeDasharray: dash, strokeDashoffset: dash }}>
-                {text}
-              </text>
-            </svg>
+                abajo: relleno solido (sin el problema de letra hueca de
+                trazar el contorno de una tipografia comun) revelado por una
+                mascara cuyo propio trazo se dibuja con stroke-dasharray/
+                -dashoffset — no un barrido de clip-path (eso se ve como una
+                cortina, no como una pluma escribiendo). Ver HandwrittenText. */}
+            <HandwrittenText text={text} className="slogan-write" duration={1.9} ready={show} onMeasure={setTextWidth} />
             {/* Subrayado a mano alzada: arranca debajo de "La" (borde
                 izquierdo del bloque de texto) y recorre toda la frase — por
                 eso este SVG se estira sin mantener proporcion (el trazo
@@ -464,33 +433,84 @@ function ScrollSideDecor() {
 }
 
 // Silueta de la pantalla de carga: "MDM Surgery & Team" a mano alzada con
-// boligrafo, mismo mecanismo que el slogan (ver Slogan mas arriba) — <text>
-// sin relleno, solo trazo, con stroke-dasharray/-dashoffset recorriendo el
-// contorno de la tinta en vez de un barrido de clip-path (que se ve como una
-// cortina corriendose, no como una pluma escribiendo). Arranca siempre al
-// montar, sin gatillo de scroll.
+// boligrafo, mismo mecanismo que el trazo de abajo del slogan (ver
+// HandwrittenText, mas abajo) — el texto se rellena solido (tipografia
+// script realmente monolineal, sin el problema de letra hueca de un
+// tipo de letra comun trazado en su contorno) y se revela con una mascara
+// cuyo trazo se dibuja con stroke-dasharray/-dashoffset, igual que
+// .doodle-flourish. Arranca siempre al montar, sin gatillo de scroll.
 function LoaderWordmark() {
-  const svgTextRef = useRef(null);
-  const [textWidth, setTextWidth] = useState(280);
-  const [dash, setDash] = useState(900);
+  return <HandwrittenText text="MDM Surgery & Team" className="loader-write" duration={0.85} ready />;
+}
+
+// Texto escrito a mano alzada, en cursiva monolineal, revelado por una
+// mascara con trazo animado (stroke-dasharray/-dashoffset, misma tecnica y
+// misma curva ease-out que .doodle-flourish) en vez de tracear el contorno
+// del propio texto: cualquier tipografia comun (incluso liviana) tiene area,
+// asi que trazar solo su contorno se ve como una letra hueca de molde, no
+// como una linea de pluma. Con el texto relleno solido (sin ese problema,
+// Mrs Saint Delafield ya es una script fina de una sola linea) y una
+// mascara aparte haciendo de "cortina" con forma de trazo de pluma —no un
+// barrido recto tipo cortina de clip-path— el efecto final es un simple
+// reveal: se ve como si una mano estuviera escribiendo con tinta real.
+function HandwrittenText({ text, className, duration, ready: forceReady, onMeasure }) {
+  const textRef = useRef(null);
+  const pathRef = useRef(null);
+  const maskId = useId();
+  const [box, setBox] = useState({ x: 0, y: 0, width: 280, height: 50 });
+  const [dash, setDash] = useState(500);
+  const [measured, setMeasured] = useState(false);
 
   useEffect(() => {
     const measure = () => {
-      const el = svgTextRef.current;
+      const el = textRef.current;
       if (!el) return;
-      const len = el.getComputedTextLength();
-      if (len > 0) { setTextWidth(len); setDash(len * 2.6); }
+      const b = el.getBBox();
+      if (b.width > 0) { setBox(b); setMeasured(true); onMeasure?.(b.width); }
     };
     measure();
+    // La tipografia carga async — si measure() mide antes de que termine de
+    // cargar, lo hace con las metricas de la fuente de reemplazo (mas
+    // angosta), y el trazo de revelado queda corto para el texto real.
     document.fonts?.ready?.then(measure);
-  }, []);
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+
+  useEffect(() => {
+    const p = pathRef.current;
+    if (!p) return;
+    const len = p.getTotalLength();
+    if (len > 0) setDash(len);
+  }, [box]);
+
+  const pad = box.height * 0.75;
+  const midY = box.y + box.height * 0.58;
+  const x0 = box.x - pad * 0.4;
+  const x1 = box.x + box.width + pad * 0.4;
+  const span = x1 - x0;
+  const d = `M ${x0},${midY} Q ${x0 + span * 0.28},${midY - box.height * 0.16} ${x0 + span * 0.52},${midY + box.height * 0.1} T ${x1},${midY}`;
+  // El gatillo externo (siempre true para el loading; "esta en pantalla"
+  // para el slogan) Y la propia medicion tienen que estar listos — si el
+  // gatillo llega antes de medir el trazo real, la animacion arrancaria con
+  // el largo de reserva y saltaria al largo real a mitad de camino.
+  const externalReady = forceReady === undefined ? true : forceReady;
+  const ready = externalReady && measured;
 
   return (
-    <svg aria-hidden="true" width={textWidth} height="1.3em"
-      className="font-slogan italic" style={{ overflow: "visible" }}>
-      <text ref={svgTextRef} x="0" y="0.95em" className="loader-write-path"
-        style={{ strokeDasharray: dash, strokeDashoffset: dash }}>
-        MDM Surgery &amp; Team
+    <svg aria-hidden="true" width={box.width + pad * 2} height={box.height + pad * 2}
+      viewBox={`${box.x - pad} ${box.y - pad} ${box.width + pad * 2} ${box.height + pad * 2}`}
+      className={`${className} ${ready ? "handwritten-ready" : ""}`} style={{ overflow: "visible" }}>
+      <defs>
+        <mask id={maskId} maskUnits="userSpaceOnUse">
+          <path ref={pathRef} d={d} fill="none" stroke="#fff" strokeLinecap="round"
+            strokeWidth={box.height * 1.7 || 60} className="handwritten-reveal"
+            style={{ "--pen-duration": `${duration}s`, strokeDasharray: dash, strokeDashoffset: dash }} />
+        </mask>
+      </defs>
+      <text ref={textRef} x="0" y="0" className="handwritten-fill" mask={`url(#${maskId})`}>
+        {text}
       </text>
     </svg>
   );
@@ -544,6 +564,12 @@ export default function App() {
   const procRailRef = useRef(null);
   const [procPanDistance, setProcPanDistance] = useState(0);
   const [procStickyHeight, setProcStickyHeight] = useState(0);
+  // Si se hace click varias veces seguidas en "cambiar idioma" estando
+  // adentro de la seccion, cada click dispara su propia correccion de
+  // scroll diferida a un frame — sin cancelar la anterior, la de un click
+  // viejo podia pisar la de uno mas nuevo (o pelearse con ella) y terminar
+  // en cualquier lado. Solo la ultima programada debe llegar a correr.
+  const procScrollFixRaf = useRef(null);
   useEffect(() => {
     // El wrapper tiene que medir exactamente lo que el contenido fijo ocupa
     // mas lo que hay que scrollear para el paneo — antes usaba min-h-screen
@@ -578,13 +604,25 @@ export default function App() {
       setProcStickyHeight(sticky.offsetHeight);
 
       if (progress !== null) {
+        // Si un click anterior (cambio de idioma, resize) todavia tiene una
+        // correccion sin aplicar, se descarta: solo la programada por esta
+        // misma llamada a measure() tiene que llegar a correr.
+        if (procScrollFixRaf.current != null) cancelAnimationFrame(procScrollFixRaf.current);
         // Recien despues de que React aplique el nuevo alto al wrapper (el
         // siguiente frame pintado) tiene sentido volver a medir su rect —
         // antes de eso todavia mide con el alto viejo.
-        requestAnimationFrame(() => {
+        procScrollFixRaf.current = requestAnimationFrame(() => {
+          procScrollFixRaf.current = null;
           const afterRect = wrap.getBoundingClientRect();
           const wrapTopAbs = window.scrollY + afterRect.top;
-          window.scrollTo(0, Math.round(wrapTopAbs + progress * afterRect.height));
+          // behavior:"instant", no la forma de dos argumentos: el sitio tiene
+          // scroll-behavior:smooth en <html>, y esa forma vieja lo respeta —
+          // la correccion terminaba siendo un scroll ANIMADO (visible, y que
+          // un click siguiente podia interrumpir a mitad de camino) en vez
+          // del salto invisible que se buscaba. Ese scroll interrumpido a
+          // mitad de una animacion, seguido de otro click, era el bug real
+          // detras de "a veces se bugea la pagina" con varios clicks seguidos.
+          window.scrollTo({ top: Math.round(wrapTopAbs + progress * afterRect.height), left: 0, behavior: "instant" });
         });
       }
     };
@@ -596,7 +634,10 @@ export default function App() {
     // de forma intermitente, justo el bug reportado.
     document.fonts?.ready?.then(measure);
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      if (procScrollFixRaf.current != null) cancelAnimationFrame(procScrollFixRaf.current);
+    };
   }, [lang]);
   // Extra scroll despues de terminar el paneo, antes de que se suelte el pin:
   // sin esto la ultima tarjeta llega justo cuando la seccion se libera. Un

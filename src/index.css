@@ -90,57 +90,36 @@ html {
   border-radius: 2px;
 }
 
-/* Pantalla de carga: "MDM Surgery & Team" escrito a mano alzada con boligrafo
-   — <text> sin relleno, solo trazo, con stroke-dasharray/-dashoffset
-   recorriendo el contorno de la tinta (ver LoaderWordmark en App.jsx, que
-   mide el trazo real con getComputedTextLength() y fija dasharray/dashoffset
-   por estilo inline). Arranca apenas monta, no hace falta gatillo de scroll
-   como en el slogan. Peso 300 (no el 500 que usa el resto del sitio para
-   esta tipografia) a proposito: 500 tiene el trazo de cada letra
-   demasiado grueso, y el contorno de una letra gruesa dibujado con
-   stroke-only se ve como una letra hueca de molde, no como una linea de
-   pluma — con 300 el propio glifo ya es fino, asi que trazarlo da el
-   mismo trazo delicado que .doodle-flourish (misma curva ease-out).
-   La media query de movimiento reducido, mas abajo, ya fuerza duracion
-   casi cero en toda animacion del sitio. */
-.loader-write-path {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 1.1;
-  font-size: 32px;
-  font-weight: 300;
-  animation: pen-draw 0.85s ease-out forwards;
-  /* Un trazo tan fino sin esto renderiza con antialiasing de subpixel (tipo
-     ClearType) en vez de escala de grises — a este grosor, eso se ve como
-     un flequillo de colores (rojo/verde/violeta) alrededor de cada letra
-     en vez de una linea limpia. Fuerza escala de grises en su lugar. */
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* Texto a mano alzada (pantalla de carga + slogan, ver HandwrittenText en
+   App.jsx): el propio texto va relleno solido, sin problema de letra hueca,
+   porque Mrs Saint Delafield es una script realmente monolineal (su glifo
+   YA es una linea fina, no una forma con area gruesa) — trazar el contorno
+   de una tipografia comun en cambio siempre deja un hueco en el medio de
+   cada letra, por mas fina que sea la tipografia o el trazo. Lo que se
+   anima no es el texto sino la mascara que lo revela: un trazo curvo con
+   stroke-dasharray/-dashoffset, la misma tecnica y la misma curva ease-out
+   que .doodle-flourish, asi que el resultado final se ve como una mano
+   escribiendo con tinta real en vez de una cortina de clip-path corriendose. */
+.handwritten-fill {
+  fill: var(--ink);
+  font-family: "Mrs Saint Delafield", cursive;
+  font-weight: 400;
 }
-@media (min-width: 640px) {
-  .loader-write-path { font-size: 40px; }
+.handwritten-reveal { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.handwritten-ready .handwritten-reveal {
+  animation: pen-draw var(--pen-duration, 1.2s) ease-out forwards;
 }
-
-/* Texto del slogan, escrito con el mismo mecanismo y el mismo peso liviano
-   — ver el comentario junto al <svg> en App.jsx y el de arriba sobre el
-   peso 300. currentColor toma var(--ink) del texto que lo rodea. Igual
-   que el garabato de abajo: sin la clase .doodle-show (que React agrega
-   recien cuando la seccion entra en pantalla) queda en su punto de
-   partida, sin revelar nada. */
-/* -webkit-font-smoothing/-moz-osx-font-smoothing: ver el comentario junto a
-   .loader-write-path — mismo trazo fino, mismo riesgo de flequillo de color
-   por antialiasing de subpixel sin esto. */
-.slogan-write-path {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.2;
-  font-weight: 300;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-.doodle-show .slogan-write-path { animation: pen-draw 1.9s ease-out forwards; }
 @keyframes pen-draw {
   to { stroke-dashoffset: 0; }
+}
+
+.loader-write { font-size: 42px; }
+@media (min-width: 640px) {
+  .loader-write { font-size: 54px; }
+}
+.slogan-write { font-size: 52px; }
+@media (min-width: 640px) {
+  .slogan-write { font-size: 64px; }
 }
 
 /* Garabato del slogan (ver Slogan en App.jsx): igual que el fondo, dibujado
