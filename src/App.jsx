@@ -339,6 +339,35 @@ function Slogan({ text }) {
   };
   const words = text.split(" ");
 
+  // Trazo a mano alzada + flor que se dibujan justo despues de la ultima
+  // palabra, una vez que el texto ya aparecio — como si la pluma terminara
+  // la frase y garabateara despues. Un solo dibujo (sin loop) en el acento
+  // del sitio; con reduccion de movimiento queda ya trazado, fijo.
+  const doodleRefs = useRef([]);
+  useEffect(() => {
+    if (!show) return;
+    if (reduce) return;
+    const delayBase = 0.15 * words.length + 0.5;
+    const tweens = doodleRefs.current.filter(Boolean).map((p, i) => {
+      const len = p.getTotalLength();
+      p.style.strokeDasharray = len;
+      p.style.strokeDashoffset = len;
+      return gsap.to(p.style, {
+        strokeDashoffset: 0, duration: i === 0 ? 1.1 : 0.5,
+        delay: delayBase + (i === 0 ? 0 : 1.1 + i * 0.12),
+        ease: "power2.inOut",
+      });
+    });
+    return () => tweens.forEach((t) => t.kill());
+  }, [show, reduce, words.length]);
+  const FLOWER_PETALS = [
+    "M80,30 Q76.9,21.5 80,18 Q83.1,21.5 80,30",
+    "M80,30 Q87.1,24.5 91.4,26.3 Q89.0,30.3 80,30",
+    "M80,30 Q87.5,35.0 87.1,39.7 Q82.5,38.6 80,30",
+    "M80,30 Q77.5,38.6 72.9,39.7 Q72.5,35.0 80,30",
+    "M80,30 Q71.0,30.3 68.6,26.3 Q72.9,24.5 80,30",
+  ];
+
   // Ya no es una cita chica entre dos filetes al final de una seccion: es su
   // propia pausa a todo el ancho, con fondo propio, entre Qué hacemos y Equipo.
   return (
@@ -365,6 +394,19 @@ function Slogan({ text }) {
               {i < words.length - 1 ? " " : ""}
             </motion.span>
           ))}
+          <svg aria-hidden="true" viewBox="0 0 100 60"
+            className="ml-2 inline-block h-[0.9em] w-[1.5em] align-middle sm:h-[1em] sm:w-[1.7em]"
+            style={{ overflow: "visible" }}>
+            <path ref={(el) => (doodleRefs.current[0] = el)}
+              d="M 0,38 C 10,15 20,50 30,20 S 50,45 62,28"
+              fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
+            <circle ref={(el) => (doodleRefs.current[1] = el)}
+              cx="80" cy="30" r="2" fill="none" stroke="var(--accent)" strokeWidth="1.6" />
+            {FLOWER_PETALS.map((d, i) => (
+              <path key={i} ref={(el) => (doodleRefs.current[i + 2] = el)}
+                d={d} fill="none" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            ))}
+          </svg>
         </motion.p>
       </div>
     </section>
@@ -396,14 +438,17 @@ const BG_LINES_PATHS = [
 function BackgroundLines({ reduce }) {
   const pathRefs = useRef([]);
   useEffect(() => {
+    // Se dibuja UNA vez al cargar y se queda trazada — nada de yoyo/repeat:
+    // con eso, la mitad del ciclo la linea iba borrandose hasta desaparecer
+    // del todo, y si el usuario miraba la pagina justo en esa mitad el fondo
+    // parecia no estar. Asi siempre termina visible y se queda asi.
     if (reduce) return;
     const tweens = pathRefs.current.filter(Boolean).map((p, i) => {
       const len = p.getTotalLength();
       p.style.strokeDasharray = len;
       p.style.strokeDashoffset = len;
       return gsap.to(p.style, {
-        strokeDashoffset: 0, duration: 5.5, delay: i * 0.5,
-        repeat: -1, repeatDelay: 2.2, yoyo: true, ease: "power2.inOut",
+        strokeDashoffset: 0, duration: 3, delay: i * 0.35, ease: "power2.inOut",
       });
     });
     return () => tweens.forEach((t) => t.kill());
@@ -1117,18 +1162,18 @@ export default function App() {
                     className={`flex items-stretch gap-5 pb-2 sm:gap-6 ${reduce ? "snap-x snap-mandatory scroll-pl-6 sm:scroll-pl-10" : ""}`}>
                     {PROCEDURES.map((x) => (
                       <div key={x.slug}
-                        className={`flex w-[320px] flex-shrink-0 flex-col gap-5 border border-[var(--line)] bg-[var(--surface)] p-7 text-left sm:w-[380px] sm:p-8 ${reduce ? "snap-start" : ""}`}>
+                        className={`flex w-[360px] flex-shrink-0 flex-col gap-5 border border-[var(--line)] bg-[var(--surface)] p-8 text-left sm:w-[440px] sm:p-9 ${reduce ? "snap-start" : ""}`}>
                         <div className="flex items-center gap-4">
                           {x.art ? (
-                            <img src={x.art} alt="" aria-hidden="true" className="proc-art h-10 w-10 flex-shrink-0 object-contain" />
+                            <img src={x.art} alt="" aria-hidden="true" className="proc-art h-11 w-11 flex-shrink-0 object-contain" />
                           ) : (
-                            <x.icon size={26} strokeWidth={1.3} aria-hidden="true" className="h-10 w-10 flex-shrink-0 text-[var(--ink)]" />
+                            <x.icon size={28} strokeWidth={1.3} aria-hidden="true" className="h-11 w-11 flex-shrink-0 text-[var(--ink)]" />
                           )}
-                          <h3 className="font-display text-[19px] font-normal leading-snug text-[var(--ink)] sm:text-[21px]">
+                          <h3 className="font-display text-[21px] font-normal leading-snug text-[var(--ink)] sm:text-[23px]">
                             {x[lang].name}
                           </h3>
                         </div>
-                        <p className="text-[14px] leading-relaxed text-[var(--muted)]">{x[lang].desc}</p>
+                        <p className="text-[15px] leading-relaxed text-[var(--muted)]">{x[lang].desc}</p>
 
                         <dl className="space-y-2.5 border-t border-[var(--line)] pt-5 text-[14px]">
                           <div className="flex justify-between gap-4">
