@@ -12,6 +12,21 @@ const PAPER_IMAGES = import.meta.glob("./assets/pappers/*.webp", { eager: true, 
 
 const CASE_IMAGES = import.meta.glob("./assets/procedimientos/*/*/*.webp", { eager: true, import: "default" });
 
+/* Fotos y videos de pacientes para Testimonios: cualquier archivo que se agregue a
+   ./assets/testimonios aparece solo, sin tocar este archivo — mismo criterio que las
+   fotos de Resultados. El video se distingue de la foto por la extension. */
+const TESTIMONIAL_MEDIA = import.meta.glob(
+  "./assets/testimonios/*.{png,jpg,jpeg,webp,mp4,mov,webm}",
+  { eager: true, import: "default" },
+);
+const VIDEO_EXT = /\.(mp4|mov|webm)$/i;
+const TESTIMONIAL_UPLOADS = Object.keys(TESTIMONIAL_MEDIA)
+  .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  .map((path) => ({
+    type: VIDEO_EXT.test(path) ? "video" : "photo",
+    src: TESTIMONIAL_MEDIA[path],
+  }));
+
 /* Encuadre de cada foto, calculado con revision3/encuadre.py.
    - fotos:  [ancho, alto, izquierda, arriba] en porcentaje del recuadro. Amplia la foto
              sobre la zona del procedimiento y deja el mismo punto de la cara en el mismo
@@ -70,9 +85,47 @@ const FOCO_DEFECTO = "50% 35%";   // rostro completo con cuello
    Add a "<slug>/<case>" key here only when a case already shows the complete logo. */
 const CASES_WITH_OWN_LOGO = new Set([
   "breast/caso-01",
-  "feminization/caso-01",
+  "feminization/Renata Quiroga",
   "forehead-orbital/caso-01",
 ]);
+
+/* Pacientes que se operaron de mas de una cosa y por eso su caso corresponde
+   a mas de un procedimiento: las fotos viven en una sola carpeta ("owner",
+   src/assets/procedimientos/<owner>/<caseId>) y esta lista hace que el mismo
+   caso ya construido (mismas fotos, mismo encuadre) tambien aparezca en cada
+   procedimiento de "alsoIn" — sin copiar los archivos en disco. Antes cada
+   procedimiento tenia su propia copia de las fotos: corregir o reemplazar
+   una (ej. una foto girada) solo arreglaba esa copia y dejaba a las demas
+   desactualizadas, ademas de inflar el proyecto con fotos repetidas. */
+const SHARED_CASES = [
+  { owner: "profiloplasty", caseId: "Clara Godoy",
+    alsoIn: ["chin-jaw", "eyes-expression", "upper-lip-lift"] },
+  { owner: "eyes-expression", caseId: "Milagros Cabrera",
+    alsoIn: ["feminization", "forehead-orbital", "rhinoplasty"] },
+  { owner: "eyes-expression", caseId: "Ignacio Farías", alsoIn: ["feminization"] },
+  { owner: "feminization", caseId: "Renata Quiroga", alsoIn: ["eyes-expression"] },
+  { owner: "feminization", caseId: "Julieta Espósito", alsoIn: ["rhinoplasty"] },
+  { owner: "forehead-orbital", caseId: "Tomás Bruno", alsoIn: ["hair-implants"] },
+  { owner: "forehead-orbital", caseId: "Agustina Ferreyra", alsoIn: ["chin-jaw"] },
+  { owner: "masculinization", caseId: "Jerónimo Ortiz", alsoIn: ["rejuvenation"] },
+  { owner: "masculinization", caseId: "Nicolás Núñez", alsoIn: ["rejuvenation"] },
+  { owner: "rhinoplasty", caseId: "Josefina Paredes", alsoIn: ["profiloplasty"] },
+];
+
+/* Casos que no son cirugia sino un tratamiento con Acido Hialuronico: el resultado
+   se puede confundir con uno quirurgico en las fotos, asi que se aclara junto al
+   caso para que el usuario sepa que no paso por quirofano. Misma clave que
+   CASES_WITH_OWN_LOGO ("<slug>/<caseId>"). */
+const CASE_NOTES = {
+  "upper-lip-lift/caso-01": {
+    es: "Lifting de labio superior con Ácido Hialurónico, sin cirugía.",
+    en: "Upper lip lift with Hyaluronic Acid, no surgery.",
+  },
+  "cheeks/caso-01": {
+    es: "Aumento de pómulos con Ácido Hialurónico, sin cirugía.",
+    en: "Cheek augmentation with Hyaluronic Acid, no surgery.",
+  },
+};
 
 const CASES_BY_SLUG = (() => {
   const acc = {};
@@ -92,29 +145,52 @@ const CASES_BY_SLUG = (() => {
   }
 
   const byBase = (a, b) => a.base.localeCompare(b.base, undefined, { numeric: true });
+  const buildCase = (slug, caseId) => {
+    const raw = acc[slug]?.[caseId];
+    if (!raw) return null;
+    const before = raw.before.slice().sort(byBase);
+    const after = raw.after.slice().sort(byBase);
+    // Each angle is one before/after shot of the same patient.
+    const angles = Array.from({ length: Math.min(before.length, after.length) }, (_, k) => {
+      const beforeFit = encuadreDe(slug, caseId, before[k].file);
+      const afterFit = encuadreDe(slug, caseId, after[k].file);
+      // Si falta la medida de un lado, los dos vuelven al encuadre por defecto:
+      // ampliar solo una mitad del par la dejaria descalzada con la otra.
+      const par = beforeFit && afterFit;
+      return { before: before[k].image, after: after[k].image,
+               beforeFit: par ? beforeFit : null, afterFit: par ? afterFit : null,
+               frame: marcoDe(slug, caseId, before[k].file, after[k].file) };
+    });
+    const apart = (raw.apart ?? []).slice().sort(byBase)
+      .map((x) => ({ image: x.image, frame: aparteDe(slug, caseId, x.file) }));
+    return { caseId, angles, apart, focus: FOCO[slug] ?? FOCO_DEFECTO,
+             watermark: !CASES_WITH_OWN_LOGO.has(`${slug}/${caseId}`),
+             note: CASE_NOTES[`${slug}/${caseId}`] ?? null };
+  };
+
+  // Un caso por carpeta en disco, agrupado por su propio procedimiento ("owner").
+  const bySlug = {};
+  for (const slug of Object.keys(acc)) {
+    bySlug[slug] = Object.keys(acc[slug]).map((caseId) => buildCase(slug, caseId));
+  }
+
+  // Suma los casos compartidos a cada procedimiento de "alsoIn", reusando el
+  // mismo objeto ya armado (mismo encuadre, mismas fotos) del "owner" — sin
+  // volver a leer ni recalcular nada.
+  for (const { owner, caseId, alsoIn } of SHARED_CASES) {
+    const shared = bySlug[owner]?.find((c) => c.caseId === caseId);
+    if (!shared) continue;
+    for (const slug of alsoIn) {
+      bySlug[slug] ??= [];
+      bySlug[slug].push(shared);
+    }
+  }
+
   return Object.fromEntries(
-    Object.entries(acc).map(([slug, cases]) => {
-      const list = Object.keys(cases)
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-        .map((caseId) => {
-          const before = cases[caseId].before.sort(byBase);
-          const after = cases[caseId].after.sort(byBase);
-          // Each angle is one before/after shot of the same patient.
-          const angles = Array.from({ length: Math.min(before.length, after.length) }, (_, k) => {
-            const beforeFit = encuadreDe(slug, caseId, before[k].file);
-            const afterFit = encuadreDe(slug, caseId, after[k].file);
-            // Si falta la medida de un lado, los dos vuelven al encuadre por defecto:
-            // ampliar solo una mitad del par la dejaria descalzada con la otra.
-            const par = beforeFit && afterFit;
-            return { before: before[k].image, after: after[k].image,
-                     beforeFit: par ? beforeFit : null, afterFit: par ? afterFit : null,
-                     frame: marcoDe(slug, caseId, before[k].file, after[k].file) };
-          });
-          const apart = (cases[caseId].apart ?? []).sort(byBase)
-            .map((x) => ({ image: x.image, frame: aparteDe(slug, caseId, x.file) }));
-          return { caseId, angles, apart, focus: FOCO[slug] ?? FOCO_DEFECTO,
-                   watermark: !CASES_WITH_OWN_LOGO.has(`${slug}/${caseId}`) };
-        })
+    Object.entries(bySlug).map(([slug, cases]) => {
+      const list = cases
+        .slice()
+        .sort((a, b) => a.caseId.localeCompare(b.caseId, undefined, { numeric: true }))
         /* Un caso se publica si tiene un par antes/despues o, al menos, fotos sueltas. */
         .filter((c) => c.angles.length > 0 || c.apart.length > 0)
         .slice(0, MAX_CASES)
@@ -436,6 +512,7 @@ export const PAPERS = PAPER_LIST.map((p, i) => ({
    los agrega solos. */
 export const TESTIMONIALS = [
   { type: "instagram", url: "https://www.instagram.com/maeru.jpg/p/DPj77imEpSZ/" },
+  ...TESTIMONIAL_UPLOADS,
   { initials: "M.G.", place: "Buenos Aires", stars: 5,
     es: { proc: "Rinoplastia", time: "8 meses después",
           text: "Mi experiencia fue maravillosa. El acompañamiento antes y después de la cirugía fue constante." },

@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useReducedMotion, useInView, useScroll, useTra
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
   Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
-  Image as ImageIcon,
+  Image as ImageIcon, Droplet,
 } from "lucide-react";
 import {
   SunIcon, MoonIcon, GlobeIcon, ObeliskIcon, SpireIcon, SkylineIcon, EnvelopeIcon, SealIcon,
@@ -344,7 +344,7 @@ function InstagramEmbed({ url, loadingLabel, fallbackLabel }) {
   if (status === "failed") {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer"
-        className="flex min-h-[600px] w-full flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-[var(--muted)]">
+        className="flex min-h-[420px] w-full flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-[var(--muted)]">
         <Instagram size={22} strokeWidth={1.5} className="flex-shrink-0 text-[var(--faint)]" />
         {fallbackLabel}
       </a>
@@ -359,7 +359,7 @@ function InstagramEmbed({ url, loadingLabel, fallbackLabel }) {
     // tarjeta, la "linea a la mitad de la card" del bug. Sin centrado, esa
     // misma rendija apenas se nota arriba de todo mientras dura, y una vez
     // que Instagram lo agranda ocupa el lugar con normalidad.
-    <div ref={wrapRef} className="ig-embed-wrap min-h-[600px]">
+    <div ref={wrapRef} className="ig-embed-wrap min-h-[420px]">
       <blockquote className="instagram-media" data-instgrm-permalink={url} data-instgrm-version="14"
         style={{ margin: 0, width: "100%", minWidth: "100%" }}>
         {/* Instagram reemplaza todo esto por el iframe real una vez que
@@ -367,7 +367,7 @@ function InstagramEmbed({ url, loadingLabel, fallbackLabel }) {
             llega a cargar, ver el estado "failed" arriba) queda este
             enlace, nunca un recuadro vacio. */}
         <a href={url} target="_blank" rel="noopener noreferrer"
-          className="flex min-h-[600px] w-full items-center justify-center gap-2 p-6 text-center text-[13px] text-[var(--muted)]">
+          className="flex min-h-[420px] w-full items-center justify-center gap-2 p-6 text-center text-[13px] text-[var(--muted)]">
           <Instagram size={16} strokeWidth={1.6} className="flex-shrink-0" />
           {loadingLabel}
         </a>
@@ -1637,6 +1637,37 @@ export default function App() {
                       )}
                     </div>
 
+                    {/* Aviso de que el caso es un tratamiento (ej. Acido Hialuronico) y
+                        no una cirugia: algunos resultados no quirurgicos se ven muy
+                        parecidos a uno quirurgico en foto. */}
+                    {kase.note && (
+                      <div className="mt-4 flex items-center gap-2 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-4 py-2.5 text-[12px] leading-snug text-[var(--ink)]">
+                        <Droplet size={14} strokeWidth={1.6} className="flex-shrink-0 text-[var(--accent)]" />
+                        {kase.note[lang]}
+                      </div>
+                    )}
+
+                    {/* Otras tomas del mismo paciente, arriba del par antes/despues para
+                        elegir el angulo antes de ver la foto grande. La fila solo existe
+                        si hay mas de una: nada de alto reservado, para no dejar un hueco
+                        vacio. */}
+                    {kase.angles.length > 1 && (
+                      <div className="mt-5">
+                        <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.angles}</p>
+                        <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto">
+                          {kase.angles.map((a, k) => (
+                            <button key={k} type="button" onClick={() => setActiveAngle(k)}
+                              aria-pressed={k === ai} aria-label={`${t.res.angle} ${k + 1}`}
+                              className={`relative h-16 w-16 flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border transition-colors duration-200 active:scale-95 ${
+                                k === ai ? "border-[var(--ink)]" : "border-[var(--line)] opacity-70 hover:opacity-100"}`}>
+                              <img src={a.after} alt="" aria-hidden="true" loading="lazy"
+                                className="h-full w-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Before / after */}
                     <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
                       {marcos.map(({ caption, src, fit, entera, frame }) => (
@@ -1665,25 +1696,6 @@ export default function App() {
                         </figure>
                       ))}
                     </div>
-
-                    {/* Otras tomas del mismo paciente. La fila solo existe si hay mas de
-                        una: nada de alto reservado, para no dejar un hueco vacio. */}
-                    {kase.angles.length > 1 && (
-                      <div className="mt-5">
-                        <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.angles}</p>
-                        <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto">
-                          {kase.angles.map((a, k) => (
-                            <button key={k} type="button" onClick={() => setActiveAngle(k)}
-                              aria-pressed={k === ai} aria-label={`${t.res.angle} ${k + 1}`}
-                              className={`relative h-16 w-16 flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border transition-colors duration-200 active:scale-95 ${
-                                k === ai ? "border-[var(--ink)]" : "border-[var(--line)] opacity-70 hover:opacity-100"}`}>
-                              <img src={a.after} alt="" aria-hidden="true" loading="lazy"
-                                className="h-full w-full object-cover" />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
 
                     {/* Fotos sueltas del caso: no tienen par, se muestran solas y enteras. */}
                     {sueltas.length > 0 && (
@@ -1992,6 +2004,27 @@ export default function App() {
                           </motion.div>
                         );
                       }
+                      if (x.type === "photo") {
+                        // Foto real subida por el usuario a ./assets/testimonios.
+                        // Mismo alto que el embed de Instagram para que las cards
+                        // de la fila no queden desparejas.
+                        return (
+                          <motion.div key={key} variants={fadeUp}
+                            className="min-h-[420px] overflow-hidden border border-[var(--line)] bg-[var(--photo)]">
+                            <img src={x.src} alt={t.test.patientMedia} loading="lazy"
+                              className="h-full w-full object-cover" style={{ minHeight: 420 }} />
+                          </motion.div>
+                        );
+                      }
+                      if (x.type === "video") {
+                        return (
+                          <motion.div key={key} variants={fadeUp}
+                            className="min-h-[420px] overflow-hidden border border-[var(--line)] bg-black">
+                            <video src={x.src} controls playsInline preload="metadata"
+                              className="h-full w-full" style={{ minHeight: 420 }} />
+                          </motion.div>
+                        );
+                      }
                       if (x.type === "placeholder") {
                         // Recuadro reservado para cuando se suba una foto o video
                         // real de un paciente — bastante mas alto que una card de
@@ -2002,7 +2035,7 @@ export default function App() {
                         // un bug.
                         return (
                           <motion.div key={key} variants={fadeUp}
-                            className="flex min-h-[600px] flex-col items-center justify-center gap-3 border border-dashed border-[var(--line)] p-6 text-center">
+                            className="flex min-h-[420px] flex-col items-center justify-center gap-3 border border-dashed border-[var(--line)] p-6 text-center">
                             <ImageIcon size={28} strokeWidth={1.3} className="text-[var(--faint)]" />
                             <p className="font-display text-[17px] font-normal text-[var(--muted)]">{t.test.placeholderTitle}</p>
                             <p className="text-[13px] text-[var(--faint)]">{t.test.placeholderBody}</p>
