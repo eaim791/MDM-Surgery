@@ -344,7 +344,7 @@ function InstagramEmbed({ url, loadingLabel, fallbackLabel }) {
   if (status === "failed") {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer"
-        className="flex min-h-[340px] w-full flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-[var(--muted)]">
+        className="flex min-h-[600px] w-full flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-[var(--muted)]">
         <Instagram size={22} strokeWidth={1.5} className="flex-shrink-0 text-[var(--faint)]" />
         {fallbackLabel}
       </a>
@@ -352,7 +352,14 @@ function InstagramEmbed({ url, loadingLabel, fallbackLabel }) {
   }
 
   return (
-    <div ref={wrapRef} className="ig-embed-wrap flex min-h-[340px] items-center justify-center">
+    // Sin flex/centrado ACA: el iframe que Instagram termina insertando
+    // arranca en alto 0 (recien mide su propio contenido real y se
+    // redimensiona solo despues, por postMessage) — centrado con flex, esa
+    // rendija de un par de pixeles quedaba centrada en el medio de toda la
+    // tarjeta, la "linea a la mitad de la card" del bug. Sin centrado, esa
+    // misma rendija apenas se nota arriba de todo mientras dura, y una vez
+    // que Instagram lo agranda ocupa el lugar con normalidad.
+    <div ref={wrapRef} className="ig-embed-wrap min-h-[600px]">
       <blockquote className="instagram-media" data-instgrm-permalink={url} data-instgrm-version="14"
         style={{ margin: 0, width: "100%", minWidth: "100%" }}>
         {/* Instagram reemplaza todo esto por el iframe real una vez que
@@ -360,7 +367,7 @@ function InstagramEmbed({ url, loadingLabel, fallbackLabel }) {
             llega a cargar, ver el estado "failed" arriba) queda este
             enlace, nunca un recuadro vacio. */}
         <a href={url} target="_blank" rel="noopener noreferrer"
-          className="flex min-h-[340px] w-full items-center justify-center gap-2 p-6 text-center text-[13px] text-[var(--muted)]">
+          className="flex min-h-[600px] w-full items-center justify-center gap-2 p-6 text-center text-[13px] text-[var(--muted)]">
           <Instagram size={16} strokeWidth={1.6} className="flex-shrink-0" />
           {loadingLabel}
         </a>
@@ -1995,7 +2002,7 @@ export default function App() {
                         // un bug.
                         return (
                           <motion.div key={key} variants={fadeUp}
-                            className="flex min-h-[340px] flex-col items-center justify-center gap-3 border border-dashed border-[var(--line)] p-6 text-center">
+                            className="flex min-h-[600px] flex-col items-center justify-center gap-3 border border-dashed border-[var(--line)] p-6 text-center">
                             <ImageIcon size={28} strokeWidth={1.3} className="text-[var(--faint)]" />
                             <p className="font-display text-[17px] font-normal text-[var(--muted)]">{t.test.placeholderTitle}</p>
                             <p className="text-[13px] text-[var(--faint)]">{t.test.placeholderBody}</p>
