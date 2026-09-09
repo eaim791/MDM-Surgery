@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #F4F4F5;
+  --bg: #FFFFFF;
   --surface: #FFFFFF;
   --ink: #1E2427;
   /* --muted y --faint recalculados para pasar WCAG AA (4.5:1) sobre --surface
@@ -18,10 +18,10 @@
   --photo-ink: #A9AFB3;
   --shadow: rgba(30, 36, 39, 0.06);
   --rule: rgba(30, 36, 39, 0.32);
-  --scrim-core: rgba(244, 244, 245, 0.62);
-  --scrim-edge: rgba(244, 244, 245, 0.14);
+  --scrim-core: rgba(255, 255, 255, 0.62);
+  --scrim-edge: rgba(255, 255, 255, 0.14);
   --hero-body: #363E43;
-  --hero-halo: rgba(244, 244, 245, 0.85);
+  --hero-halo: rgba(255, 255, 255, 0.85);
   /* Único acento cromático del sitio: un azul pizarra, usado a proposito en
      pocos lugares (foco de teclado, el detalle del CTA del hero, el indicador
      de seccion activa) y en ningun otro. Reemplaza al bronce anterior, que
@@ -32,6 +32,11 @@
      porque un radial-gradient no puede tomar el alfa de otra variable HSL/HEX
      por si solo. Se usa para el resplandor de fondo (ver html, mas abajo). */
   --accent-glow: rgba(61, 82, 102, 0.16);
+  /* Cinta de tela decorativa (ver SilkRibbon en App.jsx): celeste palido a
+     casi blanco, como una organza liviana. */
+  --ribbon-a: #F5FAFD;
+  --ribbon-b: #B8D6EA;
+  --ribbon-shadow: rgba(61, 82, 102, 0.14);
 }
 
 .dark {
@@ -56,6 +61,9 @@
   --accent: #8FA8BE;
   --accent-soft: #1F2830;
   --accent-glow: rgba(143, 168, 190, 0.16);
+  --ribbon-a: #4A6478;
+  --ribbon-b: #2E4356;
+  --ribbon-shadow: rgba(0, 0, 0, 0.4);
 }
 
 /* Fondo de campo de color difuminado: dos resplandores grandes en el acento
@@ -73,6 +81,11 @@
 html {
   color-scheme: light;
   scroll-behavior: smooth;
+  /* Red de seguridad para las cintas de tela grandes (ver SilkRibbon en
+     App.jsx): varias sangran a proposito un poco mas alla del borde de su
+     seccion para verse mas sueltas — sin esto, en pantallas angostas
+     alguna podria terminar empujando una barra de scroll horizontal. */
+  overflow-x: hidden;
   background-color: var(--bg);
   background-image:
     radial-gradient(circle at 8% 0%, var(--accent-glow) 0%, transparent 55%),

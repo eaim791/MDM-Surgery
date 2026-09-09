@@ -112,6 +112,41 @@ const SHARED_CASES = [
   { owner: "rhinoplasty", caseId: "Josefina Paredes", alsoIn: ["profiloplasty"] },
 ];
 
+/* Casos que van al final del todo de su procedimiento en vez de por orden
+   alfabetico (pedido del cliente) — el orden dentro de esta lista es el
+   orden final entre ellos. */
+const CASOS_AL_FINAL = {
+  rhinoplasty: ["caso-10", "caso-11", "caso-13"],
+  "forehead-orbital": ["Aitana Lucero"],
+  "upper-lip-lift": ["caso-02"],
+};
+
+/* Fotos que muestran contenido de quirofano (paciente acostado, gasas, suturas o
+   sangre) o exposicion de piel mas alla de cara/cuello/hombros con ropa: se muestran
+   borroneadas con un aviso, y el usuario elige verlas o no. Misma clave que arriba
+   ("<slug>/<caseId>/<archivo-sin-extension>"). */
+const FOTOS_SENSIBLES = new Set([
+  "forehead-orbital/Aitana Lucero/antes-1",
+  "forehead-orbital/Aitana Lucero/despues-1",
+  "forehead-orbital/Tomás Bruno/antes-1",
+  "forehead-orbital/Tomás Bruno/despues-1",
+  "rhinoplasty/caso-10/antes-1",
+  "rhinoplasty/caso-10/despues-1",
+  "rhinoplasty/caso-11/antes-0",
+  "rhinoplasty/caso-11/despues-0",
+  "rhinoplasty/caso-13/antes-2",
+  "rhinoplasty/caso-13/despues-2",
+  "rhinoplasty/Josefina Paredes/antes (6) q",
+  "rhinoplasty/Josefina Paredes/despues (6) q",
+  "facial-harmonization/Valentina Morales/antes-4",
+  "facial-harmonization/Valentina Morales/despues-4",
+].map((k) => k.normalize("NFC")));
+/* Procedimientos donde TODAS las fotos quedan borroneadas por defecto (pedido
+   del cliente), no solo las puntuales de FOTOS_SENSIBLES de arriba. */
+const PROCEDIMIENTOS_SENSIBLES = new Set(["breast", "body-remodeling", "hair-implants"]);
+const esSensible = (slug, caseId, file) =>
+  PROCEDIMIENTOS_SENSIBLES.has(slug) || FOTOS_SENSIBLES.has(clave(slug, caseId, file));
+
 /* Casos que no son cirugia sino un tratamiento con Acido Hialuronico: el resultado
    se puede confundir con uno quirurgico en las fotos, asi que se aclara junto al
    caso para que el usuario sepa que no paso por quirofano. Misma clave que
@@ -159,10 +194,13 @@ const CASES_BY_SLUG = (() => {
       const par = beforeFit && afterFit;
       return { before: before[k].image, after: after[k].image,
                beforeFit: par ? beforeFit : null, afterFit: par ? afterFit : null,
-               frame: marcoDe(slug, caseId, before[k].file, after[k].file) };
+               frame: marcoDe(slug, caseId, before[k].file, after[k].file),
+               beforeSensitive: esSensible(slug, caseId, before[k].file),
+               afterSensitive: esSensible(slug, caseId, after[k].file) };
     });
     const apart = (raw.apart ?? []).slice().sort(byBase)
-      .map((x) => ({ image: x.image, frame: aparteDe(slug, caseId, x.file) }));
+      .map((x) => ({ image: x.image, frame: aparteDe(slug, caseId, x.file),
+                     sensitive: esSensible(slug, caseId, x.file) }));
     return { caseId, angles, apart, focus: FOCO[slug] ?? FOCO_DEFECTO,
              watermark: !CASES_WITH_OWN_LOGO.has(`${slug}/${caseId}`),
              note: CASE_NOTES[`${slug}/${caseId}`] ?? null };
@@ -188,9 +226,14 @@ const CASES_BY_SLUG = (() => {
 
   return Object.fromEntries(
     Object.entries(bySlug).map(([slug, cases]) => {
+      const alFinal = CASOS_AL_FINAL[slug] ?? [];
       const list = cases
         .slice()
-        .sort((a, b) => a.caseId.localeCompare(b.caseId, undefined, { numeric: true }))
+        .sort((a, b) => {
+          const ia = alFinal.indexOf(a.caseId), ib = alFinal.indexOf(b.caseId);
+          if (ia !== -1 || ib !== -1) return ia === -1 ? -1 : ib === -1 ? 1 : ia - ib;
+          return a.caseId.localeCompare(b.caseId, undefined, { numeric: true });
+        })
         /* Un caso se publica si tiene un par antes/despues o, al menos, fotos sueltas. */
         .filter((c) => c.angles.length > 0 || c.apart.length > 0)
         .slice(0, MAX_CASES)
