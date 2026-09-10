@@ -191,6 +191,42 @@ html {
 /* Procedure line art is black ink on transparent — invert it on dark backgrounds */
 .dark .proc-art { filter: invert(1); }
 
+/* Riel de Procedimientos en pantallas bajas (notebook, 1366x768 y similares):
+   el bloque fijo (titulo + tarjetas + nota) se mide con sticky.offsetHeight y
+   se pinea a top:0 durante todo el paneo horizontal — si esa medida supera el
+   alto de la ventana, la parte de abajo de cada tarjeta (el boton "Ver
+   resultados") queda literalmente debajo del borde inferior de la pantalla
+   mientras dura el pin, sin forma de scrollear para alcanzarlo. En vez de
+   reescribir el mecanismo de paneo, se achica el contenido fijo para que
+   entre entero en una ventana baja — el paneo se sigue recalculando solo
+   (measure() escucha "resize") asi que no hace falta tocar nada de JS. No
+   se aplica por ancho (sm:) porque el problema es puramente de alto: un
+   notebook y un monitor externo pueden compartir el mismo ancho de 1366px
+   pero uno tiene la mitad de alto disponible que el otro. */
+@media (max-height: 850px) {
+  .proc-sticky { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+  .proc-rail-viewport { margin-top: 1.25rem; }
+  .proc-card { padding: 1.25rem; gap: 0.75rem; }
+  .proc-card-head { gap: 0.75rem; }
+  /* Segunda linea aclaratoria ("para pacientes en..."): es contenido
+     secundario, el primero que se puede ocultar sin perder lo esencial de
+     la tarjeta (nombre, descripcion, duracion/recuperacion, acciones). */
+  .proc-card-who { display: none; }
+  /* Tope de 2 lineas: sin esto, una descripcion mas larga que otra deja
+     tarjetas de alto dispar en el mismo riel (se estiran todas a la mas
+     alta via items-stretch) y el ahorro de las demas reglas de aca se
+     pierde contra la tarjeta con el texto mas largo. */
+  .proc-card-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .proc-card-dl { padding-top: 0.75rem; }
+  .proc-card-actions button { padding-top: 0.625rem; padding-bottom: 0.625rem; }
+  .proc-note { margin-top: 0.5rem; }
+}
+
 /* Horizontal carousels scroll by drag/arrows — the native bar adds nothing */
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }

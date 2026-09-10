@@ -1694,7 +1694,7 @@ export default function App() {
                   "lejos" de las tarjetas aunque el margen fuera chico. Sin
                   altura minima forzada, el pin suelta apenas termina el
                   contenido real. */}
-              <div ref={procStickyRef} className="sticky top-0 flex flex-col justify-start py-16 sm:py-24">
+              <div ref={procStickyRef} className="proc-sticky sticky top-0 flex flex-col justify-start py-16 sm:py-24">
                 {/* Adentro del sticky (no del wrap, que es alto por el
                     scroll-pin): asi la cinta queda pegada a la parte fijada
                     en pantalla durante todo el paneo, en vez de quedar
@@ -1705,7 +1705,7 @@ export default function App() {
                 <SilkRibbon
                   className="pointer-events-none absolute -top-4 -right-8 hidden w-56 aspect-[300/460] opacity-70 md:block"
                   rotate={-10} />
-                <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+                <motion.div className="proc-title-wrap" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
                   <Eyebrow size="text-[12px]">{t.proc.eyebrow}</Eyebrow>
                   <SectionTitle size="text-4xl sm:text-5xl">{t.proc.title}</SectionTitle>
                 </motion.div>
@@ -1714,13 +1714,13 @@ export default function App() {
                     completa (descripcion, duracion/recuperacion y acciones),
                     no solo un selector que manda el detalle a otro lado. */}
                 <div ref={procViewportRef}
-                  className={`-mx-6 mt-10 px-6 sm:-mx-10 sm:px-10 ${reduce ? "no-scrollbar overflow-x-auto" : "overflow-hidden"}`}>
+                  className={`proc-rail-viewport -mx-6 mt-10 px-6 sm:-mx-10 sm:px-10 ${reduce ? "no-scrollbar overflow-x-auto" : "overflow-hidden"}`}>
                   <motion.div ref={procRailRef} style={{ x: reduce ? 0 : procX }}
                     className={`flex items-stretch gap-5 pb-2 sm:gap-6 ${reduce ? "snap-x snap-mandatory scroll-pl-6 sm:scroll-pl-10" : ""}`}>
                     {PROCEDURES.map((x) => (
                       <div key={x.slug}
-                        className={`flex w-[360px] flex-shrink-0 flex-col gap-5 border border-[var(--line)] bg-[var(--surface)] p-8 text-left sm:w-[440px] sm:p-9 ${reduce ? "snap-start" : ""}`}>
-                        <div className="flex items-center gap-4">
+                        className={`proc-card flex w-[360px] flex-shrink-0 flex-col gap-5 border border-[var(--line)] bg-[var(--surface)] p-8 text-left sm:w-[440px] sm:p-9 ${reduce ? "snap-start" : ""}`}>
+                        <div className="proc-card-head flex items-center gap-4">
                           {x.art ? (
                             <img src={x.art} alt="" aria-hidden="true" className="proc-art h-11 w-11 flex-shrink-0 object-contain" />
                           ) : (
@@ -1730,12 +1730,12 @@ export default function App() {
                             {x[lang].name}
                           </h3>
                         </div>
-                        <p className="text-[15px] leading-relaxed text-[var(--muted)]">{x[lang].desc}</p>
+                        <p className="proc-card-desc text-[15px] leading-relaxed text-[var(--muted)]">{x[lang].desc}</p>
                         {x[lang].who && (
-                          <p className="text-[12px] leading-relaxed text-[var(--faint)]">{x[lang].who}</p>
+                          <p className="proc-card-who text-[12px] leading-relaxed text-[var(--faint)]">{x[lang].who}</p>
                         )}
 
-                        <dl className="space-y-2.5 border-t border-[var(--line)] pt-5 text-[14px]">
+                        <dl className="proc-card-dl space-y-2.5 border-t border-[var(--line)] pt-5 text-[14px]">
                           <div className="flex justify-between gap-4">
                             <dt className="text-[var(--faint)]">{t.proc.duration}</dt>
                             <dd className="text-right text-[var(--ink)]">{x[lang].duration}</dd>
@@ -1746,7 +1746,7 @@ export default function App() {
                           </div>
                         </dl>
 
-                        <div className="mt-auto space-y-2.5 pt-1">
+                        <div className="proc-card-actions mt-auto space-y-2.5 pt-1">
                           <button type="button" onClick={() => askAbout(x[lang].name, x.slug)}
                             className="w-full cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-3.5 text-[11px] uppercase tracking-[0.16em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85 active:scale-[0.98]">
                             {t.proc.ask}
@@ -1783,7 +1783,7 @@ export default function App() {
                 {/* Adentro del bloque fijo, no despues: asi queda pineado
                     junto con las tarjetas mientras dura el paneo, no aparece
                     recien cuando el pin suelta. */}
-                <p className="mt-6 max-w-2xl text-[12px] leading-relaxed text-[var(--faint)]">{t.proc.note}</p>
+                <p className="proc-note mt-6 max-w-2xl text-[12px] leading-relaxed text-[var(--faint)]">{t.proc.note}</p>
               </div>
             </div>
           </section>
