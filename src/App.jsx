@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useReducedMotion, useInView, useScroll, useTra
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
   Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
-  Image as ImageIcon, Droplet, EyeOff,
+  Image as ImageIcon, Droplet, EyeOff, Construction,
 } from "lucide-react";
 import {
   SunIcon, MoonIcon, GlobeIcon, ObeliskIcon, SpireIcon, SkylineIcon, EnvelopeIcon, SealIcon,
@@ -794,6 +794,11 @@ export default function App() {
   const [cSent, setCSent] = useState(false);
   const [cSubmitting, setCSubmitting] = useState(false);
   const [cErr, setCErr] = useState("");
+  // Paso intermedio antes de mandar de verdad: pedido del cliente para que
+  // nadie pierda una consulta por haber tipeado mal el email — se re-muestra
+  // el email tal cual quedo cargado, editable ahi mismo, y solo se envia
+  // cuando la persona confirma que esta bien.
+  const [emailConfirmOpen, setEmailConfirmOpen] = useState(false);
   // Ventana emergente con el mismo formulario de Contacto, abierta desde el
   // CTA del hero y el CTA flotante — asi la consulta arranca sin forzar el
   // scroll hasta el final de la pagina.
@@ -1049,7 +1054,7 @@ export default function App() {
     }, 30);
   };
 
-  const submitEnquiry = async (e) => {
+  const submitEnquiry = (e) => {
     e.preventDefault();
     if (!cForm.name.trim() || !cForm.email.trim() || !cForm.msg.trim()) { setCErr(t.contact.required); return; }
     // Honeypot: campo invisible para una persona pero que un bot que llena
@@ -1064,6 +1069,14 @@ export default function App() {
     }
     if (Date.now() - contactMountedAt.current < MIN_FILL_MS) { setCErr(t.contact.tooFast); return; }
     setCErr("");
+    // No se manda todavia: primero se muestra el email cargado para que la
+    // persona lo revise (y lo corrija ahi mismo si hace falta) antes de
+    // confirmar el envio real en sendEnquiry.
+    setEmailConfirmOpen(true);
+  };
+
+  const sendEnquiry = async () => {
+    setEmailConfirmOpen(false);
     setCSubmitting(true);
     try {
       const chosenProc = PROCEDURES.find((p) => p.slug === cForm.proc);
@@ -1435,6 +1448,47 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Verificacion de email antes de enviar de verdad — pedido del
+          cliente: un email mal tipeado deja una consulta sin forma de
+          contestar, asi que antes del envio real se re-muestra el email tal
+          como quedo cargado, editable en este mismo recuadro, y solo se
+          manda cuando la persona confirma. */}
+      <AnimatePresence>
+        {emailConfirmOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setEmailConfirmOpen(false)} role="dialog" aria-modal="true"
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-6">
+            <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-sm rounded-2xl bg-[var(--surface)] p-8 text-center shadow-[0_20px_60px_var(--shadow)]">
+              <button type="button" onClick={() => setEmailConfirmOpen(false)} aria-label={t.contact.close}
+                className="absolute right-5 top-5 cursor-pointer text-[var(--muted)] transition-colors hover:text-[var(--ink)] active:scale-90">
+                <X size={18} />
+              </button>
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
+                <EnvelopeIcon size={20} strokeWidth={1.8} />
+              </span>
+              <h3 className="mt-5 font-display text-[22px] font-normal text-[var(--ink)]">{t.contact.checkEmailTitle}</h3>
+              <p className="mt-2 text-[14px] leading-relaxed text-[var(--muted)]">{t.contact.checkEmailBody}</p>
+              <label className="mt-5 block text-left">
+                <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fEmail}</span>
+                <input type="email" value={cForm.email} placeholder={t.contact.fEmailPh} maxLength={90} autoFocus
+                  onChange={(e) => setCForm({ ...cForm, email: e.target.value })}
+                  className="mt-2 w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+              </label>
+              {!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cForm.email.trim()) && (
+                <p className="mt-2 text-left text-[12px] text-[#E0908D]">{t.contact.checkEmailLooksWrong}</p>
+              )}
+              <button type="button" onClick={sendEnquiry} disabled={!cForm.email.trim()}
+                className="mt-6 flex w-full cursor-pointer items-center justify-center gap-2.5 border border-[var(--accent)] bg-[var(--accent)] px-4 py-3.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50">
+                {t.contact.checkEmailConfirm}
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Lightbox — certificates & papers */}
       <AnimatePresence>
         {lightbox && (
@@ -1491,7 +1545,14 @@ export default function App() {
             <div className="absolute inset-0" style={{ background: HERO_SCRIM }} />
           </div>
 
-          <motion.div initial="hidden" animate="visible"
+          {/* Arranca oculto y solo pasa a "visible" cuando el loader empieza a
+              desvanecerse (loading=false): si esto animaba solo, terminaba de
+              dibujarse ANTES de que el loader se fuera del todo, y durante el
+              cruce se veian superpuestos el trazo a mano del loader y este
+              mismo texto ya formado — como si "MDM Surgery & Team" apareciera
+              dos veces. Encadenado a loading, el uno se desvanece justo cuando
+              el otro aparece: un solo cruce, no dos textos a la vez. */}
+          <motion.div initial="hidden" animate={loading ? "hidden" : "visible"}
             variants={{ hidden: {}, visible: { transition: { staggerChildren: reduce ? 0 : 0.12, delayChildren: 0.1 } } }}
             className="relative z-10 w-full max-w-3xl text-center lg:text-left">
             <div className="flex justify-center lg:justify-start">
@@ -1821,33 +1882,43 @@ export default function App() {
               return (
                 <>
                   <div id={`res-${proc.slug}`} className="mt-10 scroll-mt-24 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-7">
-                    {/* Selector de procedimiento — chico, en el lugar donde antes
-                        iba el nombre en texto plano, no una caja aparte arriba
-                        de toda la seccion. Con --accent en vez de --line para
-                        que se note que es interactivo, y un anillo que hace
-                        ping cada vez que se llega desde "Ver resultados" de
-                        otra tarjeta — asi queda claro que el procedimiento
-                        tambien se puede cambiar desde aca. */}
-                    <div className="relative inline-block max-w-full">
-                      {filterPulseKey > 0 && (
-                        <motion.span key={filterPulseKey} aria-hidden="true"
-                          initial={{ opacity: 0.9, scale: 1 }}
-                          animate={{ opacity: 0, scale: 1.4 }}
-                          transition={{ duration: 1, ease: "easeOut" }}
-                          className="pointer-events-none absolute -inset-2 rounded-lg border-2 border-[var(--accent)]" />
-                      )}
-                      <label htmlFor="res-filtro" className="sr-only">{t.res.filter}</label>
-                      <SlidersHorizontal size={13} strokeWidth={2} aria-hidden="true"
-                        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--accent)]" />
-                      <select id="res-filtro" value={proc.slug}
-                        onChange={(e) => { setActiveSlug(e.target.value); setActiveCase(0); setActiveAngle(0); }}
-                        className="relative w-full max-w-full cursor-pointer appearance-none truncate rounded-md border-[1.5px] border-[var(--accent)] bg-[var(--accent-soft)] py-2.5 pl-9 pr-9 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--ink)] transition-opacity duration-200 hover:opacity-85">
-                        {PROCEDURES_WITH_CASES.map((x) => (
-                          <option key={x.slug} value={x.slug}>{x[lang].name}</option>
-                        ))}
-                      </select>
-                      <ChevronDown size={15} strokeWidth={1.8} aria-hidden="true"
-                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ink)]" />
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Selector de procedimiento — chico, en el lugar donde antes
+                          iba el nombre en texto plano, no una caja aparte arriba
+                          de toda la seccion. Con --accent en vez de --line para
+                          que se note que es interactivo, y un anillo que hace
+                          ping cada vez que se llega desde "Ver resultados" de
+                          otra tarjeta — asi queda claro que el procedimiento
+                          tambien se puede cambiar desde aca. */}
+                      <div className="relative inline-block max-w-full">
+                        {filterPulseKey > 0 && (
+                          <motion.span key={filterPulseKey} aria-hidden="true"
+                            initial={{ opacity: 0.9, scale: 1 }}
+                            animate={{ opacity: 0, scale: 1.4 }}
+                            transition={{ duration: 1, ease: "easeOut" }}
+                            className="pointer-events-none absolute -inset-2 rounded-lg border-2 border-[var(--accent)]" />
+                        )}
+                        <label htmlFor="res-filtro" className="sr-only">{t.res.filter}</label>
+                        <SlidersHorizontal size={13} strokeWidth={2} aria-hidden="true"
+                          className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--accent)]" />
+                        <select id="res-filtro" value={proc.slug}
+                          onChange={(e) => { setActiveSlug(e.target.value); setActiveCase(0); setActiveAngle(0); }}
+                          className="relative w-full max-w-full cursor-pointer appearance-none truncate rounded-md border-[1.5px] border-[var(--accent)] bg-[var(--accent-soft)] py-2.5 pl-9 pr-9 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--ink)] transition-opacity duration-200 hover:opacity-85">
+                          {PROCEDURES_WITH_CASES.map((x) => (
+                            <option key={x.slug} value={x.slug}>{x[lang].name}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={15} strokeWidth={1.8} aria-hidden="true"
+                          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ink)]" />
+                      </div>
+
+                      {/* Aviso de que esta seccion todavia se esta cargando/curando —
+                          pedido explicito del cliente, chico y al lado del selector,
+                          no un banner aparte. */}
+                      <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-[var(--faint)]">
+                        <Construction size={13} strokeWidth={1.8} aria-hidden="true" />
+                        {t.res.building}
+                      </span>
                     </div>
                     <div className="mt-3 flex h-[34px] items-center gap-3">
                       {/* Con menos de 10 casos no hay flechas, pero si igual no
