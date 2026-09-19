@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useReducedMotion, useInView, useScroll, useTra
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
   Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
-  Image as ImageIcon, Droplet, EyeOff, Construction,
+  Droplet, EyeOff, Construction, ChevronsRight, ArrowUpRight, MessageCircle,
 } from "lucide-react";
 import {
   SunIcon, MoonIcon, GlobeIcon, ObeliskIcon, SpireIcon, SkylineIcon, EnvelopeIcon, SealIcon,
@@ -18,12 +18,7 @@ import {
   LOCATIONS, SEDES, TESTIMONIALS, casesFor, CERTIFICATES, PAPERS,
 } from "./data.js";
 
-/* Velo del video del hero, compartido con su reflejo (ver HeroVideoReflection
-   mas abajo) — el reflejo lo aplica dado vuelta, en la misma capa que se
-   flipea, asi el tinte de la franja de arriba del reflejo queda exactamente
-   el mismo que el tinte del borde de abajo del video real: sin eso, el
-   reflejo se ve "crudo" al lado del video real (que si esta atenuado por
-   este velo) y se nota un salto de color justo en la union de los dos. */
+/* Velo del video del hero: atenua el centro-izquierda para que el texto se lea. */
 const HERO_SCRIM =
   "radial-gradient(ellipse 68% 75% at 30% 62%, var(--scrim-core) 0%, var(--scrim-core) 50%, var(--scrim-edge) 100%)";
 
@@ -273,6 +268,45 @@ function Wordmark({ size = 48, tagline = true, className = "" }) {
   );
 }
 
+/* Fila con scroll horizontal por deslizamiento: degradé en el borde del lado
+   donde queda contenido y, en movil (donde no hay flechas), un aviso chico de
+   que se puede deslizar — solo si la fila realmente desborda. "watch" vuelve
+   a medir cuando cambia el contenido (otro caso, otro procedimiento). */
+function SwipeRow({ rowRef, className = "", hint, watch, children }) {
+  const ownRef = useRef(null);
+  const ref = rowRef ?? ownRef;
+  const [edges, setEdges] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setEdges({
+      left: el.scrollLeft > 4,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    });
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => { el.removeEventListener("scroll", update); ro.disconnect(); };
+  }, [ref, watch]);
+  const fade = (dir) => ({ background: `linear-gradient(to ${dir}, transparent, var(--surface))` });
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="relative">
+        <div ref={ref} className={`no-scrollbar flex overflow-x-auto ${className}`}>{children}</div>
+        {edges.left && <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 w-8" style={fade("left")} />}
+        {edges.right && <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-10" style={fade("right")} />}
+      </div>
+      {hint && (edges.left || edges.right) && (
+        <p className="mt-2 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--faint)] sm:hidden">
+          <ChevronsRight size={13} strokeWidth={1.8} aria-hidden="true" className="swipe-nudge" />
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function CarouselArrows({ onPrev, onNext, prevLabel, nextLabel }) {
   const btn = "flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90";
   return (
@@ -296,91 +330,6 @@ function PhotoBox({ label, className = "", textClass = "text-2xl" }) {
   return (
     <div className={`flex items-center justify-center bg-[var(--accent-soft)] ${className}`}>
       <span className={`font-display font-medium text-[var(--accent)] ${textClass}`}>{label}</span>
-    </div>
-  );
-}
-
-// Publicacion real de Instagram embebida entre los testimonios de texto —
-// usa el script oficial de Instagram (embed.js), que reemplaza el
-// <blockquote> por un iframe con el post real (foto/video, likes, caption).
-// El script se carga una sola vez para todo el sitio aunque haya varias
-// publicaciones embebidas (varios testimonios de Instagram a la vez): si
-// ya esta cargado, o cargandose, solo hace falta pedirle que procese los
-// <blockquote> nuevos.
-let instagramScriptState = "idle"; // "idle" | "loading" | "ready"
-function loadInstagramEmbedScript(onReady) {
-  if (instagramScriptState === "ready") { onReady(); return; }
-  if (instagramScriptState === "loading") {
-    document.getElementById("ig-embed-script")?.addEventListener("load", onReady, { once: true });
-    return;
-  }
-  instagramScriptState = "loading";
-  const script = document.createElement("script");
-  script.id = "ig-embed-script";
-  script.src = "https://www.instagram.com/embed.js";
-  script.async = true;
-  script.addEventListener("load", () => { instagramScriptState = "ready"; onReady(); });
-  document.body.appendChild(script);
-}
-function InstagramEmbed({ url, loadingLabel, fallbackLabel }) {
-  const wrapRef = useRef(null);
-  // "loading" mientras se espera al iframe real; "failed" si a los pocos
-  // segundos todavia no aparecio (script bloqueado, sin conexion a
-  // Instagram, el post ya no existe, etc.) — sin esto, un embed que nunca
-  // termina de cargar se queda diciendo "Cargando…" para siempre, que es
-  // peor que mostrar directo un enlace a la publicacion.
-  const [status, setStatus] = useState("loading");
-
-  useEffect(() => {
-    setStatus("loading");
-    const wrap = wrapRef.current;
-    if (!wrap) return;
-    // Instagram no avisa cuando termina de procesar un <blockquote> puntual
-    // (Embeds.process() es "mejor esfuerzo" para toda la pagina) — el unico
-    // indicio confiable de que ESTE embed en particular ya es el iframe
-    // real es que el iframe efectivamente aparezca adentro de su wrapper.
-    const observer = new MutationObserver(() => {
-      if (wrap.querySelector("iframe")) { setStatus("ready"); observer.disconnect(); }
-    });
-    observer.observe(wrap, { childList: true, subtree: true });
-    loadInstagramEmbedScript(() => window.instgrm?.Embeds?.process());
-    const timeout = setTimeout(() => {
-      if (!wrap.querySelector("iframe")) setStatus("failed");
-    }, 6000);
-    return () => { observer.disconnect(); clearTimeout(timeout); };
-  }, [url]);
-
-  if (status === "failed") {
-    return (
-      <a href={url} target="_blank" rel="noopener noreferrer"
-        className="flex min-h-[420px] w-full flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-[var(--muted)]">
-        <Instagram size={22} strokeWidth={1.5} className="flex-shrink-0 text-[var(--faint)]" />
-        {fallbackLabel}
-      </a>
-    );
-  }
-
-  return (
-    // Sin flex/centrado ACA: el iframe que Instagram termina insertando
-    // arranca en alto 0 (recien mide su propio contenido real y se
-    // redimensiona solo despues, por postMessage) — centrado con flex, esa
-    // rendija de un par de pixeles quedaba centrada en el medio de toda la
-    // tarjeta, la "linea a la mitad de la card" del bug. Sin centrado, esa
-    // misma rendija apenas se nota arriba de todo mientras dura, y una vez
-    // que Instagram lo agranda ocupa el lugar con normalidad.
-    <div ref={wrapRef} className="ig-embed-wrap min-h-[420px]">
-      <blockquote className="instagram-media" data-instgrm-permalink={url} data-instgrm-version="14"
-        style={{ margin: 0, width: "100%", minWidth: "100%" }}>
-        {/* Instagram reemplaza todo esto por el iframe real una vez que
-            embed.js procesa el bloque — hasta entonces (o si el script no
-            llega a cargar, ver el estado "failed" arriba) queda este
-            enlace, nunca un recuadro vacio. */}
-        <a href={url} target="_blank" rel="noopener noreferrer"
-          className="flex min-h-[420px] w-full items-center justify-center gap-2 p-6 text-center text-[13px] text-[var(--muted)]">
-          <Instagram size={16} strokeWidth={1.6} className="flex-shrink-0" />
-          {loadingLabel}
-        </a>
-      </blockquote>
     </div>
   );
 }
@@ -432,7 +381,20 @@ function Slogan({ text }) {
   // lo reporta por onMeasure) contra el espacio disponible — en vez de
   // adivinar un tamano de fuente que a veces alcanza y a veces no, la
   // frase se escala lo justo y necesario para entrar en un solo renglon.
-  const [textWidth, setTextWidth] = useState(500);
+  // En movil la frase entera en un renglon quedaba chiquita (escalada para
+  // entrar en el ancho): se parte en la coma en dos renglones, cada uno casi
+  // del doble de tamano, y el segundo se escribe despues del primero.
+  const [twoLines, setTwoLines] = useState(() => window.matchMedia("(max-width: 639px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const on = () => setTwoLines(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  const cut = text.indexOf(", ");
+  const lines = twoLines && cut > 0 ? [text.slice(0, cut + 1), text.slice(cut + 2)] : [text];
+  const [widths, setWidths] = useState({});
+  const textWidth = Math.max(0, ...lines.map((_, i) => widths[`${lines.length}-${i}`] ?? 0)) || 500;
   const reduce = useReducedMotion();
   const inView = useInView(wrapRef, { once: true, amount: 0.4 });
   const show = inView || reduce;
@@ -499,7 +461,18 @@ function Slogan({ text }) {
                 mascara cuyo propio trazo se dibuja con stroke-dasharray/
                 -dashoffset — no un barrido de clip-path (eso se ve como una
                 cortina, no como una pluma escribiendo). Ver HandwrittenText. */}
-            <HandwrittenText text={text} className="slogan-write" duration={1.9} ready={show} onMeasure={setTextWidth} />
+            <span className="flex flex-col items-center">
+              {lines.map((line, i) => (
+                // El SVG de cada renglon trae su propio margen arriba/abajo (para
+                // el trazo de revelado): el segundo se sube para que no queden
+                // separados como dos frases sueltas.
+                <span key={`${lines.length}-${i}`} className="block" style={{ marginTop: i ? "-1.6em" : 0 }}>
+                  <HandwrittenText text={line} className="slogan-write"
+                    duration={lines.length > 1 ? 1.1 : 1.9} delay={i * 1.0} ready={show}
+                    onMeasure={(w) => setWidths((prev) => ({ ...prev, [`${lines.length}-${i}`]: w }))} />
+                </span>
+              ))}
+            </span>
             {/* Subrayado a mano alzada: arranca debajo de "La" (borde
                 izquierdo del bloque de texto) y recorre toda la frase — por
                 eso este SVG se estira sin mantener proporcion (el trazo
@@ -545,6 +518,17 @@ function ScrollSideDecor() {
 // tipo de letra comun trazado en su contorno) y se revela con una mascara
 // cuyo trazo se dibuja con stroke-dasharray/-dashoffset, igual que
 // .doodle-flourish. Arranca siempre al montar, sin gatillo de scroll.
+// En la primera visita la cursiva todavia no esta en cache: sin esperarla,
+// el trazo arrancaba con la fuente de reemplazo (otra letra, otras metricas,
+// mas abajo del centro) y a mitad de camino saltaba a la real. Una sola
+// promesa compartida entre el loading y el slogan, con tope de 2.5s para no
+// colgar la pantalla de carga si la fuente no llega nunca.
+let handwritingReady;
+const waitForHandwriting = () => handwritingReady ??= Promise.race([
+  document.fonts?.load?.('1em "Sacramento"') ?? Promise.resolve(),
+  new Promise((r) => setTimeout(r, 2500)),
+]).catch(() => {});
+
 function LoaderWordmark() {
   return <HandwrittenText text="MDM Surgery & Team" className="loader-write" duration={0.85} ready />;
 }
@@ -555,20 +539,21 @@ function LoaderWordmark() {
 // del propio texto: cualquier tipografia comun (incluso liviana) tiene area,
 // asi que trazar solo su contorno se ve como una letra hueca de molde, no
 // como una linea de pluma. Con el texto relleno solido (sin ese problema,
-// Mrs Saint Delafield ya es una script fina de una sola linea) y una
+// Sacramento ya es una script fina de una sola linea) y una
 // mascara aparte haciendo de "cortina" con forma de trazo de pluma —no un
 // barrido recto tipo cortina de clip-path— el efecto final es un simple
 // reveal: se ve como si una mano estuviera escribiendo con tinta real.
-function HandwrittenText({ text, className, duration, ready: forceReady, onMeasure }) {
+function HandwrittenText({ text, className, duration, delay = 0, ready: forceReady, onMeasure }) {
   const textRef = useRef(null);
   const maskId = useId();
   const [box, setBox] = useState({ x: 0, y: 0, width: 280, height: 50 });
   const [measured, setMeasured] = useState(false);
 
   useEffect(() => {
+    let fontLoaded = false;
     const measure = () => {
       const el = textRef.current;
-      if (!el) return;
+      if (!el || !fontLoaded) return;
       const b = el.getBBox();
       // onMeasure reporta el ancho del <svg> ya renderizado (texto + el pad
       // que se usa para el trazo de revelado a los costados), no el ancho
@@ -577,13 +562,13 @@ function HandwrittenText({ text, className, duration, ready: forceReady, onMeasu
       // (el span con este SVG adentro) es mas ancho que el texto solo.
       if (b.width > 0) { setBox(b); setMeasured(true); onMeasure?.(b.width + b.height * 1.5); }
     };
-    measure();
-    // La tipografia carga async — si measure() mide antes de que termine de
-    // cargar, lo hace con las metricas de la fuente de reemplazo (mas
-    // angosta), y el trazo de revelado queda corto para el texto real.
-    document.fonts?.ready?.then(measure);
+    // Recien se mide (y por lo tanto recien se habilita la animacion) con la
+    // cursiva real cargada — medir con la de reemplazo dejaba el trazo
+    // arrancando con otra letra y en otra posicion. Ver waitForHandwriting.
+    let alive = true;
+    waitForHandwriting().then(() => { fontLoaded = true; if (alive) measure(); });
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    return () => { alive = false; window.removeEventListener("resize", measure); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
 
@@ -620,10 +605,16 @@ function HandwrittenText({ text, className, duration, ready: forceReady, onMeasu
       viewBox={`${box.x - pad} ${box.y - pad} ${box.width + pad * 2} ${box.height + pad * 2}`}
       className={`${className} ${ready ? "handwritten-ready" : ""}`} style={{ overflow: "visible" }}>
       <defs>
-        <mask id={maskId} maskUnits="userSpaceOnUse">
+        {/* Region de la mascara explicita: sin x/y/width/height, con
+            userSpaceOnUse el navegador usa -10%..110% del viewport contado
+            desde el 0 del sistema de coordenadas, no desde el viewBox — y
+            como el texto se dibuja con la linea de base en y=0, la parte de
+            arriba de las mayusculas (la T, las M) quedaba afuera, cortada. */}
+        <mask id={maskId} maskUnits="userSpaceOnUse"
+          x={box.x - pad * 2} y={box.y - pad * 2} width={box.width + pad * 4} height={box.height + pad * 4}>
           <path d={d} fill="none" stroke="#fff" strokeLinecap="round"
             strokeWidth={box.height * 1.7 || 60} className="handwritten-reveal"
-            style={{ "--pen-duration": `${duration}s`, strokeDasharray: dash, strokeDashoffset: dash }} />
+            style={{ "--pen-duration": `${duration}s`, "--pen-delay": `${delay}s`, strokeDasharray: dash, strokeDashoffset: dash }} />
         </mask>
       </defs>
       <text ref={textRef} x="0" y="0" className="handwritten-fill" mask={`url(#${maskId})`}>
@@ -631,89 +622,6 @@ function HandwrittenText({ text, className, duration, ready: forceReady, onMeasu
       </text>
     </svg>
   );
-}
-
-/* Reflejo del video del hero (ver el bloque debajo de la seccion "home" en
-   App): dos <video> separados con el mismo src NUNCA quedan sincronizados
-   entre si (cada uno tiene su propio reloj de reproduccion y ademas hay que
-   descargar y decodificar el video dos veces) — por eso el reflejo se veia
-   "atrasado" respecto al video real. Este componente no reproduce el video
-   de nuevo: en cada frame calca el frame actual del <video> real (el mismo
-   elemento, via ref) sobre un canvas, así que siempre es exactamente la
-   misma imagen, nunca puede desincronizarse. El canvas usa el tamaño nativo
-   del video como su propio tamaño intrinseco, asi que el object-cover de la
-   clase CSS lo encuadra exactamente igual que al video de arriba. */
-function HeroVideoReflection({ videoRef, reduce }) {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) return;
-    const ctx = canvas.getContext("2d");
-
-    const drawFrame = () => {
-      // Copiar un <video> a un canvas antes de que tenga un frame real
-      // (readyState HAVE_CURRENT_DATA) puede tirar una excepcion en algunos
-      // navegadores — con el video recien montado eso pasa en el primer
-      // intento, casi siempre.
-      if (video.readyState < 2) return;
-      if (video.videoWidth && canvas.width !== video.videoWidth) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-      }
-      ctx.drawImage(video, 0, 0);
-    };
-
-    if (reduce) {
-      // Sin movimiento: el video real queda pausado en su primer frame, asi
-      // que el reflejo tambien calca uno solo y ahi se queda — nada de
-      // requestAnimationFrame en bucle.
-      if (video.readyState >= 2) drawFrame();
-      else video.addEventListener("loadeddata", drawFrame, { once: true });
-      return;
-    }
-
-    // requestAnimationFrame es lo que da la animacion fluida (calca a la
-    // misma tasa de refresco de la pantalla), pero "timeupdate" — que el
-    // navegador dispara solo, atado a la reproduccion real del video, no a
-    // rAF — es la red de seguridad: si algo llega a bloquear el primer tick
-    // de rAF, el reflejo igual se pone al dia apenas el video avanza un
-    // toque, en vez de quedar congelado en el cuadro por defecto para
-    // siempre.
-    video.addEventListener("timeupdate", drawFrame);
-    video.addEventListener("loadeddata", drawFrame);
-
-    // requestVideoFrameCallback dispara justo cuando el navegador compone
-    // un frame NUEVO del video — a diferencia de rAF, que tira una vez por
-    // refresco de pantalla sin importar si el video ya cambio de cuadro o
-    // no. Con solo rAF, si el hilo principal estaba un toque ocupado justo
-    // en ese tick, el canvas terminaba copiando el frame anterior una y
-    // otra vez — se iba quedando atras del video real de a poco, no de
-    // golpe, por eso se notaba como un desfasaje "leve" en vez de un salto.
-    // No existe en Firefox: ahi se cae al bucle de rAF de siempre.
-    let rvfcId, raf;
-    if (typeof video.requestVideoFrameCallback === "function") {
-      const onFrame = () => {
-        drawFrame();
-        rvfcId = video.requestVideoFrameCallback(onFrame);
-      };
-      rvfcId = video.requestVideoFrameCallback(onFrame);
-    } else {
-      raf = requestAnimationFrame(function loop() {
-        drawFrame();
-        raf = requestAnimationFrame(loop);
-      });
-    }
-    return () => {
-      if (rvfcId != null) video.cancelVideoFrameCallback(rvfcId);
-      if (raf != null) cancelAnimationFrame(raf);
-      video.removeEventListener("timeupdate", drawFrame);
-      video.removeEventListener("loadeddata", drawFrame);
-    };
-  }, [videoRef, reduce]);
-
-  return <canvas ref={canvasRef} aria-hidden="true" className="h-full w-full object-cover" />;
 }
 
 /* Cinta de tela decorativa, repetida por varias secciones del sitio (menos
@@ -748,8 +656,10 @@ function SilkRibbon({ className = "", flip = false, rotate = 0 }) {
     + "C 42,255 125,295 142,330 C 158,365 105,405 88,440 L 132,440 "
     + "C 145,405 172,365 158,330 C 165,295 102,255 120,220 "
     + "C 140,185 178,145 168,110 C 205,75 163,40 124,20 Z";
+  // -z-10 siempre de fondo: cada seccion que la contiene lleva "isolate",
+  // asi queda detras del texto y las tarjetas sin irse detras del fondo de la pagina.
   return (
-    <svg aria-hidden="true" viewBox="0 0 300 460" className={className}
+    <svg aria-hidden="true" viewBox="0 0 300 460" className={`-z-10 ${className}`}
       style={{ transform: `rotate(${rotate}deg)${flip ? " scaleX(-1)" : ""}` }}>
       <defs>
         <linearGradient id={`${id}-a`} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -820,7 +730,6 @@ export default function App() {
   const [fabMsgIndex, setFabMsgIndex] = useState(0);
   const papersRef = useRef(null);
   const casesRef = useRef(null);
-  const heroVideoRef = useRef(null);
   const [certsOpen, setCertsOpen] = useState(false);
   const [fold, setFold] = useState(null);
   const [pastHero, setPastHero] = useState(false);
@@ -897,7 +806,12 @@ export default function App() {
       // por si solo ignora ese corrimiento y el paneo se queda corto exactamente
       // por esa distancia — la ultima tarjeta terminaba tapada por el recorte
       // en vez de con el margen de aire que deja el pr-6/pr-10 del riel.
-      const railInset = rail.getBoundingClientRect().left - viewport.getBoundingClientRect().left;
+      // Del padding, no de getBoundingClientRect: esa medida incluye el
+      // translateX actual del riel, y si se remedia estando debajo de la
+      // seccion (riel ya paneado del todo — pasa en el celular al subir,
+      // cuando reaparece la barra del navegador y dispara un resize) el
+      // paneo daba ~0 y el wrapper colapsaba: salto de scroll y riel trabado.
+      const railInset = parseFloat(getComputedStyle(viewport).paddingLeft) || 0;
       setProcPanDistance(Math.max(0, rail.scrollWidth - viewport.clientWidth + railInset));
       setProcStickyHeight(sticky.offsetHeight);
       procHasMeasured.current = true;
@@ -951,8 +865,14 @@ export default function App() {
     // 880ms: el trazo a boligrafo de "MDM Surgery & Team" tarda 0.85s en
     // dibujarse (ver LoaderWordmark) — con menos, el fade se lleva puesto
     // el final del trazo antes de que termine de escribirse.
-    const id = setTimeout(() => setLoading(false), reduce ? 0 : 880);
-    return () => clearTimeout(id);
+    // El reloj arranca cuando la cursiva ya cargo (ver waitForHandwriting):
+    // en la primera visita la descarga de la fuente se comia parte de estos
+    // 880ms y el loading se iba antes de terminar de escribirse.
+    let alive = true, id;
+    waitForHandwriting().then(() => {
+      if (alive) id = setTimeout(() => setLoading(false), reduce ? 0 : 880);
+    });
+    return () => { alive = false; clearTimeout(id); };
   }, [reduce]);
 
   useEffect(() => {
@@ -1518,7 +1438,15 @@ export default function App() {
             que existe (todo centrado) sin sacar el video ni el scrim. */}
         <section id="home" className="relative flex min-h-screen w-full items-center overflow-hidden px-6 pb-24 pt-28 lg:items-end lg:px-10 lg:pb-28 lg:pt-24">
           {/* Background video — scoped to this section, sits inside main's lg:pl-60 so it never covers the sidebar */}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+          {/* El video se desvanece a transparente (mascara) y se funde con el
+              fondo real de la pagina — reemplaza al reflejo espejado que habia
+              debajo del hero, cuya union dejaba una raya oscura cuando el
+              cuadro tenia partes oscuras (pinzas, vetas del marmol). Con una
+              mascara, y no con un degrade a un color fijo, no queda corte: el
+              fondo de la pagina tiene su propio brillo y no es blanco liso. */}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden"
+            style={{ WebkitMaskImage: "linear-gradient(to bottom, black 72%, transparent 100%)",
+                     maskImage: "linear-gradient(to bottom, black 72%, transparent 100%)" }}>
             {/* poster nativo no permite recorte responsivo (retrato en movil,
                 horizontal en escritorio) — en su lugar, dos imagenes fijas en
                 la misma posicion que el video: en conexiones lentas evitan el
@@ -1531,7 +1459,6 @@ export default function App() {
             {/* One video for every breakpoint — it is framed to survive the portrait crop.
                 With prefers-reduced-motion it stays on its first frame instead of looping. */}
             <video
-              ref={heroVideoRef}
               className="absolute inset-0 h-full w-full object-cover"
               src={heroVideo}
               autoPlay={!reduce}
@@ -1625,62 +1552,9 @@ export default function App() {
           </motion.button>
         </section>
 
-        {/* Reflejo del video del hero: calca el frame real del video de
-            arriba en vez de reproducir una segunda copia (ver
-            HeroVideoReflection) — asi nunca se desincroniza. El canvas se
-            renderiza con el mismo alto que el video real (h-screen, igual
-            que el min-h-screen del hero) para que el object-cover lo
-            encuadre exactamente igual — encajarlo directo en una caja mas
-            baja lo hacia ver con mucho mas zoom, como una toma distinta en
-            vez de un reflejo. Esa caja alta se da vuelta entera (scaleY) y
-            una ventana mas baja, con overflow hidden, deja ver solo la tira
-            de arriba: como el flip deja lo que antes era el borde de abajo
-            del video justo en ese borde de arriba, la tira que se ve es la
-            continuacion sin corte del video real, dada vuelta. El mismo
-            velo del video real (HERO_SCRIM) va adentro de esta caja, asi se
-            da vuelta junto con el video y el tinte de la punta de arriba
-            del reflejo termina siendo igual al tinte del borde de abajo
-            del video real.
-            Dos intentos previos (blur+opacity+degrade aparte; despues un
-            mask-image que arrancaba ya al 50%) seguian dejando lineas
-            visibles. La razon: CUALQUIER salto de opacidad justo en la
-            union — aunque sea de 100% a 50% — se nota como una linea, mas
-            todavia con una imagen de alto contraste (las pinzas, las
-            vetas oscuras del marmol) de por medio. Y del otro lado, si el
-            degrade llega a "transparente" recien en el borde fisico de la
-            caja, los detalles oscuros que quedan visibles hasta ese
-            ultimo pixel desaparecen de golpe ahi — se ve como otro corte,
-            aunque el numero de opacidad haya bajado en forma gradual.
-            La solucion: la caja que se da vuelta queda a su opacidad
-            normal (100%, sin blur, sin mask) — en la punta de arriba es
-            entonces IDENTICA en corte, tinte y opacidad al borde de abajo
-            del video real, cero salto. Todo el desvanecido lo hace un
-            degrade aparte, SIN el transform (si no, el flip lo invierte),
-            que arranca transparente (no tapa nada, se ve el video/reflejo
-            entero) justo en la union.
-            Ese degrade llegaba al color de fondo solido recien al 55% de
-            la franja — de punta a punta se seguia viendo casi la mitad del
-            video (marmol/piel, tonos grisaceos/beige) antes de que
-            desaparaciera, y ESE tramo largo y grisaceo, cortado en seco
-            contra el blanco solido de golpe, es lo que se seguia notando
-            como una linea — no importa que el numero baje gradual, si el
-            video se ve grisaceo un buen tramo y despues no se ve nada, el
-            ojo lee un corte ahi. Ahora el color de fondo solido llega
-            mucho antes (22%): la franja pasa la mayor parte del tiempo ya
-            en blanco puro, y solo se alcanza a ver una tira angosta del
-            video real, bien pegada a la union, antes de apagarse. */}
-        <div aria-hidden="true" className="relative h-[30vh] w-full overflow-hidden sm:h-[36vh]">
-          <div className="absolute inset-x-0 top-0 h-screen" style={{ transform: "scaleY(-1)" }}>
-            <HeroVideoReflection videoRef={heroVideoRef} reduce={reduce} />
-            <div className="absolute inset-0" style={{ background: HERO_SCRIM }} />
-          </div>
-          <div className="pointer-events-none absolute inset-0"
-            style={{ background: "linear-gradient(to bottom, transparent 0%, var(--bg) 22%, var(--bg) 100%)" }} />
-        </div>
-
         <div className="mx-auto max-w-5xl px-6 pb-20 sm:px-10 xl:max-w-6xl 2xl:max-w-7xl">
           {/* ============ AREAS ============ */}
-          <section id="areas" className="relative scroll-mt-24 pt-24">
+          <section id="areas" className="relative isolate scroll-mt-24 pt-24">
             <SilkRibbon
               className="pointer-events-none absolute -top-10 -right-6 hidden w-64 aspect-[300/460] opacity-80 sm:block"
               rotate={12} />
@@ -1755,7 +1629,7 @@ export default function App() {
                   "lejos" de las tarjetas aunque el margen fuera chico. Sin
                   altura minima forzada, el pin suelta apenas termina el
                   contenido real. */}
-              <div ref={procStickyRef} className="proc-sticky sticky top-0 flex flex-col justify-start py-16 sm:py-24">
+              <div ref={procStickyRef} className="proc-sticky sticky top-0 isolate flex flex-col justify-start py-16 sm:py-24">
                 {/* Adentro del sticky (no del wrap, que es alto por el
                     scroll-pin): asi la cinta queda pegada a la parte fijada
                     en pantalla durante todo el paneo, en vez de quedar
@@ -1854,7 +1728,7 @@ export default function App() {
               selected. The frame keeps a fixed height so the page never jumps. */}
           {/* Segundo bloque que rompe el ancho de columna: es la seccion de prueba
               visual (fotos de pacientes), se beneficia de mas aire que el resto. */}
-          <section id="resultados" className="relative scroll-mt-24 pt-24 2xl:-mx-16">
+          <section id="resultados" className="relative isolate scroll-mt-24 pt-24 2xl:-mx-16">
             <SilkRibbon flip
               className="pointer-events-none absolute -top-8 left-2 hidden w-56 aspect-[300/460] opacity-70 md:block"
               rotate={16} />
@@ -1920,33 +1794,23 @@ export default function App() {
                         {t.res.building}
                       </span>
                     </div>
-                    <div className="mt-3 flex h-[34px] items-center gap-3">
-                      {/* Con menos de 10 casos no hay flechas, pero si igual no
-                          entran todos en el ancho visible se puede arrastrar —
-                          sin ninguna pista, eso no se nota. El degrade a la
-                          derecha (visible solo cuando el contenido de verdad
-                          desborda, porque min-w-0 deja que el flex se achique
-                          antes que el degrade) avisa que hay mas para el lado. */}
-                      <div className="relative min-w-0 flex-1">
-                        <div ref={casesRef} className="no-scrollbar flex items-center gap-2 overflow-x-auto">
-                          {cases.map((c, k) => (
-                            <button key={c.n} type="button" aria-pressed={k === ci}
-                              onClick={() => { setActiveCase(k); setActiveAngle(0); }}
-                              className={`flex-shrink-0 cursor-pointer rounded-full border px-4 py-1.5 text-[11px] uppercase tracking-[0.16em] transition-colors duration-200 active:scale-95 ${
-                                k === ci
-                                  ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]"
-                                  : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"}`}>
-                              {t.res.case} {c.n}
-                            </button>
-                          ))}
-                        </div>
-                        {cases.length > 1 && cases.length < 10 && (
-                          <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8"
-                            style={{ background: "linear-gradient(to right, transparent, var(--surface))" }} />
-                        )}
-                      </div>
+                    <div className="mt-3 flex min-h-[34px] items-center gap-3">
+                      <SwipeRow rowRef={casesRef} className="items-center gap-2" hint={t.res.swipe} watch={`${proc.slug}-${cases.length}`}>
+                        {cases.map((c, k) => (
+                          <button key={c.n} type="button" aria-pressed={k === ci}
+                            onClick={() => { setActiveCase(k); setActiveAngle(0); }}
+                            className={`flex-shrink-0 cursor-pointer rounded-full border px-4 py-1.5 text-[11px] uppercase tracking-[0.16em] transition-colors duration-200 active:scale-95 ${
+                              k === ci
+                                ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]"
+                                : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"}`}>
+                            {t.res.case} {c.n}
+                          </button>
+                        ))}
+                      </SwipeRow>
+                      {/* Flechas solo en escritorio: en movil se desliza con el
+                          dedo y el aviso de SwipeRow lo indica. */}
                       {cases.length >= 10 && (
-                        <div className="flex flex-shrink-0 items-center gap-1.5">
+                        <div className="hidden flex-shrink-0 items-center gap-1.5 self-start sm:flex">
                           <button type="button" aria-label={t.res.prevCase} title={t.res.prevCase}
                             onClick={() => scrollCarousel(casesRef, -1)}
                             className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90">
@@ -1978,7 +1842,8 @@ export default function App() {
                     {kase.angles.length > 1 && (
                       <div className="mt-5">
                         <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.angles}</p>
-                        <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto">
+                        <div className="mt-3">
+                        <SwipeRow className="gap-3" hint={t.res.swipe} watch={`${proc.slug}-${ci}`}>
                           {kase.angles.map((a, k) => (
                             <button key={k} type="button" onClick={() => setActiveAngle(k)}
                               aria-pressed={k === ai} aria-label={`${t.res.angle} ${k + 1}`}
@@ -1988,6 +1853,7 @@ export default function App() {
                                 className={`h-full w-full object-cover ${a.afterSensitive && !revealedSensitive.has(a.after) ? "scale-110 blur-md" : ""}`} />
                             </button>
                           ))}
+                        </SwipeRow>
                         </div>
                       </div>
                     )}
@@ -2038,7 +1904,8 @@ export default function App() {
                     {sueltas.length > 0 && (
                       <div className="mt-5">
                         <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.apart}</p>
-                        <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto">
+                        <div className="mt-3">
+                        <SwipeRow className="gap-3" hint={t.res.swipe} watch={`${proc.slug}-${ci}-${sueltas.length}`}>
                           {sueltas.map(({ image, frame, sensitive }, k) => {
                             const oculta = sensitive && !revealedSensitive.has(image);
                             return (
@@ -2063,6 +1930,7 @@ export default function App() {
                             </button>
                             );
                           })}
+                        </SwipeRow>
                         </div>
                       </div>
                     )}
@@ -2093,7 +1961,7 @@ export default function App() {
               compartido) — la cita ya no compite en tamano con el titulo,
               queda como bajada chica entre el eyebrow y el titulo, mas cerca
               de un epigrafe editorial que de un segundo titular. */}
-          <section id="team" className="relative scroll-mt-24 pt-32">
+          <section id="team" className="relative isolate scroll-mt-24 pt-32">
             <SilkRibbon flip
               className="pointer-events-none absolute -left-14 bottom-0 hidden w-72 aspect-[300/460] opacity-70 lg:block"
               rotate={-14} />
@@ -2113,15 +1981,21 @@ export default function App() {
               <p className="mt-5 max-w-2xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{t.team.body}</p>
             </motion.div>
 
-            {/* Unico bloque que rompe el ancho de columna del resto de la pagina:
-                la foto del cirujano se agranda y el grid respira mas alla del
-                max-w-5xl que envuelve todo lo demas. */}
+            {/* Foto del Dr.: recortada sobre el tono claro del sitio (el fondo
+                azul de estudio era el unico bloque oscuro de la zona), vertical
+                4:5, alineada con la columna de texto y con un marco fino
+                desplazado, estilo galeria. La foto va con fondo transparente:
+                el fondo lo pone el CSS, asi tambien funciona en modo oscuro. */}
             <motion.div id="dr-di-maggio" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}
-              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-8 md:grid-cols-[minmax(0,340px)_1fr] md:items-center md:gap-6 lg:grid-cols-[380px_1fr] lg:gap-8 2xl:-mx-20 2xl:grid-cols-[460px_1fr]">
-              <motion.div variants={settleIn} className="overflow-hidden rounded-2xl">
-                <motion.div whileHover={{ scale: 1.05 }} transition={{ duration: 0.4, ease: "easeOut" }}>
-                  <img src={marceloPhoto} alt={LEAD.name} className="h-[26rem] w-full object-cover sm:h-[32rem]" />
-                </motion.div>
+              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-10 md:grid-cols-[minmax(0,320px)_1fr] md:items-center md:gap-10 lg:grid-cols-[360px_1fr] lg:gap-12 2xl:grid-cols-[420px_1fr]">
+              <motion.div variants={settleIn} className="relative mb-4 mr-4 max-w-[360px] md:max-w-none">
+                <div aria-hidden="true" className="absolute inset-0 translate-x-4 translate-y-4 border border-[var(--accent)]/35" />
+                <div className="relative aspect-[4/5] overflow-hidden"
+                  style={{ background: "radial-gradient(ellipse 80% 70% at 50% 38%, var(--surface) 0%, var(--chip) 75%)" }}>
+                  <motion.img src={marceloPhoto} alt={LEAD.name}
+                    whileHover={{ scale: 1.03 }} transition={{ duration: 0.5, ease: "easeOut" }}
+                    className="h-full w-full object-cover object-center" />
+                </div>
               </motion.div>
               <motion.div variants={fadeUp}>
                 <div className="flex flex-wrap items-baseline gap-3">
@@ -2202,7 +2076,7 @@ export default function App() {
           </section>
 
           {/* ============ TRAYECTORIA & PRENSA ============ */}
-          <section id="press" className="relative scroll-mt-24 pt-24">
+          <section id="press" className="relative isolate scroll-mt-24 pt-24">
             <SilkRibbon
               className="pointer-events-none absolute -top-10 -right-6 hidden w-64 aspect-[300/460] opacity-70 md:block"
               rotate={-20} />
@@ -2337,7 +2211,7 @@ export default function App() {
           </section>
 
           {/* ============ TESTIMONIOS ============ */}
-          <section id="testimonios" className="relative scroll-mt-24 pt-24">
+          <section id="testimonios" className="relative isolate scroll-mt-24 pt-24">
             {/* Cintas del lado contrario a las de Prensa (arriba) y Sedes
                 (abajo): con el mismo lado que la vecina, las dos quedaban
                 pegadas justo en el borde entre secciones — se leia como
@@ -2354,97 +2228,66 @@ export default function App() {
             </motion.div>
 
             {(() => {
-              const all = TESTIMONIALS.map((x) => (
-                x.type ? x : { initials: x.initials, place: x.place, stars: x.stars, ...x[lang] }
-              ));
+              const all = TESTIMONIALS.map((x) => ({
+                initials: x.initials, place: x.place, stars: x.stars, source: x.source, ...x[lang],
+              }));
               const totalPages = Math.max(1, Math.ceil(all.length / TEST_PAGE_SIZE));
               const page = ((testPage % totalPages) + totalPages) % totalPages;
               const visible = all.slice(page * TEST_PAGE_SIZE, page * TEST_PAGE_SIZE + TEST_PAGE_SIZE);
+              const NET = { instagram: ["Instagram", Instagram], facebook: ["Facebook", Facebook], google: ["Google", Star] };
               return (
                 <>
                   <motion.div key={page} variants={container} initial="hidden" animate="visible"
-                    // items-start: por defecto un grid estira cada celda a la altura de
-                    // la mas alta de su fila — el embed de Instagram (alto lo decide el
-                    // propio iframe de Instagram, sin tope) inflaba tambien a la foto o
-                    // el video de al lado hasta esa misma altura, mucho mas grandes de
-                    // lo que su propio min-h pedia. Con items-start cada card mide lo
-                    // suyo, sin heredar el alto de la vecina.
-                    className="mt-10 grid grid-cols-1 items-start gap-x-4 gap-y-10 sm:grid-cols-2">
+                    className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {visible.map((x, i) => {
-                      const key = x.type === "instagram" ? x.url : x.type === "placeholder" ? `placeholder-${page}-${i}` : `${x.initials}-${page}-${i}`;
-                      if (x.type === "instagram") {
-                        return (
-                          <motion.div key={key} variants={fadeUp}
-                            className="overflow-hidden border border-[var(--line)] bg-[var(--surface)]">
-                            <InstagramEmbed url={x.url} loadingLabel={t.test.igLoading} fallbackLabel={t.test.igViewPost} />
-                          </motion.div>
-                        );
-                      }
-                      if (x.type === "photo") {
-                        // Alto FIJO, no min-height: con solo un piso, h-full de la img no
-                        // tiene una altura real de la que tomar el 100% (el padre no tiene
-                        // ninguna otra que lo fuerce) y termina cayendo al alto intrinseco
-                        // de la foto entera — una captura de telefono vertical se veia
-                        // enorme en vez de recortada a un alto de tarjeta normal.
-                        return (
-                          <motion.div key={key} variants={fadeUp}
-                            className="h-[420px] overflow-hidden border border-[var(--line)] bg-[var(--photo)]">
-                            <img src={x.src} alt={t.test.patientMedia} loading="lazy"
-                              className="h-full w-full object-cover" />
-                          </motion.div>
-                        );
-                      }
-                      if (x.type === "video") {
-                        return (
-                          <motion.div key={key} variants={fadeUp}
-                            className="h-[420px] overflow-hidden border border-[var(--line)] bg-black">
-                            <video src={x.src} controls playsInline preload="metadata"
-                              className="h-full w-full object-cover" />
-                          </motion.div>
-                        );
-                      }
-                      if (x.type === "placeholder") {
-                        // Recuadro reservado para cuando se suba una foto o video
-                        // real de un paciente — bastante mas alto que una card de
-                        // texto (mismo alto minimo que el embed de Instagram) para
-                        // que una foto o un video vertical entren comodos y no
-                        // angostos — pero claramente "todavia no hay nada aca"
-                        // (borde punteado) en vez de una card vacia que parezca
-                        // un bug.
-                        return (
-                          <motion.div key={key} variants={fadeUp}
-                            className="flex min-h-[420px] flex-col items-center justify-center gap-3 border border-dashed border-[var(--line)] p-6 text-center">
-                            <ImageIcon size={28} strokeWidth={1.3} className="text-[var(--faint)]" />
-                            <p className="font-display text-[17px] font-normal text-[var(--muted)]">{t.test.placeholderTitle}</p>
-                            <p className="text-[13px] text-[var(--faint)]">{t.test.placeholderBody}</p>
-                          </motion.div>
-                        );
-                      }
+                      const net = x.source?.url && NET[x.source.type];
                       return (
-                        <motion.figure key={key} variants={fadeUp}
-                          className="border border-[var(--line)] bg-[var(--surface)] p-6">
-                          <div className="flex items-center gap-3">
-                            <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full">
-                              <PhotoBox label={x.initials} className="h-full w-full" textClass="text-sm" />
-                            </div>
-                            <figcaption>
-                              <p className="font-display text-[16px] font-normal text-[var(--ink)]">{x.initials}</p>
-                              {x.place && <p className="text-[11px] text-[var(--faint)]">{x.place}</p>}
-                            </figcaption>
-                          </div>
-                          <div className="mt-4"><Stars value={x.stars ?? 5} t={t} /></div>
-                          <blockquote className="mt-3 text-[13px] leading-relaxed italic text-[var(--muted)]">“{x.text}”</blockquote>
-                          {/* Procedimiento + tiempo transcurrido: un testimonio suelto
-                              sin ese contexto pesa mucho menos que uno anclado a un
-                              caso y un momento concretos. */}
-                          {(x.proc || x.time) && (
-                            <p className="mt-3 text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
-                              {[x.proc, x.time].filter(Boolean).join(" · ")}
+                        <motion.figure key={`${x.initials}-${page}-${i}`} variants={fadeUp}
+                          className="flex flex-col border border-[var(--line)] bg-[var(--surface)] p-7">
+                          {x.stars && <div className="mb-4"><Stars value={x.stars} t={t} /></div>}
+                          <blockquote className="flex-1 font-display text-[17px] font-normal leading-relaxed text-[var(--ink)]">
+                            “{x.text}”
+                          </blockquote>
+                          <figcaption className="mt-6 border-t border-[var(--line)] pt-4">
+                            <p className="text-[13px] text-[var(--ink)]">
+                              {x.initials}{x.place && <span className="text-[var(--faint)]"> · {x.place}</span>}
                             </p>
-                          )}
+                            {/* Procedimiento + tiempo transcurrido: sin ese contexto un
+                                testimonio suelto pesa mucho menos. */}
+                            {(x.proc || x.time) && (
+                              <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
+                                {[x.proc, x.time].filter(Boolean).join(" · ")}
+                              </p>
+                            )}
+                            {/* Origen: link a la publicacion original si existe; si no,
+                                el canal por el que llego (sin link, no se inventa uno). */}
+                            {net ? (
+                              <a href={x.source.url} target="_blank" rel="noopener noreferrer"
+                                className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--accent)] transition-opacity hover:opacity-75">
+                                {(() => { const Icon = net[1]; return <Icon size={13} strokeWidth={1.8} aria-hidden="true" />; })()}
+                                {t.test.viewOn.replace("{net}", net[0])}
+                                <ArrowUpRight size={12} strokeWidth={1.8} aria-hidden="true" />
+                              </a>
+                            ) : x.source?.type && t.test.via[x.source.type] ? (
+                              <p className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-[var(--faint)]">
+                                <MessageCircle size={13} strokeWidth={1.8} aria-hidden="true" />
+                                {t.test.via[x.source.type]}
+                              </p>
+                            ) : null}
+                          </figcaption>
                         </motion.figure>
                       );
                     })}
+                    {/* Mientras se suman testimonios reales: un recuadro que deja
+                        claro que la seccion sigue creciendo, en la ultima pagina. */}
+                    {page === totalPages - 1 && (
+                      <motion.div variants={fadeUp}
+                        className="flex flex-col items-center justify-center gap-3 border border-dashed border-[var(--line)] bg-[var(--surface)] p-7 text-center">
+                        <Construction size={22} strokeWidth={1.5} aria-hidden="true" className="text-[var(--faint)]" />
+                        <p className="font-display text-[17px] font-normal text-[var(--ink)]">{t.test.soonTitle}</p>
+                        <p className="max-w-xs text-[13px] leading-relaxed text-[var(--faint)]">{t.test.soonBody}</p>
+                      </motion.div>
+                    )}
                   </motion.div>
                   {totalPages > 1 && (
                     <div className="mt-5 flex items-center justify-end gap-3">
@@ -2468,7 +2311,7 @@ export default function App() {
           </section>
 
           {/* ============ LOCATIONS ============ */}
-          <section id="locations" className="relative scroll-mt-24 pt-24">
+          <section id="locations" className="relative isolate scroll-mt-24 pt-24">
             {/* La cinta mas grande de todo el sitio — pausa visual marcada
                 entre Prensa y Sedes/Contacto, dos secciones bastante mas
                 "texto plano" que el resto. */}
@@ -2508,7 +2351,7 @@ export default function App() {
           </section>
 
           {/* ============ CONTACT ============ */}
-          <section id="contact" className="relative scroll-mt-24 pt-24">
+          <section id="contact" className="relative isolate scroll-mt-24 pt-24">
             {/* Por fuera de la card del formulario a proposito — el
                 formulario mismo queda limpio, la cinta solo asoma alrededor
                 del borde. */}

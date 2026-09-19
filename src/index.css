@@ -105,7 +105,7 @@ html {
 
 /* Texto a mano alzada (pantalla de carga + slogan, ver HandwrittenText en
    App.jsx): el propio texto va relleno solido, sin problema de letra hueca,
-   porque Mrs Saint Delafield es una script realmente monolineal (su glifo
+   porque Sacramento es una script realmente monolineal (su glifo
    YA es una linea fina, no una forma con area gruesa) — trazar el contorno
    de una tipografia comun en cambio siempre deja un hueco en el medio de
    cada letra, por mas fina que sea la tipografia o el trazo. Lo que se
@@ -115,18 +115,30 @@ html {
    escribiendo con tinta real en vez de una cortina de clip-path corriendose. */
 .handwritten-fill {
   fill: var(--ink);
-  font-family: "Mrs Saint Delafield", cursive;
+  font-family: "Sacramento", cursive;
   font-weight: 400;
 }
 .handwritten-reveal { stroke-dasharray: 1; stroke-dashoffset: 1; }
 .handwritten-ready .handwritten-reveal {
-  animation: pen-draw var(--pen-duration, 1.2s) ease-out forwards;
+  animation: pen-draw var(--pen-duration, 1.2s) var(--pen-delay, 0s) ease-out forwards;
 }
+/* Aviso de "deslizá para ver más" en las filas de Resultados (movil): la
+   flecha empuja hacia la derecha de a ratos, sin quedarse temblando. */
+.swipe-nudge { animation: swipe-nudge 2.4s ease-in-out infinite; }
+@keyframes swipe-nudge {
+  0%, 60%, 100% { transform: translateX(0); }
+  70% { transform: translateX(4px); }
+  80% { transform: translateX(0); }
+  90% { transform: translateX(4px); }
+}
+
 @keyframes pen-draw {
   to { stroke-dashoffset: 0; }
 }
 
-.loader-write { font-size: 42px; }
+/* min() con vw: Sacramento es ancha y a 42px fijos "MDM Surgery & Team"
+   se salia de los costados en celulares de 375px. */
+.loader-write { font-size: min(42px, 8.4vw); }
 @media (min-width: 640px) {
   .loader-write { font-size: 54px; }
 }

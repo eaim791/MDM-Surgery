@@ -12,21 +12,6 @@ const PAPER_IMAGES = import.meta.glob("./assets/pappers/*.webp", { eager: true, 
 
 const CASE_IMAGES = import.meta.glob("./assets/procedimientos/*/*/*.webp", { eager: true, import: "default" });
 
-/* Fotos y videos de pacientes para Testimonios: cualquier archivo que se agregue a
-   ./assets/testimonios aparece solo, sin tocar este archivo — mismo criterio que las
-   fotos de Resultados. El video se distingue de la foto por la extension. */
-const TESTIMONIAL_MEDIA = import.meta.glob(
-  "./assets/testimonios/*.{png,jpg,jpeg,webp,mp4,mov,webm}",
-  { eager: true, import: "default" },
-);
-const VIDEO_EXT = /\.(mp4|mov|webm)$/i;
-const TESTIMONIAL_UPLOADS = Object.keys(TESTIMONIAL_MEDIA)
-  .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-  .map((path) => ({
-    type: VIDEO_EXT.test(path) ? "video" : "photo",
-    src: TESTIMONIAL_MEDIA[path],
-  }));
-
 /* Encuadre de cada foto, calculado con revision3/encuadre.py.
    - fotos:  [ancho, alto, izquierda, arriba] en porcentaje del recuadro. Amplia la foto
              sobre la zona del procedimiento y deja el mismo punto de la cara en el mismo
@@ -119,6 +104,12 @@ const CASOS_AL_FINAL = {
   rhinoplasty: ["caso-10", "caso-11", "caso-13"],
   "forehead-orbital": ["Aitana Lucero"],
   "upper-lip-lift": ["caso-02"],
+};
+
+/* Lo mismo al reves: casos que van primero en su procedimiento (pedido del
+   cliente), en el orden de esta lista, antes de los alfabeticos. */
+const CASOS_AL_PRINCIPIO = {
+  "facial-harmonization": ["Candace Atlas"],
 };
 
 /* Fotos que muestran contenido de quirofano (paciente acostado, gasas, suturas o
@@ -227,9 +218,12 @@ const CASES_BY_SLUG = (() => {
   return Object.fromEntries(
     Object.entries(bySlug).map(([slug, cases]) => {
       const alFinal = CASOS_AL_FINAL[slug] ?? [];
+      const alPrincipio = CASOS_AL_PRINCIPIO[slug] ?? [];
       const list = cases
         .slice()
         .sort((a, b) => {
+          const pa = alPrincipio.indexOf(a.caseId), pb = alPrincipio.indexOf(b.caseId);
+          if (pa !== -1 || pb !== -1) return pa === -1 ? 1 : pb === -1 ? -1 : pa - pb;
           const ia = alFinal.indexOf(a.caseId), ib = alFinal.indexOf(b.caseId);
           if (ia !== -1 || ib !== -1) return ia === -1 ? -1 : ib === -1 ? 1 : ia - ib;
           return a.caseId.localeCompare(b.caseId, undefined, { numeric: true });
@@ -544,60 +538,17 @@ export const PAPERS = PAPER_LIST.map((p, i) => ({
   en: { ref: p.refEn ?? p.ref },
 }));
 
-/* Testimonios: la mayoria son texto (PLACEHOLDER inventado a la espera de
-   testimonios reales de pacientes — misma estructura de iniciales/ciudad/
-   procedimiento/tiempo transcurrido para poder reemplazarlos uno a uno sin
-   tocar el componente), pero tambien puede haber una publicacion de
-   Instagram embebida ({ type: "instagram", url }) o un recuadro vacio
-   reservado para una foto o video que todavia no se subio
-   ({ type: "placeholder" }) — agregar mas de cualquiera de los dos tipos
-   en cualquier lugar de esta lista alcanza, el carrusel de Testimonios
-   los agrega solos. */
+/* Testimonios: solo texto, todos reales. "source" dice de donde viene cada
+   uno — { type: "instagram" | "facebook" | "google", url } muestra un link a
+   la publicacion original; { type: "whatsapp" | "site" } (sin url) muestra
+   por que canal llego. "stars" es opcional: solo si el paciente la dio. */
 export const TESTIMONIALS = [
-  { type: "instagram", url: "https://www.instagram.com/maeru.jpg/p/DPj77imEpSZ/" },
-  ...TESTIMONIAL_UPLOADS,
-  { initials: "M.G.", place: "Buenos Aires", stars: 5,
-    es: { proc: "Rinoplastia", time: "8 meses después",
-          text: "Mi experiencia fue maravillosa. El acompañamiento antes y después de la cirugía fue constante." },
-    en: { proc: "Rhinoplasty", time: "8 months later",
-          text: "My experience was wonderful. The support before and after surgery was constant." } },
-  { initials: "L.P.", place: "Madrid", stars: 5,
-    es: { proc: "Armonización Facial", time: "1 año después",
-          text: "Vas a encontrar una respuesta profesional y los resultados se ven naturales." },
-    en: { proc: "Facial Harmonization", time: "1 year later",
-          text: "You are going to find a professional answer and the results look natural." } },
-  { initials: "A.R.", place: "New York", stars: 5,
-    es: { proc: "Feminización Facial", time: "6 meses después",
-          text: "¡Son el mejor equipo! Me sentí cuidada en cada paso del proceso." },
-    en: { proc: "Facial Feminization", time: "6 months later",
-          text: "You guys are the best team ever! I felt looked after at every step." } },
-  { initials: "C.M.", place: "Córdoba", stars: 4,
-    es: { proc: "Blefaroplastia", time: "4 meses después",
-          text: "Se tomaron el tiempo de explicarme todo. El resultado superó lo que esperaba." },
-    en: { proc: "Blepharoplasty", time: "4 months later",
-          text: "They took the time to explain everything. The result exceeded what I expected." } },
-  { initials: "S.D.", place: "Buenos Aires", stars: 5,
-    es: { proc: "Lifting Facial y Cervical", time: "10 meses después",
-          text: "Todo el equipo, no solo el Dr. Di Maggio, te hace sentir en buenas manos. Recomiendo consultar sin miedo." },
-    en: { proc: "Face & Neck Lift", time: "10 months later",
-          text: "The whole team, not just Dr. Di Maggio, makes you feel in good hands. I'd recommend consulting without fear." } },
-  { initials: "V.T.", place: "Madrid", stars: 5,
-    es: { proc: "Mamas", time: "1 año y medio después",
-          text: "La consulta previa fue muy clara sobre lo que se podía lograr y lo que no. Eso me dio mucha tranquilidad." },
-    en: { proc: "Breast", time: "1.5 years later",
-          text: "The initial consultation was very clear about what could and couldn't be achieved. That gave me a lot of peace of mind." } },
-  { initials: "F.N.", place: "Nueva York", stars: 5,
-    es: { proc: "Masculinización y Antiaging", time: "5 meses después",
-          text: "Viajé desde Chicago para la consulta y valió cada minuto. Resultado natural, nada exagerado." },
-    en: { proc: "Masculinization & Antiaging", time: "5 months later",
-          text: "I traveled from Chicago for the consultation and it was worth every minute. Natural result, nothing overdone." } },
-  { initials: "P.A.", place: "Córdoba", stars: 5,
-    es: { proc: "Rejuvenecimiento Facial", time: "7 meses después",
-          text: "Lo que más valoro es que nunca sentí que me estaban vendiendo algo — el Dr. Di Maggio te dice lo que conviene, no lo que querés escuchar." },
-    en: { proc: "Facial Rejuvenation", time: "7 months later",
-          text: "What I value most is that I never felt like I was being sold something — Dr. Di Maggio tells you what's right, not what you want to hear." } },
-  { type: "placeholder" },
-  { type: "placeholder" },
+  { initials: "@maeru.jpg",
+    source: { type: "instagram", url: "https://www.instagram.com/maeru.jpg/p/DPj77imEpSZ/" },
+    es: { proc: "Feminización Facial", time: "Durante la recuperación",
+          text: "Los sueños a veces se hacen realidad. Si mi yo de hace años se hubiera enterado de que iba a lograr la feminización facial, hubiera llorado de felicidad, igual que lloré al despertarme tras la cirugía. Gracias al doctor y a MDM Surgery por hacerlo posible: no podría estar más conforme." },
+    en: { proc: "Facial Feminization", time: "During recovery",
+          text: "Dreams sometimes come true. If my younger self had known I would get facial feminization, I would have cried with joy, just like I cried when I woke up after surgery. Thank you to the doctor and MDM Surgery for making it possible: I couldn't be happier." } },
 ];
 
 /* Only the cases that actually have a before/after pair on disk. */

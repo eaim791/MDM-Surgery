@@ -10,3 +10,6 @@ originales/
 # Exports del logo para uso fuera de la web (perfil de Google, redes, etc.) —
 # no lo usa el sitio, no hace falta subirlo al repo.
 brand-assets/
+
+# Configuracion local de Claude Code (servidor de preview) — no es parte del sitio.
+.claude/
