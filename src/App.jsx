@@ -74,7 +74,7 @@ const EMAIL_DOMAIN = "mdmsurgery.com";
 const CONTACT_EMAIL = `${EMAIL_USER}@${EMAIL_DOMAIN}`;
 const INSTAGRAM_HANDLE = "@mdmsurgery";
 const DEVELOPER_NAME = "Emma A.";
-const DEVELOPER_PORTFOLIO_URL = "https://aimettaemma.vercel.app/";
+const DEVELOPER_PORTFOLIO_URL = "https://portfolio-emma-aimetta.vercel.app";
 const FORMSPREE_ENDPOINT = "https://formspree.io/f/xnpaaroa";
 // Ningun humano completa nombre, email y mensaje en menos de esto — un envio
 // mas rapido es un bot que llena el formulario por script.
