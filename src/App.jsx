@@ -1355,13 +1355,16 @@ export default function App() {
         const j = await r.json();
         if (r.status === 401) { salirDelEditor(); setFitMsg("Se venció la sesión. Entrá de nuevo con el candadito y volvé a publicar."); return; }
         if (!j.ok) throw new Error(j.error);
-        if (j.sinCambios) { setFitMsg("No había nada para publicar."); return; }
+        const noEstaban = j.faltantes?.length
+          ? ` No encontré en el sitio: ${j.faltantes.join(", ")} (puede que ya se hayan quitado antes).`
+          : "";
+        if (j.sinCambios) { setFitMsg(`No había nada para publicar.${noEstaban}`); return; }
         // Ya esta en la pagina de verdad: el borrador deja de hacer falta.
         await conPase("/api/borrador", { method: "DELETE" }).catch(() => {});
         subidos.current = new Set();
         setFits({}); setMarcoEdits({}); setArchivos([]); setFirmaGuardada("");
         // El numero del commit confirma que llego a GitHub de verdad.
-        setFitMsg(`Publicado (${j.commit}, ${j.archivos} archivos). En un par de minutos se ve en la página.`);
+        setFitMsg(`Publicado (${j.commit}, ${j.archivos} archivos). En un par de minutos se ve en la página.${noEstaban}`);
       }
     } catch (e) {
       setFitMsg(`Error al publicar: ${e.message}`);

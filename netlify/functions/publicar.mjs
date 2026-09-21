@@ -95,16 +95,40 @@ export default async (req) => {
       arbol.push({ path: ENCUADRES, mode: "100644", type: "blob", sha: blob.sha });
     }
 
-    // 3. Fotos: las nuevas van como blob; las quitadas, con sha en null.
+    /* 3a. Lo que se quiere borrar tiene que existir: si se le pide a GitHub
+       que borre una ruta que no esta en el repositorio, responde
+       "GitRPC::BadObjectState" y no aclara cual es. Asi que primero se lee el
+       arbol del commit y se comparan las rutas (normalizadas, porque los
+       acentos pueden venir escritos de dos maneras distintas). */
+    const aBorrar = archivos.filter((a) => a.accion === "borrar");
+    let enElRepo = null;
+    if (aBorrar.length) {
+      const base = await gh(`/git/trees/${commitBase.tree.sha}?recursive=1`);
+      if (!base.truncated) {
+        enElRepo = new Map(base.tree.filter((x) => x.type === "blob").map((x) => [x.path.normalize("NFC"), x.path]));
+      }
+    }
+    const faltantes = [];
+
+    // 3b. Fotos: las nuevas van como blob; las quitadas, con sha en null.
     for (const { accion, ruta, datos } of archivos) {
       const path = `${BASE_FOTOS}/${ruta}`;
       if (accion === "guardar") {
         const blob = await gh("/git/blobs", { method: "POST", body: JSON.stringify({ content: datos, encoding: "base64" }) });
         arbol.push({ path, mode: "100644", type: "blob", sha: blob.sha });
       } else if (accion === "borrar") {
-        arbol.push({ path, mode: "100644", type: "blob", sha: null });
+        if (enElRepo) {
+          const real = enElRepo.get(path.normalize("NFC"));
+          if (!real) { faltantes.push(ruta); continue; }
+          arbol.push({ path: real, mode: "100644", type: "blob", sha: null });
+        } else {
+          arbol.push({ path, mode: "100644", type: "blob", sha: null });
+        }
       }
     }
+
+    // Si lo unico que habia era borrar fotos que ya no estan, no hay commit.
+    if (!arbol.length) return json({ ok: true, sinCambios: true, faltantes });
 
     // 4. Un solo commit con todo y la rama apuntando ahí.
     const arbolNuevo = await gh("/git/trees", {
@@ -121,7 +145,7 @@ export default async (req) => {
     });
     await gh(`/git/refs/heads/${RAMA}`, { method: "PATCH", body: JSON.stringify({ sha: commit.sha }) });
 
-    return json({ ok: true, commit: commit.sha.slice(0, 7), archivos: arbol.length });
+    return json({ ok: true, commit: commit.sha.slice(0, 7), archivos: arbol.length, faltantes });
   } catch (e) {
     return json({ ok: false, error: String(e.message || e) }, 500);
   }
