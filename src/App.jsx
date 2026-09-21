@@ -1772,6 +1772,16 @@ export default function App() {
       {/* Boton flotante para publicar (solo en desarrollo): va arriba del boton
           de contacto y sube el contenido a internet — un deploy por cada uso,
           por eso pide confirmacion antes. */}
+      {puedeEditar && fitMsg && (
+        <div role="status"
+          className="fixed bottom-40 right-6 z-40 max-w-[17rem] border border-[var(--line)] bg-[var(--surface)] px-4 py-3 text-[12px] leading-relaxed text-[var(--ink)] shadow-[0_8px_24px_var(--shadow)] sm:bottom-44 sm:right-8">
+          {fitMsg}
+          <button type="button" onClick={() => setFitMsg("")} aria-label="Cerrar aviso"
+            className="mt-2 block cursor-pointer text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] transition-opacity hover:opacity-75">
+            Cerrar
+          </button>
+        </div>
+      )}
       {puedeEditar && (
         <button type="button" onClick={publicarPagina} disabled={fitBusy || !pendientes}
           title="Actualizar la página en internet"
@@ -2547,10 +2557,6 @@ export default function App() {
                                       e.target.value = "";
                                     }} />
                                 </label>
-                                <button type="button" onClick={() => quitarAngulo(kase, angle)}
-                                  className="cursor-pointer border border-[var(--line)] px-3 py-1.5 text-[11px] text-[#C0706D] transition-colors hover:border-[#C0706D]">
-                                  Quitar esta foto
-                                </button>
                               </div>
                             </>
                           )}
@@ -2558,6 +2564,20 @@ export default function App() {
                         );
                       })}
                     </div>
+                    {/* El antes y el despues son una sola cosa: la pagina los
+                        muestra de a pares, una foto sola no se puede mostrar.
+                        Por eso se quitan juntos, y el boton lo dice. */}
+                    {puedeEditar && fitEdit && angle && (
+                      <div className="mt-2 flex justify-end">
+                        <button type="button"
+                          onClick={() => {
+                            if (window.confirm(`Se van a quitar las dos fotos de este antes y después (${angle.beforeFile} y ${angle.afterFile}). ¿Seguimos?`)) quitarAngulo(kase, angle);
+                          }}
+                          className="cursor-pointer border border-[var(--line)] px-3 py-1.5 text-[11px] text-[#C0706D] transition-colors hover:border-[#C0706D]">
+                          Quitar este antes y después
+                        </button>
+                      </div>
+                    )}
 
                     </>)}
 

@@ -29,6 +29,27 @@ const gh = async (camino, opciones = {}) => {
 };
 
 export default async (req) => {
+  /* Chequeo temporal para saber por que falla la publicacion. No devuelve
+     ningun dato secreto: solo si las variables estan puestas y si el token
+     llega al repositorio con permiso de escritura. Se saca una vez resuelto. */
+  if (req.method === "GET") {
+    const estado = {
+      claveConfigurada: !!process.env.EDITOR_PASSWORD,
+      tokenConfigurado: !!process.env.EDITOR_GITHUB_TOKEN,
+      rama: RAMA,
+    };
+    if (estado.tokenConfigurado) {
+      try {
+        const repo = await gh("");
+        estado.llegaAlRepositorio = true;
+        estado.puedeEscribir = !!repo.permissions?.push;
+      } catch (e) {
+        estado.llegaAlRepositorio = false;
+        estado.motivo = String(e.message || e);
+      }
+    }
+    return json({ ok: true, estado });
+  }
   if (req.method !== "POST") return json({ ok: false }, 405);
   if (!(await paseValido(pedirPase(req), process.env.EDITOR_PASSWORD))) {
     return json({ ok: false, error: "Sesión vencida, volvé a entrar" }, 401);
