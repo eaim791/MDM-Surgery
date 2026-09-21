@@ -1584,6 +1584,16 @@ export default function App() {
           para no repetir el vacio enorme que este mismo empuje causaba en el
           drawer movil, mas bajo y ya compacto de por si. */}
       <div className="mt-5 border-t border-[var(--line)] pt-4 lg:mt-auto">
+        {/* Candadito del editor: discreto, arriba de las sedes. Abre el ingreso
+            con contrasena; sin eso no hay nada que editar. */}
+        {!sesion && (
+          <button type="button"
+            onClick={() => { setLoginAbierto(true); setLoginMsg(""); setOpen(false); }}
+            aria-label="Entrar al editor" title="Entrar al editor"
+            className="mb-3 flex cursor-pointer items-center text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
+            <Lock size={13} strokeWidth={1.8} />
+          </button>
+        )}
         <ul className="space-y-0.5 text-[11px] leading-relaxed text-[var(--faint)]">
           {SEDES.map((s) => <li key={s}>{s}</li>)}
         </ul>
@@ -3096,15 +3106,6 @@ export default function App() {
                 className="underline decoration-dotted underline-offset-2 transition-colors hover:text-[var(--ink)]">
                 {DEVELOPER_NAME}
               </a>
-              {/* Candadito del editor: discreto, al lado del credito. Abre el
-                  ingreso con contrasena; sin eso no hay nada que editar. */}
-              {!sesion && (
-                <button type="button" onClick={() => { setLoginAbierto(true); setLoginMsg(""); }}
-                  aria-label="Entrar al editor" title="Entrar al editor"
-                  className="ml-3 cursor-pointer align-middle text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
-                  <Lock size={12} strokeWidth={1.8} />
-                </button>
-              )}
             </p>
           </footer>
         </div>
