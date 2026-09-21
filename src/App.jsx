@@ -4,7 +4,7 @@ import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
   Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
   Droplet, EyeOff, Construction, ChevronsRight, ArrowUpRight, MessageCircle,
-  Plus, Minus, Move, MoveHorizontal, MoveVertical, UploadCloud,
+  Plus, Minus, Move, MoveHorizontal, MoveVertical, UploadCloud, Lock,
 } from "lucide-react";
 import {
   SunIcon, MoonIcon, GlobeIcon, ObeliskIcon, SpireIcon, SkylineIcon, EnvelopeIcon, SealIcon,
@@ -959,7 +959,42 @@ export default function App() {
      viven en vite.config.js (servidor de desarrollo), asi que en el sitio
      publicado no existe ni el editor ni forma de escribir nada: el bundler
      borra este bloque entero porque import.meta.env.DEV queda en false. */
+  // Sesion del editor: en el sitio publicado hay que entrar con la contrasena
+  // (candadito del pie de pagina). En desarrollo el editor esta siempre a mano.
+  const [sesion, setSesion] = useState(() => localStorage.getItem("mdm-editor") || "");
+  const [loginAbierto, setLoginAbierto] = useState(false);
+  const [claveLogin, setClaveLogin] = useState("");
+  const [loginMsg, setLoginMsg] = useState("");
+  const puedeEditar = import.meta.env.DEV || !!sesion;
+  const entrarAlEditor = async (e) => {
+    e.preventDefault();
+    setLoginMsg("Entrando…");
+    try {
+      const r = await fetch("/api/login", { method: "POST", body: JSON.stringify({ clave: claveLogin }) });
+      const j = await r.json().catch(() => ({ ok: false, error: "No se pudo conectar" }));
+      if (!j.ok) throw new Error(j.error || "No se pudo entrar");
+      localStorage.setItem("mdm-editor", j.pase);
+      setSesion(j.pase); setLoginAbierto(false); setClaveLogin(""); setLoginMsg("");
+      setFitEdit(true);
+      document.getElementById("resultados")?.scrollIntoView({ behavior: "smooth" });
+    } catch (err) { setLoginMsg(err.message); }
+  };
+  const salirDelEditor = () => {
+    localStorage.removeItem("mdm-editor");
+    setSesion(""); setFitEdit(false); setArchivos([]); setFits({}); setMarcoEdits({});
+  };
+
   const [fitEdit, setFitEdit] = useState(false);
+  // Fotos preparadas y todavia sin publicar: { accion, ruta, datos (base64), url (vista previa) }
+  const [archivos, setArchivos] = useState([]);
+  // Las fotos preparadas viven en esta pestana hasta publicar: si se cierra
+  // antes, se pierden — el navegador avisa.
+  useEffect(() => {
+    if (!archivos.length) return;
+    const avisar = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [archivos.length]);
   const [fits, setFits] = useState({});
   const [marcoEdits, setMarcoEdits] = useState({});
   const [fitMsg, setFitMsg] = useState("");
@@ -973,7 +1008,7 @@ export default function App() {
   const fitDrag = useRef(null);
   const marcoDrag = useRef(null);
   const [fitMoving, setFitMoving] = useState(null);
-  const pendientes = Object.keys(fits).length + Object.keys(marcoEdits).length;
+  const pendientes = Object.keys(fits).length + Object.keys(marcoEdits).length + archivos.length;
 
   const fitOf = (key) => fits[key] ?? ENCUADRE_FOTOS[key] ?? [100, 100, 0, 0];
   const marcoOf = (key, base) => marcoEdits[key] ?? (ENCUADRE_MARCOS[key] !== undefined
@@ -1056,42 +1091,15 @@ export default function App() {
     setFit(key, [ancho, alto, l - (ancho - w) / 2, t - (alto - h) / 2]);
   };
 
-  const guardarEncuadres = async () => {
-    if (!pendientes) return true;
-    const r = await fetch("/__editor/encuadre", {
-      method: "POST", body: JSON.stringify({ fotos: fits, marcos: marcoEdits }),
-    });
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error);
-    setFits({}); setMarcoEdits({});
-    return true;
+  // Las fotos no se escriben en el momento: quedan en cola (con su vista
+  // previa) y se suben todas juntas al publicar. Asi el doctor acomoda todo y
+  // el sitio se actualiza una sola vez.
+  const encolar = (nuevas) => {
+    setArchivos((p) => [...p.filter((a) => !nuevas.some((n) => n.ruta === a.ruta)), ...nuevas]);
+    setFitMsg("Preparado. Falta publicar.");
   };
-  const publicarPagina = async () => {
-    if (!window.confirm("Esto actualiza el sitio en internet, para todo el mundo. ¿Seguimos?")) return;
-    setFitBusy(true); setFitMsg("Publicando…");
-    try {
-      await guardarEncuadres();
-      const r = await fetch("/__editor/publicar", { method: "POST" });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error);
-      setFitMsg(j.sinCambios ? "No había cambios para publicar" : `Publicado (${j.archivos} archivos)`);
-    } catch (e) {
-      setFitMsg(`Error al publicar: ${e.message}`);
-    } finally { setFitBusy(false); }
-  };
-  const actualizarPagina = async () => {
-    setFitBusy(true); setFitMsg("Actualizando…");
-    try {
-      await guardarEncuadres();
-      setFitMsg("Página actualizada");
-    } catch (e) {
-      setFitMsg(`Error: ${e.message}`);
-    } finally { setFitBusy(false); }
-  };
-
-  /* ---- Fotos: reemplazar, quitar, agregar y crear casos ---- */
   // La foto se convierte a webp en el navegador (misma receta que el resto del
-  // sitio: lado mayor 1800px y bajo 200 KB), asi el servidor solo la escribe.
+  // sitio: lado mayor 1800px y bajo 200 KB), asi el servidor solo la guarda.
   const aWebp = async (file) => {
     const bitmap = await createImageBitmap(file);
     const escala = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height));
@@ -1107,77 +1115,173 @@ export default function App() {
     const buffer = await blob.arrayBuffer();
     let binario = "";
     for (const byte of new Uint8Array(buffer)) binario += String.fromCharCode(byte);
-    return btoa(binario);
+    return { datos: btoa(binario), url: URL.createObjectURL(blob) };
   };
-  const aplicarArchivos = async (acciones, aviso) => {
-    setFitBusy(true); setFitMsg(aviso ?? "Guardando…");
-    try {
-      // Al agregar o quitar archivos, el servidor de desarrollo recarga la
-      // pagina sola: lo que este a medio acomodar se guarda antes para que no
-      // se pierda.
-      await guardarEncuadres();
-      const r = await fetch("/__editor/archivos", { method: "POST", body: JSON.stringify({ acciones }) });
+  const prepararFoto = async (ruta, file) => {
+    const { datos, url } = await aWebp(file);
+    return { accion: "guardar", ruta, datos, url };
+  };
+  // Siguiente numero libre para "antes-N.webp" / "despues-N.webp" / "fotoaparte-N.webp",
+  // contando tambien lo que ya esta en cola.
+  const proximoNumero = (kase, tipo) => {
+    const enCola = archivos
+      .filter((a) => a.accion === "guardar" && a.ruta.startsWith(`${kase.slug}/${kase.caseId}/`))
+      .map((a) => a.ruta.split("/")[2]);
+    const nombres = [...(kase.archivos?.[tipo] ?? []), ...enCola.filter((f) => f.toLowerCase().includes(tipo === "aparte" ? "aparte" : tipo))];
+    const usados = nombres.map((f) => Number((f.match(/(\d+)/) ?? [])[1] ?? -1));
+    return Math.max(-1, ...usados) + 1;
+  };
+  const reemplazarFoto = async (kase, archivo, file) =>
+    encolar([await prepararFoto(`${kase.slug}/${kase.caseId}/${archivo}`, file)]);
+  const quitarAngulo = (kase, angle) => encolar([
+    { accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${angle.beforeFile}` },
+    { accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${angle.afterFile}` },
+  ]);
+  const quitarSuelta = (kase, archivo) =>
+    encolar([{ accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${archivo}` }]);
+  const agregarPar = async (kase, fileAntes, fileDespues) => {
+    const n = Math.max(proximoNumero(kase, "antes"), proximoNumero(kase, "despues"));
+    encolar([
+      await prepararFoto(`${kase.slug}/${kase.caseId}/antes-${n}.webp`, fileAntes),
+      await prepararFoto(`${kase.slug}/${kase.caseId}/despues-${n}.webp`, fileDespues),
+    ]);
+  };
+  const agregarSuelta = async (kase, file) =>
+    encolar([await prepararFoto(`${kase.slug}/${kase.caseId}/fotoaparte-${proximoNumero(kase, "aparte")}.webp`, file)]);
+  // Nombre de carpeta libre para el caso nuevo: caso-01, caso-02, ...
+  const proximaCarpeta = (casos) => {
+    const usados = casos.map((c) => Number((c.caseId.match(/caso-(\d+)/) ?? [])[1] ?? 0));
+    return `caso-${String(Math.max(0, ...usados) + 1).padStart(2, "0")}`;
+  };
+  const crearCaso = async (caso) => {
+    encolar([
+      await prepararFoto(`${caso.slug}/${caso.carpeta}/antes-0.webp`, caso.antes.file),
+      await prepararFoto(`${caso.slug}/${caso.carpeta}/despues-0.webp`, caso.despues.file),
+    ]);
+    setCasoNuevo(null);
+  };
+
+  /* Los cambios preparados se ven en la pagina antes de publicar: esta funcion
+     arma la lista de casos "como va a quedar" — con las fotos reemplazadas,
+     sin las quitadas y con las nuevas (incluido un caso nuevo entero). */
+  const sinExt = (f) => f.replace(/\.[^.]+$/, "");
+  const casosConPendientes = (casos, slug) => {
+    if (!archivos.length) return casos;
+    const porCaso = new Map();
+    for (const a of archivos) {
+      const [s0, caso, archivo] = a.ruta.split("/");
+      if (s0 !== slug) continue;
+      if (!porCaso.has(caso)) porCaso.set(caso, []);
+      porCaso.get(caso).push({ ...a, archivo });
+    }
+    if (!porCaso.size) return casos;
+    const conOps = (base, ops) => {
+      const fuera = new Set(ops.filter((o) => o.accion === "borrar").map((o) => o.archivo));
+      const puestas = new Map(ops.filter((o) => o.accion === "guardar").map((o) => [o.archivo, o]));
+      const angles = base.angles
+        .filter((a) => !fuera.has(a.beforeFile) && !fuera.has(a.afterFile))
+        .map((a) => ({ ...a,
+          before: puestas.get(a.beforeFile)?.url ?? a.before,
+          after: puestas.get(a.afterFile)?.url ?? a.after }));
+      const apart = base.apart
+        .filter((x) => !fuera.has(x.file))
+        .map((x) => ({ ...x, image: puestas.get(x.file)?.url ?? x.image }));
+      const yaEstaban = new Set([...base.angles.flatMap((a) => [a.beforeFile, a.afterFile]), ...base.apart.map((x) => x.file)]);
+      const nuevas = [...puestas.values()].filter((g) => !yaEstaban.has(g.archivo));
+      const num = (f) => (f.match(/(\d+)/) ?? [])[1];
+      const clave = (f) => `${slug}/${base.caseId}/${sinExt(f)}`.normalize("NFC");
+      for (const a of nuevas.filter((g) => /antes/i.test(g.archivo))) {
+        const d = nuevas.find((g) => /despu|dsp|after/i.test(g.archivo) && num(g.archivo) === num(a.archivo));
+        if (!d) continue;
+        angles.push({
+          before: a.url, after: d.url, beforeFile: a.archivo, afterFile: d.archivo,
+          beforeKey: clave(a.archivo), afterKey: clave(d.archivo),
+          beforeFit: null, afterFit: null, frame: marcoGuardado(4 / 5),
+          beforeSensitive: false, afterSensitive: false,
+        });
+      }
+      for (const g of nuevas.filter((x) => /aparte/i.test(x.archivo))) {
+        apart.push({ image: g.url, file: g.archivo, frame: 4 / 5, sensitive: false });
+      }
+      const archivosCaso = {
+        antes: [...(base.archivos?.antes ?? []), ...nuevas.filter((g) => /antes/i.test(g.archivo)).map((g) => g.archivo)],
+        despues: [...(base.archivos?.despues ?? []), ...nuevas.filter((g) => /despu/i.test(g.archivo)).map((g) => g.archivo)],
+        aparte: [...(base.archivos?.aparte ?? []), ...nuevas.filter((g) => /aparte/i.test(g.archivo)).map((g) => g.archivo)],
+      };
+      return { ...base, angles, apart, archivos: archivosCaso };
+    };
+    const lista = casos.map((c) => {
+      const ops = porCaso.get(c.caseId);
+      if (!ops) return c;
+      porCaso.delete(c.caseId);
+      return conOps(c, ops);
+    });
+    for (const [caso, ops] of porCaso) {
+      lista.push(conOps({ caseId: caso, slug, angles: [], apart: [], focus: "50% 35%",
+                          watermark: true, note: null, archivos: { antes: [], despues: [], aparte: [] } }, ops));
+    }
+    return lista
+      .filter((c) => c.angles.length || c.apart.length)
+      .map((c, i) => ({ ...c, n: String(i + 1).padStart(2, "0") }));
+  };
+
+  /* Publicar: en el sitio publicado se manda todo a la funcion de Netlify, que
+     lo sube a GitHub en un commit y dispara la reconstruccion. En desarrollo se
+     escribe en el disco de esta compu (endpoints de vite.config.js). */
+  const guardarLocal = async () => {
+    if (Object.keys(fits).length || Object.keys(marcoEdits).length) {
+      const r = await fetch("/__editor/encuadre", { method: "POST", body: JSON.stringify({ fotos: fits, marcos: marcoEdits }) });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
-      // Sin recargar la pagina: las fotos nuevas entran solas y las
-      // reemplazadas se refrescan con ?v= (mismo nombre de archivo).
-      const marca = Date.now();
-      setVersiones((v) => ({ ...v, ...Object.fromEntries(acciones.map((a) => [a.ruta, marca])) }));
-      setFitMsg("Listo");
+    }
+    if (archivos.length) {
+      const r = await fetch("/__editor/archivos", {
+        method: "POST",
+        body: JSON.stringify({ acciones: archivos.map(({ accion, ruta, datos }) => ({ accion, ruta, datos })) }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error);
+    }
+    setFits({}); setMarcoEdits({}); setArchivos([]);
+  };
+  const actualizarPagina = async () => {
+    if (!pendientes) return;
+    setFitBusy(true); setFitMsg("Guardando…");
+    try {
+      if (import.meta.env.DEV) await guardarLocal();
+      setFitMsg(import.meta.env.DEV ? "Guardado en esta computadora" : "Guardado acá. Para que lo vean todos, tocá la nube.");
     } catch (e) {
       setFitMsg(`Error: ${e.message}`);
     } finally { setFitBusy(false); }
   };
-  // Para mostrar la version nueva de una foto reemplazada.
-  const conVersion = (src, kase, archivo) => {
-    const v = versiones[`${kase.slug}/${kase.caseId}/${archivo}`];
-    return v ? `${src}${src.includes("?") ? "&" : "?"}v=${v}` : src;
-  };
-  // Siguiente numero libre para "antes-N.webp" / "despues-N.webp" / "fotoaparte-N.webp"
-  const proximoNumero = (archivos = []) => {
-    const usados = archivos.map((f) => Number((f.match(/(\d+)/) ?? [])[1] ?? -1));
-    return Math.max(-1, ...usados) + 1;
-  };
-  const reemplazarFoto = async (kase, archivo, file) => {
-    const datos = await aWebp(file);
-    await aplicarArchivos([{ accion: "guardar", ruta: `${kase.slug}/${kase.caseId}/${archivo}`, datos }],
-      "Reemplazando la foto…");
-  };
-  const quitarAngulo = async (kase, angle) => {
-    await aplicarArchivos([
-      { accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${angle.beforeFile}` },
-      { accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${angle.afterFile}` },
-    ], "Quitando la foto…");
-  };
-  const quitarSuelta = async (kase, archivo) => {
-    await aplicarArchivos([{ accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${archivo}` }],
-      "Quitando la foto…");
-  };
-  const agregarPar = async (kase, fileAntes, fileDespues) => {
-    const n = Math.max(proximoNumero(kase.archivos.antes), proximoNumero(kase.archivos.despues));
-    await aplicarArchivos([
-      { accion: "guardar", ruta: `${kase.slug}/${kase.caseId}/antes-${n}.webp`, datos: await aWebp(fileAntes) },
-      { accion: "guardar", ruta: `${kase.slug}/${kase.caseId}/despues-${n}.webp`, datos: await aWebp(fileDespues) },
-    ], "Agregando el antes y después…");
-  };
-  const agregarSuelta = async (kase, file) => {
-    const n = proximoNumero(kase.archivos.aparte);
-    await aplicarArchivos([
-      { accion: "guardar", ruta: `${kase.slug}/${kase.caseId}/fotoaparte-${n}.webp`, datos: await aWebp(file) },
-    ], "Agregando la foto…");
-  };
-  // Nombre de carpeta libre para el caso nuevo: caso-01, caso-02, ...
-  const proximaCarpeta = (casos) => {
-    const usados = casos.map((c) => Number((c.caseId.match(/caso-(\d+)/) ?? [])[1] ?? 0));
-    const n = Math.max(0, ...usados) + 1;
-    return `caso-${String(n).padStart(2, "0")}`;
-  };
-  const crearCaso = async (caso) => {
-    await aplicarArchivos([
-      { accion: "guardar", ruta: `${caso.slug}/${caso.carpeta}/antes-0.webp`, datos: await aWebp(caso.antes.file) },
-      { accion: "guardar", ruta: `${caso.slug}/${caso.carpeta}/despues-0.webp`, datos: await aWebp(caso.despues.file) },
-    ], "Creando el caso…");
-    setCasoNuevo(null);
+  const publicarPagina = async () => {
+    if (!window.confirm("Esto actualiza el sitio en internet, para todo el mundo. ¿Seguimos?")) return;
+    setFitBusy(true); setFitMsg("Publicando…");
+    try {
+      if (import.meta.env.DEV) {
+        await guardarLocal();
+        const r = await fetch("/__editor/publicar", { method: "POST" });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error);
+        setFitMsg(j.sinCambios ? "No había cambios para publicar" : `Publicado (${j.archivos} archivos)`);
+      } else {
+        const r = await fetch("/api/publicar", {
+          method: "POST",
+          headers: { authorization: `Bearer ${sesion}` },
+          body: JSON.stringify({
+            fotos: fits, marcos: marcoEdits,
+            archivos: archivos.map(({ accion, ruta, datos }) => ({ accion, ruta, datos })),
+          }),
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error);
+        if (r.status === 401) return salirDelEditor();
+        setFits({}); setMarcoEdits({}); setArchivos([]);
+        setFitMsg(j.sinCambios ? "No había cambios" : "Publicado. En un par de minutos se ve en la página.");
+      }
+    } catch (e) {
+      setFitMsg(`Error al publicar: ${e.message}`);
+    } finally { setFitBusy(false); }
   };
 
   const scrollTo = (id, closeMenu = true) => {
@@ -1578,13 +1682,44 @@ export default function App() {
       {/* Boton flotante para publicar (solo en desarrollo): va arriba del boton
           de contacto y sube el contenido a internet — un deploy por cada uso,
           por eso pide confirmacion antes. */}
-      {import.meta.env.DEV && (
-        <button type="button" onClick={publicarPagina} disabled={fitBusy}
+      {puedeEditar && (
+        <button type="button" onClick={publicarPagina} disabled={fitBusy || !pendientes}
           title="Actualizar la página en internet"
           className="fixed bottom-24 right-6 z-40 flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-[var(--accent)] bg-[var(--accent)] text-[var(--surface)] shadow-[0_8px_24px_var(--shadow)] transition-opacity duration-200 hover:opacity-85 active:scale-90 disabled:opacity-50 sm:bottom-28 sm:right-8 sm:h-14 sm:w-14">
           <UploadCloud size={22} strokeWidth={1.8} />
         </button>
       )}
+
+      {/* Ingreso al editor (candadito del pie). */}
+      <AnimatePresence>
+        {loginAbierto && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setLoginAbierto(false)} role="dialog" aria-modal="true"
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-6">
+            <motion.form initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              onClick={(e) => e.stopPropagation()} onSubmit={entrarAlEditor}
+              className="relative w-full max-w-xs rounded-2xl bg-[var(--surface)] p-8 text-center shadow-[0_20px_60px_var(--shadow)]">
+              <button type="button" onClick={() => setLoginAbierto(false)} aria-label={t.contact.close}
+                className="absolute right-5 top-5 cursor-pointer text-[var(--muted)] transition-colors hover:text-[var(--ink)]">
+                <X size={18} />
+              </button>
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
+                <Lock size={20} strokeWidth={1.8} />
+              </span>
+              <h3 className="mt-5 font-display text-[20px] font-normal text-[var(--ink)]">Editor de fotos</h3>
+              <input type="password" value={claveLogin} onChange={(e) => setClaveLogin(e.target.value)}
+                placeholder="Contraseña" autoFocus autoComplete="current-password"
+                className="mt-5 w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-center text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+              {loginMsg && <p className="mt-2 text-[12px] text-[var(--muted)]">{loginMsg}</p>}
+              <button type="submit"
+                className="mt-5 w-full cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-3 text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85 active:scale-[0.98]">
+                Entrar
+              </button>
+            </motion.form>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Ventana emergente de contacto — el mismo recuadro de la seccion
           Contacto (misma info, mismo formulario), abierta desde el CTA del
@@ -1981,7 +2116,7 @@ export default function App() {
 
             {(() => {
               const proc = PROCEDURES_WITH_CASES.find((x) => x.slug === activeSlug) ?? PROCEDURES_WITH_CASES[0];
-              const cases = casesFor(proc.slug);
+              const cases = casosConPendientes(casesFor(proc.slug), proc.slug);
               const ci = Math.min(activeCase, cases.length - 1);
               const kase = cases[ci];
               const ai = Math.min(activeAngle, kase.angles.length - 1);
@@ -2047,7 +2182,7 @@ export default function App() {
                             {t.res.case} {c.n}
                           </button>
                         ))}
-                        {import.meta.env.DEV && fitEdit && (
+                        {puedeEditar && fitEdit && (
                           <button type="button"
                             onClick={() => setCasoNuevo({ slug: proc.slug, carpeta: proximaCarpeta(cases), antes: null, despues: null })}
                             className="flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-[var(--accent)] px-4 py-1.5 text-[11px] uppercase tracking-[0.16em] text-[var(--accent)] transition-colors duration-200 hover:bg-[var(--accent-soft)]">
@@ -2107,19 +2242,25 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Panel del editor — solo en desarrollo (ver "Editor de
-                        Resultados" mas arriba). En el sitio publicado no existe. */}
-                    {import.meta.env.DEV && (
+                    {/* Panel del editor: en el sitio publicado aparece solo despues
+                        de entrar con la contrasena (candadito del pie). */}
+                    {puedeEditar && (
                       <div className="mt-4 flex flex-wrap items-center gap-3 border border-dashed border-[var(--accent)] bg-[var(--accent-soft)] px-4 py-3">
                         <button type="button" onClick={() => { setFitEdit((v) => !v); setFitMsg(""); setCasoNuevo(null); }}
                           className="cursor-pointer border border-[var(--ink)] px-3 py-2 text-[12px] font-medium text-[var(--ink)] transition-opacity hover:opacity-75">
                           {fitEdit ? "Cerrar editor" : "Editar fotos"}
                         </button>
+                        {!!sesion && (
+                          <button type="button" onClick={salirDelEditor}
+                            className="cursor-pointer text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] transition-opacity hover:opacity-75">
+                            Salir
+                          </button>
+                        )}
                         {fitEdit && (
                           <>
                             <button type="button" onClick={actualizarPagina} disabled={fitBusy || !pendientes}
                               className="cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[12px] font-medium text-[var(--surface)] transition-opacity hover:opacity-85 disabled:cursor-default disabled:opacity-40">
-                              Guardar cambios{pendientes ? " (" + pendientes + ")" : ""}
+                              {import.meta.env.DEV ? "Guardar cambios" : "Listo, guardar"}{pendientes ? " (" + pendientes + ")" : ""}
                             </button>
                             <span className="text-[12px] text-[var(--muted)]">
                               Arrastrá la foto para moverla · Estirá los bordes con flechas para el tamaño ·
@@ -2132,7 +2273,7 @@ export default function App() {
                     )}
 
                     {/* Agregar fotos a este caso — chico, debajo de los casos. */}
-                    {import.meta.env.DEV && fitEdit && !casoNuevo && (
+                    {puedeEditar && fitEdit && !casoNuevo && (
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <label className="flex cursor-pointer items-center gap-1.5 border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-[11px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
                           <Plus size={12} strokeWidth={2} aria-hidden="true" />
@@ -2155,7 +2296,7 @@ export default function App() {
                     )}
 
                     {/* Caso nuevo: dos recuadros vacios esperando el antes y el despues. */}
-                    {import.meta.env.DEV && fitEdit && casoNuevo && casoNuevo.slug === proc.slug && (
+                    {puedeEditar && fitEdit && casoNuevo && casoNuevo.slug === proc.slug && (
                       <div className="mt-4">
                         <div className="flex flex-wrap items-center gap-3">
                           <p className="text-[12px] font-medium text-[var(--ink)]">Caso nuevo en {proc[lang].name}</p>
@@ -2200,14 +2341,14 @@ export default function App() {
                     )}
 
                     {/* Before / after */}
-                    {!(import.meta.env.DEV && casoNuevo) && (<>
+                    {!(puedeEditar && casoNuevo) && (<>
                     {/* items-end: cuando un recuadro se achica (la foto se corrio),
                         los dos quedan alineados por abajo — la linea de abajo
                         sigue pareja entre el antes y el despues. */}
                     <div ref={parRef} className="res-pair mt-5 grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
                       {marcos.map(({ caption, src, fit, entera, frame, sensitive, fitKey }) => {
                         const oculta = sensitive && !revealedSensitive.has(src);
-                        const editando = import.meta.env.DEV && fitEdit && !!fitKey;
+                        const editando = puedeEditar && fitEdit && !!fitKey;
                         // Solo se usa encuadre propio si esta guardado (o si se esta
                         // editando ahora): sin eso el par vuelve al recorte por defecto.
                         const crudo = fitKey && (fits[fitKey] || editando || fit) ? fitOf(fitKey) : null;
@@ -2239,9 +2380,7 @@ export default function App() {
                                 el mismo punto de la cara que su par, asi el antes y el despues
                                 quedan alineados. El archivo no se recorta: al hacer click el
                                 lightbox lo muestra entero. */}
-                            <img key={src} src={editando || versiones[`${kase.slug}/${kase.caseId}/${caption === t.res.before ? angle?.beforeFile : angle?.afterFile}`]
-                                ? conVersion(src, kase, caption === t.res.before ? angle?.beforeFile : angle?.afterFile) : src}
-                              alt={`${proc[lang].name} · ${caption}`} loading="lazy" draggable={false}
+                            <img key={src} src={src} alt={`${proc[lang].name} · ${caption}`} loading="lazy" draggable={false}
                               style={fitAjustado ?? (entera ? undefined : { objectPosition: kase.focus })}
                               className={`${editando ? "" : "transition-transform duration-300"} ${oculta ? "scale-110 blur-2xl" : editando ? "" : "group-hover:scale-[1.03]"} ${
                                 fitAjustado ? "absolute max-w-none object-cover"
@@ -2362,7 +2501,7 @@ export default function App() {
                               )}
                             </button>
                             {/* Reemplazar o quitar la foto suelta — solo en el editor. */}
-                            {import.meta.env.DEV && fitEdit && (
+                            {puedeEditar && fitEdit && (
                               <div className="flex items-center gap-1">
                                 <label className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[10px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
                                   Reemplazar
@@ -2877,6 +3016,15 @@ export default function App() {
                 className="underline decoration-dotted underline-offset-2 transition-colors hover:text-[var(--ink)]">
                 {DEVELOPER_NAME}
               </a>
+              {/* Candadito del editor: discreto, al lado del credito. Abre el
+                  ingreso con contrasena; sin eso no hay nada que editar. */}
+              {!sesion && (
+                <button type="button" onClick={() => { setLoginAbierto(true); setLoginMsg(""); }}
+                  aria-label="Entrar al editor" title="Entrar al editor"
+                  className="ml-3 cursor-pointer align-middle text-[var(--faint)] transition-colors hover:text-[var(--ink)]">
+                  <Lock size={12} strokeWidth={1.8} />
+                </button>
+              )}
             </p>
           </footer>
         </div>

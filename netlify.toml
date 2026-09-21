@@ -1,0 +1,12 @@
+# Netlify: build del sitio + funciones del editor (login y publicar).
+# Las funciones quedan en /api/... gracias al redirect de abajo.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200

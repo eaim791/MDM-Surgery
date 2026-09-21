@@ -1,0 +1,107 @@
+import { json, paseValido, pedirPase } from "./_sesion.mjs";
+
+/* POST /api/publicar
+   Sube a GitHub, en un solo commit, lo que el editor dejó preparado:
+   fotos nuevas o reemplazadas, fotos quitadas y el archivo de encuadres.
+   Netlify ve el commit y reconstruye el sitio solo. */
+
+const REPO = process.env.EDITOR_REPO || "eaim791/MDM-Surgery";
+const RAMA = process.env.EDITOR_RAMA || "main";
+const BASE_FOTOS = "src/assets/procedimientos";
+const ENCUADRES = "src/encuadre.json";
+// Solo rutas "<procedimiento>/<caso>/<archivo>.webp": sin "..", sin salirse.
+const RUTA_OK = /^[^/\\]+\/[^/\\]+\/[^/\\]+\.webp$/;
+
+const gh = async (camino, opciones = {}) => {
+  const r = await fetch(`https://api.github.com/repos/${REPO}${camino}`, {
+    ...opciones,
+    headers: {
+      authorization: `Bearer ${process.env.EDITOR_GITHUB_TOKEN}`,
+      accept: "application/vnd.github+json",
+      "content-type": "application/json",
+      "user-agent": "mdm-surgery-editor",
+      ...(opciones.headers || {}),
+    },
+  });
+  const cuerpo = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(cuerpo.message || `GitHub respondió ${r.status}`);
+  return cuerpo;
+};
+
+export default async (req) => {
+  if (req.method !== "POST") return json({ ok: false }, 405);
+  if (!(await paseValido(pedirPase(req), process.env.EDITOR_PASSWORD))) {
+    return json({ ok: false, error: "Sesión vencida, volvé a entrar" }, 401);
+  }
+  if (!process.env.EDITOR_GITHUB_TOKEN) {
+    return json({ ok: false, error: "Falta configurar EDITOR_GITHUB_TOKEN" }, 500);
+  }
+
+  try {
+    const { fotos = {}, marcos = {}, archivos = [] } = await req.json();
+    for (const a of archivos) {
+      if (!RUTA_OK.test(a.ruta)) return json({ ok: false, error: `Ruta no permitida: ${a.ruta}` }, 400);
+    }
+    if (!archivos.length && !Object.keys(fotos).length && !Object.keys(marcos).length) {
+      return json({ ok: true, sinCambios: true });
+    }
+
+    // 1. Punto de partida: el último commit de la rama.
+    const ref = await gh(`/git/ref/heads/${RAMA}`);
+    const commitBase = await gh(`/git/commits/${ref.object.sha}`);
+
+    // 2. Encuadres: se lee el archivo actual y se le aplican los cambios.
+    const arbol = [];
+    if (Object.keys(fotos).length || Object.keys(marcos).length) {
+      const actual = await gh(`/contents/${ENCUADRES}?ref=${RAMA}`);
+      // De base64 a texto pasando por bytes: las claves tienen acentos
+      // ("Julieta Espósito") y atob solo devuelve bytes sueltos.
+      const bytes = Uint8Array.from(atob(actual.content.replace(/\n/g, "")), (c) => c.charCodeAt(0));
+      const datos = JSON.parse(new TextDecoder().decode(bytes));
+      const redondear = (n) => Math.round(n * 100) / 100;
+      for (const [clave, valor] of Object.entries(fotos)) {
+        if (valor === null) delete datos.fotos[clave];
+        else datos.fotos[clave] = valor.map(redondear);
+      }
+      for (const [clave, valor] of Object.entries(marcos)) {
+        if (valor === null) delete datos.marcos[clave];
+        else datos.marcos[clave] = Array.isArray(valor) ? valor.map(redondear) : redondear(valor);
+      }
+      const blob = await gh("/git/blobs", {
+        method: "POST",
+        body: JSON.stringify({ content: JSON.stringify(datos), encoding: "utf-8" }),
+      });
+      arbol.push({ path: ENCUADRES, mode: "100644", type: "blob", sha: blob.sha });
+    }
+
+    // 3. Fotos: las nuevas van como blob; las quitadas, con sha en null.
+    for (const { accion, ruta, datos } of archivos) {
+      const path = `${BASE_FOTOS}/${ruta}`;
+      if (accion === "guardar") {
+        const blob = await gh("/git/blobs", { method: "POST", body: JSON.stringify({ content: datos, encoding: "base64" }) });
+        arbol.push({ path, mode: "100644", type: "blob", sha: blob.sha });
+      } else if (accion === "borrar") {
+        arbol.push({ path, mode: "100644", type: "blob", sha: null });
+      }
+    }
+
+    // 4. Un solo commit con todo y la rama apuntando ahí.
+    const arbolNuevo = await gh("/git/trees", {
+      method: "POST",
+      body: JSON.stringify({ base_tree: commitBase.tree.sha, tree: arbol }),
+    });
+    const commit = await gh("/git/commits", {
+      method: "POST",
+      body: JSON.stringify({
+        message: "Actualiza las fotos de Resultados desde el editor",
+        tree: arbolNuevo.sha,
+        parents: [ref.object.sha],
+      }),
+    });
+    await gh(`/git/refs/heads/${RAMA}`, { method: "PATCH", body: JSON.stringify({ sha: commit.sha }) });
+
+    return json({ ok: true, commit: commit.sha.slice(0, 7), archivos: arbol.length });
+  } catch (e) {
+    return json({ ok: false, error: String(e.message || e) }, 500);
+  }
+};
