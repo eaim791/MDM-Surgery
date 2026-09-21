@@ -981,20 +981,14 @@ export default function App() {
   };
   const salirDelEditor = () => {
     localStorage.removeItem("mdm-editor");
+    borradorCargado.current = false; subidos.current = new Set();
     setSesion(""); setFitEdit(false); setArchivos([]); setFits({}); setMarcoEdits({});
+    setFirmaGuardada("");
   };
 
   const [fitEdit, setFitEdit] = useState(false);
   // Fotos preparadas y todavia sin publicar: { accion, ruta, datos (base64), url (vista previa) }
   const [archivos, setArchivos] = useState([]);
-  // Las fotos preparadas viven en esta pestana hasta publicar: si se cierra
-  // antes, se pierden — el navegador avisa.
-  useEffect(() => {
-    if (!archivos.length) return;
-    const avisar = (e) => { e.preventDefault(); e.returnValue = ""; };
-    window.addEventListener("beforeunload", avisar);
-    return () => window.removeEventListener("beforeunload", avisar);
-  }, [archivos.length]);
   const [fits, setFits] = useState({});
   const [marcoEdits, setMarcoEdits] = useState({});
   const [fitMsg, setFitMsg] = useState("");
@@ -1009,6 +1003,54 @@ export default function App() {
   const marcoDrag = useRef(null);
   const [fitMoving, setFitMoving] = useState(null);
   const pendientes = Object.keys(fits).length + Object.keys(marcoEdits).length + archivos.length;
+  /* Borrador en la nube: "Listo, guardar" manda los cambios a Netlify (funcion
+     borrador.mjs) sin tocar la pagina publica. Asi se puede cerrar la pagina y
+     seguir despues, o desde otra computadora, y recien al tocar la nube se
+     publica para todo el mundo. En desarrollo no hace falta: se escribe en el
+     disco de esta compu. */
+  const firmaDe = (f, m, a) => JSON.stringify([f, m, a.map((x) => x.accion + x.ruta)]);
+  const firma = firmaDe(fits, marcoEdits, archivos);
+  const [firmaGuardada, setFirmaGuardada] = useState("");
+  const sinGuardar = pendientes > 0 && (import.meta.env.DEV || firma !== firmaGuardada);
+  // Fotos que ya viajaron al borrador: no se vuelven a subir en cada guardado.
+  const subidos = useRef(new Set());
+  const borradorCargado = useRef(false);
+  const conPase = (url, opciones = {}) =>
+    fetch(url, { ...opciones, headers: { ...(opciones.headers || {}), authorization: `Bearer ${sesion}` } });
+  // Los cambios sin guardar viven solo en esta pestana: el navegador avisa.
+  useEffect(() => {
+    if (!sinGuardar) return;
+    const avisar = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [sinGuardar]);
+  // Al entrar (o al recargar con la sesion abierta) vuelve lo que habia quedado.
+  useEffect(() => {
+    if (import.meta.env.DEV || !sesion || borradorCargado.current) return;
+    borradorCargado.current = true;
+    (async () => {
+      try {
+        const r = await conPase("/api/borrador");
+        if (r.status === 401) return salirDelEditor();
+        const j = await r.json();
+        if (!j.ok || !j.borrador) return;
+        const { fotos = {}, marcos = {}, archivos: lista = [] } = j.borrador;
+        const recuperados = [];
+        for (const a of lista) {
+          if (a.accion !== "guardar") { recuperados.push(a); continue; }
+          const rf = await conPase(`/api/borrador?archivo=${encodeURIComponent(a.ruta)}`);
+          const jf = await rf.json();
+          if (jf.ok) recuperados.push({ ...a, datos: jf.datos, url: urlDeBase64(jf.datos) });
+        }
+        if (!recuperados.length && !Object.keys(fotos).length && !Object.keys(marcos).length) return;
+        subidos.current = new Set(recuperados.filter((a) => a.accion === "guardar").map((a) => a.ruta));
+        setFits(fotos); setMarcoEdits(marcos); setArchivos(recuperados);
+        setFirmaGuardada(firmaDe(fotos, marcos, recuperados));
+        setFitEdit(true);
+        setFitMsg("Recuperé los cambios que habías dejado sin publicar.");
+      } catch { /* si el borrador no se puede leer, se empieza limpio */ }
+    })();
+  }, [sesion]);
 
   const fitOf = (key) => fits[key] ?? ENCUADRE_FOTOS[key] ?? [100, 100, 0, 0];
   const marcoOf = (key, base) => marcoEdits[key] ?? (ENCUADRE_MARCOS[key] !== undefined
@@ -1095,6 +1137,7 @@ export default function App() {
   // previa) y se suben todas juntas al publicar. Asi el doctor acomoda todo y
   // el sitio se actualiza una sola vez.
   const encolar = (nuevas) => {
+    for (const n of nuevas) subidos.current.delete(n.ruta);
     setArchivos((p) => [...p.filter((a) => !nuevas.some((n) => n.ruta === a.ruta)), ...nuevas]);
     setFitMsg("Preparado. Falta publicar.");
   };
@@ -1116,6 +1159,13 @@ export default function App() {
     let binario = "";
     for (const byte of new Uint8Array(buffer)) binario += String.fromCharCode(byte);
     return { datos: btoa(binario), url: URL.createObjectURL(blob) };
+  };
+  // Una foto que vuelve del borrador llega en base64: se arma de nuevo para verla.
+  const urlDeBase64 = (datos) => {
+    const binario = atob(datos);
+    const bytes = new Uint8Array(binario.length);
+    for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes], { type: "image/webp" }));
   };
   const prepararFoto = async (ruta, file) => {
     const { datos, url } = await aWebp(file);
@@ -1244,12 +1294,39 @@ export default function App() {
     }
     setFits({}); setMarcoEdits({}); setArchivos([]);
   };
+  /* Guarda en el borrador de la nube: primero las fotos que todavia no
+     viajaron (una por una, porque son pesadas) y despues la lista y los
+     encuadres. No toca la pagina que ven las visitas. */
+  const guardarBorrador = async () => {
+    for (const a of archivos) {
+      if (a.accion !== "guardar" || subidos.current.has(a.ruta)) continue;
+      const r = await conPase(`/api/borrador?archivo=${encodeURIComponent(a.ruta)}`,
+                              { method: "POST", body: JSON.stringify({ datos: a.datos }) });
+      const j = await r.json();
+      if (r.status === 401) { salirDelEditor(); throw new Error("Se venció la sesión, volvé a entrar"); }
+      if (!j.ok) throw new Error(j.error);
+      subidos.current.add(a.ruta);
+    }
+    const r = await conPase("/api/borrador", {
+      method: "POST",
+      body: JSON.stringify({ fotos: fits, marcos: marcoEdits, archivos: archivos.map(({ accion, ruta }) => ({ accion, ruta })) }),
+    });
+    const j = await r.json();
+    if (r.status === 401) { salirDelEditor(); throw new Error("Se venció la sesión, volvé a entrar"); }
+    if (!j.ok) throw new Error(j.error);
+    setFirmaGuardada(firma);
+  };
   const actualizarPagina = async () => {
     if (!pendientes) return;
     setFitBusy(true); setFitMsg("Guardando…");
     try {
-      if (import.meta.env.DEV) await guardarLocal();
-      setFitMsg(import.meta.env.DEV ? "Guardado en esta computadora" : "Guardado acá. Para que lo vean todos, tocá la nube.");
+      if (import.meta.env.DEV) {
+        await guardarLocal();
+        setFitMsg("Guardado en esta computadora");
+      } else {
+        await guardarBorrador();
+        setFitMsg("Guardado. Podés cerrar la página y seguir después. Para que lo vean todos, tocá la nube.");
+      }
     } catch (e) {
       setFitMsg(`Error: ${e.message}`);
     } finally { setFitBusy(false); }
@@ -1274,9 +1351,12 @@ export default function App() {
           }),
         });
         const j = await r.json();
-        if (!j.ok) throw new Error(j.error);
         if (r.status === 401) return salirDelEditor();
-        setFits({}); setMarcoEdits({}); setArchivos([]);
+        if (!j.ok) throw new Error(j.error);
+        // Ya esta en la pagina de verdad: el borrador deja de hacer falta.
+        await conPase("/api/borrador", { method: "DELETE" }).catch(() => {});
+        subidos.current = new Set();
+        setFits({}); setMarcoEdits({}); setArchivos([]); setFirmaGuardada("");
         setFitMsg(j.sinCambios ? "No había cambios" : "Publicado. En un par de minutos se ve en la página.");
       }
     } catch (e) {
@@ -2258,9 +2338,9 @@ export default function App() {
                         )}
                         {fitEdit && (
                           <>
-                            <button type="button" onClick={actualizarPagina} disabled={fitBusy || !pendientes}
+                            <button type="button" onClick={actualizarPagina} disabled={fitBusy || !sinGuardar}
                               className="cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[12px] font-medium text-[var(--surface)] transition-opacity hover:opacity-85 disabled:cursor-default disabled:opacity-40">
-                              {import.meta.env.DEV ? "Guardar cambios" : "Listo, guardar"}{pendientes ? " (" + pendientes + ")" : ""}
+                              {import.meta.env.DEV ? "Guardar cambios" : sinGuardar ? "Listo, guardar" : "Guardado"}{pendientes ? " (" + pendientes + ")" : ""}
                             </button>
                             <span className="text-[12px] text-[var(--muted)]">
                               Arrastrá la foto para moverla · Estirá los bordes con flechas para el tamaño ·
