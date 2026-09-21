@@ -1048,7 +1048,9 @@ export default function App() {
         setFirmaGuardada(firmaDe(fotos, marcos, recuperados));
         setFitEdit(true);
         setFitMsg("Recuperé los cambios que habías dejado sin publicar.");
-      } catch { /* si el borrador no se puede leer, se empieza limpio */ }
+      } catch (e) {
+        setFitMsg(`No pude recuperar el borrador: ${e.message}`);
+      }
     })();
   }, [sesion]);
 
@@ -1351,13 +1353,15 @@ export default function App() {
           }),
         });
         const j = await r.json();
-        if (r.status === 401) return salirDelEditor();
+        if (r.status === 401) { salirDelEditor(); setFitMsg("Se venció la sesión. Entrá de nuevo con el candadito y volvé a publicar."); return; }
         if (!j.ok) throw new Error(j.error);
+        if (j.sinCambios) { setFitMsg("No había nada para publicar."); return; }
         // Ya esta en la pagina de verdad: el borrador deja de hacer falta.
         await conPase("/api/borrador", { method: "DELETE" }).catch(() => {});
         subidos.current = new Set();
         setFits({}); setMarcoEdits({}); setArchivos([]); setFirmaGuardada("");
-        setFitMsg(j.sinCambios ? "No había cambios" : "Publicado. En un par de minutos se ve en la página.");
+        // El numero del commit confirma que llego a GitHub de verdad.
+        setFitMsg(`Publicado (${j.commit}, ${j.archivos} archivos). En un par de minutos se ve en la página.`);
       }
     } catch (e) {
       setFitMsg(`Error al publicar: ${e.message}`);
