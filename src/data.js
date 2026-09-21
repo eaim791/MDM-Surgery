@@ -12,7 +12,11 @@ const PAPER_IMAGES = import.meta.glob("./assets/pappers/*.webp", { eager: true, 
 
 const CASE_IMAGES = import.meta.glob("./assets/procedimientos/*/*/*.webp", { eager: true, import: "default" });
 
-/* Encuadre de cada foto, calculado con revision3/encuadre.py.
+/* Encuadre de cada foto. Se ajusta a mano desde el propio sitio, con el editor
+   de encuadre que aparece solo en desarrollo (ver EncuadreEditor en App.jsx):
+   se arrastra la foto para moverla, se hace zoom con la rueda y "Guardar"
+   escribe este mismo archivo. Antes lo calculaba un script con deteccion de
+   caras, que fallaba en los perfiles y en las fotos de quirofano.
    - fotos:  [ancho, alto, izquierda, arriba] en porcentaje del recuadro. Amplia la foto
              sobre la zona del procedimiento y deja el mismo punto de la cara en el mismo
              lugar del recuadro en el antes y en el despues.
@@ -23,16 +27,45 @@ const CASE_IMAGES = import.meta.glob("./assets/procedimientos/*/*/*.webp", { eag
 import ENCUADRES from "./encuadre.json";
 const sinExtension = (ruta) => ruta.replace(/\.[^./]+$/, "");
 const clave = (slug, caseId, file) => sinExtension(`${slug}/${caseId}/${file}`).normalize("NFC");
+/* [ancho, alto, izquierda, arriba] en % del recuadro -> estilo del <img>. */
+export const fitStyle = (r) => ({
+  width: `${r[0]}%`, height: `${r[1]}%`, left: `${r[2]}%`, top: `${r[3]}%`,
+  // el centro del recuadro no se mueve cuando la foto crece con el hover
+  transformOrigin: `${((50 - r[2]) / r[0]) * 100}% ${((50 - r[3]) / r[1]) * 100}%`,
+});
+export const ENCUADRE_FOTOS = ENCUADRES.fotos;
+export const ENCUADRE_MARCOS = ENCUADRES.marcos;
+// Se llama en el render (no al cargar el modulo): comoMarco se define mas abajo.
+export const marcoGuardado = (v) => comoMarco(v);
+
+/* La foto puede salirse del recuadro por cualquier lado (asi se la puede bajar
+   o correr todo lo que haga falta para que el antes y el despues coincidan).
+   Donde queda hueco, el recuadro NO muestra un vacio gris: se achica hasta
+   donde llega la foto — se queda en su lugar y lo unico que cambia es cuanto
+   se ve. Devuelve la caja visible (ancho, corrimiento y proporcion) y la foto
+   recalculada dentro de esa caja. */
+export const fitRender = (r, marco) => {
+  const [w, h, l, t] = r;
+  const x0 = Math.max(0, l), y0 = Math.max(0, t);
+  const ancho = Math.max(1, Math.min(100, l + w) - x0);
+  const alto = Math.max(1, Math.min(100, t + h) - y0);
+  return {
+    caja: { width: `${ancho * marco.ancho}%`, marginLeft: `${x0 * marco.ancho}%` },
+    proporcion: (marco.ratio * ancho) / alto,
+    img: fitStyle([(w / ancho) * 100, (h / alto) * 100,
+                   ((l - x0) / ancho) * 100, ((t - y0) / alto) * 100]),
+  };
+};
 const encuadreDe = (slug, caseId, file) => {
   const r = ENCUADRES.fotos[clave(slug, caseId, file)];
-  return r ? { width: `${r[0]}%`, height: `${r[1]}%`, left: `${r[2]}%`, top: `${r[3]}%`,
-               // el centro del recuadro no se mueve cuando la foto crece con el hover
-               transformOrigin: `${((50 - r[2]) / r[0]) * 100}% ${((50 - r[3]) / r[1]) * 100}%` }
-            : null;
+  return r ? fitStyle(r) : null;
 };
 const MARCO_DEFECTO = 4 / 5;
+/* El recuadro guarda su proporcion y, si se le cambio el ancho desde el editor,
+   que parte de la columna ocupa (1 = todo el ancho disponible). */
+const comoMarco = (v) => (Array.isArray(v) ? { ratio: v[0], ancho: v[1] ?? 1 } : { ratio: v, ancho: 1 });
 const marcoDe = (slug, caseId, ...files) =>
-  files.map((f) => ENCUADRES.marcos[clave(slug, caseId, f)]).find(Boolean) ?? MARCO_DEFECTO;
+  comoMarco(files.map((f) => ENCUADRES.marcos[clave(slug, caseId, f)]).find(Boolean) ?? MARCO_DEFECTO);
 const aparteDe = (slug, caseId, file) => ENCUADRES.aparte[clave(slug, caseId, file)] ?? MARCO_DEFECTO;
 
 const imageByFile = (globObj, folder) => {
@@ -184,15 +217,22 @@ const CASES_BY_SLUG = (() => {
       // ampliar solo una mitad del par la dejaria descalzada con la otra.
       const par = beforeFit && afterFit;
       return { before: before[k].image, after: after[k].image,
+               // Claves de encuadre.json y nombres de archivo — los usa el editor.
+               beforeKey: clave(slug, caseId, before[k].file), afterKey: clave(slug, caseId, after[k].file),
+               beforeFile: before[k].file, afterFile: after[k].file,
                beforeFit: par ? beforeFit : null, afterFit: par ? afterFit : null,
                frame: marcoDe(slug, caseId, before[k].file, after[k].file),
                beforeSensitive: esSensible(slug, caseId, before[k].file),
                afterSensitive: esSensible(slug, caseId, after[k].file) };
     });
     const apart = (raw.apart ?? []).slice().sort(byBase)
-      .map((x) => ({ image: x.image, frame: aparteDe(slug, caseId, x.file),
+      .map((x) => ({ image: x.image, frame: aparteDe(slug, caseId, x.file), file: x.file,
                      sensitive: esSensible(slug, caseId, x.file) }));
     return { caseId, angles, apart, focus: FOCO[slug] ?? FOCO_DEFECTO,
+             // Para el editor: de que procedimiento es la carpeta y que archivos tiene.
+             slug,
+             archivos: { antes: before.map((x) => x.file), despues: after.map((x) => x.file),
+                         aparte: (raw.apart ?? []).map((x) => x.file) },
              watermark: !CASES_WITH_OWN_LOGO.has(`${slug}/${caseId}`),
              note: CASE_NOTES[`${slug}/${caseId}`] ?? null };
   };

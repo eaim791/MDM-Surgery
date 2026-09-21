@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useId } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useId } from "react";
 import { motion, AnimatePresence, useReducedMotion, useInView, useScroll, useTransform } from "framer-motion";
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
   Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
   Droplet, EyeOff, Construction, ChevronsRight, ArrowUpRight, MessageCircle,
+  Plus, Minus, Move, MoveHorizontal, MoveVertical, UploadCloud,
 } from "lucide-react";
 import {
   SunIcon, MoonIcon, GlobeIcon, ObeliskIcon, SpireIcon, SkylineIcon, EnvelopeIcon, SealIcon,
@@ -16,6 +17,7 @@ import marceloPhoto from "./assets/marcelodimaggio.webp";
 import {
   PROCEDURES, PROCEDURES_WITH_CASES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
   LOCATIONS, SEDES, TESTIMONIALS, casesFor, CERTIFICATES, PAPERS,
+  ENCUADRE_FOTOS, ENCUADRE_MARCOS, marcoGuardado, fitStyle, fitRender,
 } from "./data.js";
 
 /* Velo del video del hero: atenua el centro-izquierda para que el texto se lea. */
@@ -950,6 +952,234 @@ export default function App() {
     };
   }, [igHint]);
 
+  /* ---- Editor de Resultados (SOLO en desarrollo) ----
+     Todo lo de la seccion Resultados se acomoda desde el propio sitio:
+     mover y ampliar la foto, cambiar el tamano del recuadro, reemplazar o
+     quitar fotos, agregar fotos sueltas y crear casos nuevos. Los endpoints
+     viven en vite.config.js (servidor de desarrollo), asi que en el sitio
+     publicado no existe ni el editor ni forma de escribir nada: el bundler
+     borra este bloque entero porque import.meta.env.DEV queda en false. */
+  const [fitEdit, setFitEdit] = useState(false);
+  const [fits, setFits] = useState({});
+  const [marcoEdits, setMarcoEdits] = useState({});
+  const [fitMsg, setFitMsg] = useState("");
+  // Caso que se esta creando: { slug, carpeta, antes, despues } con las fotos
+  // elegidas todavia sin subir (se ven como vista previa).
+  const [casoNuevo, setCasoNuevo] = useState(null);
+  // Fotos reemplazadas: el archivo mantiene el nombre, asi que se le agrega
+  // ?v= para que el navegador muestre la nueva y no la que tenia en memoria.
+  const [versiones, setVersiones] = useState({});
+  const [fitBusy, setFitBusy] = useState(false);
+  const fitDrag = useRef(null);
+  const marcoDrag = useRef(null);
+  const [fitMoving, setFitMoving] = useState(null);
+  const pendientes = Object.keys(fits).length + Object.keys(marcoEdits).length;
+
+  const fitOf = (key) => fits[key] ?? ENCUADRE_FOTOS[key] ?? [100, 100, 0, 0];
+  const marcoOf = (key, base) => marcoEdits[key] ?? (ENCUADRE_MARCOS[key] !== undefined
+    ? [marcoGuardado(ENCUADRE_MARCOS[key]).ratio, marcoGuardado(ENCUADRE_MARCOS[key]).ancho]
+    : [base.ratio, base.ancho]);
+  const redondear = (n) => Math.round(n * 100) / 100;
+  // Se mueve libre: puede salirse del recuadro por cualquier lado. Lo que
+  // sobresale no se ve, y el hueco que queda del otro lado no se muestra
+  // gris — el recuadro se achica solo hasta donde llega la foto (fitRender).
+  const setFit = (key, next) => { anclarPar(); setFits((p) => ({ ...p, [key]: next.map(redondear) })); };
+  // El tamano del recuadro es del PAR: el antes y el despues siempre miden
+  // igual, que es lo que mantiene la seccion pareja.
+  const setMarcoPar = (keys, next) => { anclarPar(); return setMarcoEdits((p) => {
+    const v = next.map(redondear);
+    return { ...p, ...Object.fromEntries(keys.filter(Boolean).map((k) => [k, v])) };
+  }); };
+
+  const onFitDown = (e, key) => {
+    e.preventDefault();
+    fitDrag.current = { key, x: e.clientX, y: e.clientY, start: fitOf(key),
+                        rect: e.currentTarget.getBoundingClientRect() };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    // Mientras dura el arrastre se muestra el recuadro completo (con el hueco
+    // gris a la vista) para ver adonde va la foto; al soltar, el recuadro se
+    // ajusta a lo que quedo dentro.
+    setFitMoving(key);
+  };
+  const onFitMove = (e) => {
+    const d = fitDrag.current;
+    if (!d) return;
+    setFit(d.key, [d.start[0], d.start[1],
+                   d.start[2] + ((e.clientX - d.x) / d.rect.width) * 100,
+                   d.start[3] + ((e.clientY - d.y) / d.rect.height) * 100]);
+  };
+  const onFitUp = () => { fitDrag.current = null; setFitMoving(null); };
+  // Al mover o ampliar, el recuadro cambia de alto y todo lo de abajo se corre:
+  // la pagina parecia moverse sola. Se anota donde estaba el par justo antes
+  // del cambio y despues se corrige el scroll esa misma distancia — solo en
+  // ese momento, para no pelear con el scroll normal del usuario.
+  const parRef = useRef(null);
+  const parTop = useRef(null);
+  const anclarPar = () => { parTop.current = parRef.current?.getBoundingClientRect().top ?? null; };
+  useLayoutEffect(() => {
+    if (parTop.current === null || !parRef.current) return;
+    const delta = parRef.current.getBoundingClientRect().top - parTop.current;
+    parTop.current = null;
+    if (Math.abs(delta) > 0.5) window.scrollBy(0, delta);
+  });
+
+  // Tamano del recuadro: se agarra de un borde y se estira, como una ventana.
+  const onMarcoDown = (e, keys, modo, base, grilla) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const [ratio, ancho] = marcoOf(keys[0], base);
+    // Ancho de UNA columna de la grilla (el par son dos), que es el 100% del
+    // que se mide el ancho del recuadro.
+    const columnas = grilla ? getComputedStyle(grilla).gridTemplateColumns.split(" ") : [];
+    const celdaW = parseFloat(columnas[0]) || grilla?.getBoundingClientRect().width || 1;
+    marcoDrag.current = { keys, modo, x: e.clientX, y: e.clientY, ratio, ancho, celdaW };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setFitMoving(keys[0]);
+  };
+  const onMarcoMove = (e) => {
+    const d = marcoDrag.current;
+    if (!d) return;
+    const anchoPx = d.ancho * d.celdaW;
+    const altoPx = anchoPx / d.ratio;
+    const nuevoAnchoPx = d.modo.includes("e") ? Math.max(80, anchoPx + (e.clientX - d.x)) : anchoPx;
+    const nuevoAltoPx = d.modo.includes("s") ? Math.max(80, altoPx + (e.clientY - d.y)) : altoPx;
+    const ancho = Math.min(1, nuevoAnchoPx / d.celdaW);
+    setMarcoPar(d.keys, [(ancho * d.celdaW) / nuevoAltoPx, ancho]);
+  };
+  const onMarcoUp = () => { marcoDrag.current = null; setFitMoving(null); };
+
+  // El zoom crece desde el centro del recuadro, asi lo que se esta mirando no
+  // se escapa de cuadro al acercar.
+  const setFitZoom = (key, ancho) => {
+    const [w, h, l, t] = fitOf(key);
+    const alto = ancho * (h / w);
+    setFit(key, [ancho, alto, l - (ancho - w) / 2, t - (alto - h) / 2]);
+  };
+
+  const guardarEncuadres = async () => {
+    if (!pendientes) return true;
+    const r = await fetch("/__editor/encuadre", {
+      method: "POST", body: JSON.stringify({ fotos: fits, marcos: marcoEdits }),
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error);
+    setFits({}); setMarcoEdits({});
+    return true;
+  };
+  const publicarPagina = async () => {
+    if (!window.confirm("Esto actualiza el sitio en internet, para todo el mundo. ¿Seguimos?")) return;
+    setFitBusy(true); setFitMsg("Publicando…");
+    try {
+      await guardarEncuadres();
+      const r = await fetch("/__editor/publicar", { method: "POST" });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error);
+      setFitMsg(j.sinCambios ? "No había cambios para publicar" : `Publicado (${j.archivos} archivos)`);
+    } catch (e) {
+      setFitMsg(`Error al publicar: ${e.message}`);
+    } finally { setFitBusy(false); }
+  };
+  const actualizarPagina = async () => {
+    setFitBusy(true); setFitMsg("Actualizando…");
+    try {
+      await guardarEncuadres();
+      setFitMsg("Página actualizada");
+    } catch (e) {
+      setFitMsg(`Error: ${e.message}`);
+    } finally { setFitBusy(false); }
+  };
+
+  /* ---- Fotos: reemplazar, quitar, agregar y crear casos ---- */
+  // La foto se convierte a webp en el navegador (misma receta que el resto del
+  // sitio: lado mayor 1800px y bajo 200 KB), asi el servidor solo la escribe.
+  const aWebp = async (file) => {
+    const bitmap = await createImageBitmap(file);
+    const escala = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height));
+    const lienzo = document.createElement("canvas");
+    lienzo.width = Math.round(bitmap.width * escala);
+    lienzo.height = Math.round(bitmap.height * escala);
+    lienzo.getContext("2d").drawImage(bitmap, 0, 0, lienzo.width, lienzo.height);
+    let blob;
+    for (const calidad of [0.88, 0.8, 0.72, 0.64, 0.56]) {
+      blob = await new Promise((r) => lienzo.toBlob(r, "image/webp", calidad));
+      if (blob && blob.size <= 200 * 1024) break;
+    }
+    const buffer = await blob.arrayBuffer();
+    let binario = "";
+    for (const byte of new Uint8Array(buffer)) binario += String.fromCharCode(byte);
+    return btoa(binario);
+  };
+  const aplicarArchivos = async (acciones, aviso) => {
+    setFitBusy(true); setFitMsg(aviso ?? "Guardando…");
+    try {
+      // Al agregar o quitar archivos, el servidor de desarrollo recarga la
+      // pagina sola: lo que este a medio acomodar se guarda antes para que no
+      // se pierda.
+      await guardarEncuadres();
+      const r = await fetch("/__editor/archivos", { method: "POST", body: JSON.stringify({ acciones }) });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error);
+      // Sin recargar la pagina: las fotos nuevas entran solas y las
+      // reemplazadas se refrescan con ?v= (mismo nombre de archivo).
+      const marca = Date.now();
+      setVersiones((v) => ({ ...v, ...Object.fromEntries(acciones.map((a) => [a.ruta, marca])) }));
+      setFitMsg("Listo");
+    } catch (e) {
+      setFitMsg(`Error: ${e.message}`);
+    } finally { setFitBusy(false); }
+  };
+  // Para mostrar la version nueva de una foto reemplazada.
+  const conVersion = (src, kase, archivo) => {
+    const v = versiones[`${kase.slug}/${kase.caseId}/${archivo}`];
+    return v ? `${src}${src.includes("?") ? "&" : "?"}v=${v}` : src;
+  };
+  // Siguiente numero libre para "antes-N.webp" / "despues-N.webp" / "fotoaparte-N.webp"
+  const proximoNumero = (archivos = []) => {
+    const usados = archivos.map((f) => Number((f.match(/(\d+)/) ?? [])[1] ?? -1));
+    return Math.max(-1, ...usados) + 1;
+  };
+  const reemplazarFoto = async (kase, archivo, file) => {
+    const datos = await aWebp(file);
+    await aplicarArchivos([{ accion: "guardar", ruta: `${kase.slug}/${kase.caseId}/${archivo}`, datos }],
+      "Reemplazando la foto…");
+  };
+  const quitarAngulo = async (kase, angle) => {
+    await aplicarArchivos([
+      { accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${angle.beforeFile}` },
+      { accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${angle.afterFile}` },
+    ], "Quitando la foto…");
+  };
+  const quitarSuelta = async (kase, archivo) => {
+    await aplicarArchivos([{ accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${archivo}` }],
+      "Quitando la foto…");
+  };
+  const agregarPar = async (kase, fileAntes, fileDespues) => {
+    const n = Math.max(proximoNumero(kase.archivos.antes), proximoNumero(kase.archivos.despues));
+    await aplicarArchivos([
+      { accion: "guardar", ruta: `${kase.slug}/${kase.caseId}/antes-${n}.webp`, datos: await aWebp(fileAntes) },
+      { accion: "guardar", ruta: `${kase.slug}/${kase.caseId}/despues-${n}.webp`, datos: await aWebp(fileDespues) },
+    ], "Agregando el antes y después…");
+  };
+  const agregarSuelta = async (kase, file) => {
+    const n = proximoNumero(kase.archivos.aparte);
+    await aplicarArchivos([
+      { accion: "guardar", ruta: `${kase.slug}/${kase.caseId}/fotoaparte-${n}.webp`, datos: await aWebp(file) },
+    ], "Agregando la foto…");
+  };
+  // Nombre de carpeta libre para el caso nuevo: caso-01, caso-02, ...
+  const proximaCarpeta = (casos) => {
+    const usados = casos.map((c) => Number((c.caseId.match(/caso-(\d+)/) ?? [])[1] ?? 0));
+    const n = Math.max(0, ...usados) + 1;
+    return `caso-${String(n).padStart(2, "0")}`;
+  };
+  const crearCaso = async (caso) => {
+    await aplicarArchivos([
+      { accion: "guardar", ruta: `${caso.slug}/${caso.carpeta}/antes-0.webp`, datos: await aWebp(caso.antes.file) },
+      { accion: "guardar", ruta: `${caso.slug}/${caso.carpeta}/despues-0.webp`, datos: await aWebp(caso.despues.file) },
+    ], "Creando el caso…");
+    setCasoNuevo(null);
+  };
+
   const scrollTo = (id, closeMenu = true) => {
     // Las tres partes de Trayectoria & Prensa son plegables: al elegirlas en el
     // nav se abre la que corresponde y se cierran las otras.
@@ -1344,6 +1574,17 @@ export default function App() {
           <EnvelopeIcon size={22} strokeWidth={1.8} className="hidden sm:block" />
         </button>
       </motion.div>
+
+      {/* Boton flotante para publicar (solo en desarrollo): va arriba del boton
+          de contacto y sube el contenido a internet — un deploy por cada uso,
+          por eso pide confirmacion antes. */}
+      {import.meta.env.DEV && (
+        <button type="button" onClick={publicarPagina} disabled={fitBusy}
+          title="Actualizar la página en internet"
+          className="fixed bottom-24 right-6 z-40 flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-[var(--accent)] bg-[var(--accent)] text-[var(--surface)] shadow-[0_8px_24px_var(--shadow)] transition-opacity duration-200 hover:opacity-85 active:scale-90 disabled:opacity-50 sm:bottom-28 sm:right-8 sm:h-14 sm:w-14">
+          <UploadCloud size={22} strokeWidth={1.8} />
+        </button>
+      )}
 
       {/* Ventana emergente de contacto — el mismo recuadro de la seccion
           Contacto (misma info, mismo formulario), abierta desde el CTA del
@@ -1748,8 +1989,8 @@ export default function App() {
               /* Casos con par: arriba el antes y el despues, y las fotos sueltas debajo.
                  Casos que solo tienen fotos sueltas: esas fotos ocupan el lugar del par. */
               const marcos = angle
-                ? [{ caption: t.res.before, src: angle.before, fit: angle.beforeFit, frame: angle.frame, sensitive: angle.beforeSensitive },
-                   { caption: t.res.after, src: angle.after, fit: angle.afterFit, frame: angle.frame, sensitive: angle.afterSensitive }]
+                ? [{ caption: t.res.before, src: angle.before, fit: angle.beforeFit, frame: angle.frame, sensitive: angle.beforeSensitive, fitKey: angle.beforeKey },
+                   { caption: t.res.after, src: angle.after, fit: angle.afterFit, frame: angle.frame, sensitive: angle.afterSensitive, fitKey: angle.afterKey }]
                 : kase.apart.slice(0, 2).map((x, k) => ({ caption: `${t.res.angle} ${k + 1}`,
                     src: x.image, frame: x.frame, fit: null, entera: true, sensitive: x.sensitive }));
               const sueltas = angle ? kase.apart : kase.apart.slice(2);
@@ -1806,6 +2047,14 @@ export default function App() {
                             {t.res.case} {c.n}
                           </button>
                         ))}
+                        {import.meta.env.DEV && fitEdit && (
+                          <button type="button"
+                            onClick={() => setCasoNuevo({ slug: proc.slug, carpeta: proximaCarpeta(cases), antes: null, despues: null })}
+                            className="flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-[var(--accent)] px-4 py-1.5 text-[11px] uppercase tracking-[0.16em] text-[var(--accent)] transition-colors duration-200 hover:bg-[var(--accent-soft)]">
+                            <Plus size={13} strokeWidth={2} aria-hidden="true" />
+                            Agregar caso
+                          </button>
+                        )}
                       </SwipeRow>
                       {/* Flechas solo en escritorio: en movil se desliza con el
                           dedo y el aviso de SwipeRow lo indica. */}
@@ -1858,26 +2107,144 @@ export default function App() {
                       </div>
                     )}
 
+                    {/* Panel del editor — solo en desarrollo (ver "Editor de
+                        Resultados" mas arriba). En el sitio publicado no existe. */}
+                    {import.meta.env.DEV && (
+                      <div className="mt-4 flex flex-wrap items-center gap-3 border border-dashed border-[var(--accent)] bg-[var(--accent-soft)] px-4 py-3">
+                        <button type="button" onClick={() => { setFitEdit((v) => !v); setFitMsg(""); setCasoNuevo(null); }}
+                          className="cursor-pointer border border-[var(--ink)] px-3 py-2 text-[12px] font-medium text-[var(--ink)] transition-opacity hover:opacity-75">
+                          {fitEdit ? "Cerrar editor" : "Editar fotos"}
+                        </button>
+                        {fitEdit && (
+                          <>
+                            <button type="button" onClick={actualizarPagina} disabled={fitBusy || !pendientes}
+                              className="cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[12px] font-medium text-[var(--surface)] transition-opacity hover:opacity-85 disabled:cursor-default disabled:opacity-40">
+                              Guardar cambios{pendientes ? " (" + pendientes + ")" : ""}
+                            </button>
+                            <span className="text-[12px] text-[var(--muted)]">
+                              Arrastrá la foto para moverla · Estirá los bordes con flechas para el tamaño ·
+                              El antes y el después cambian juntos
+                            </span>
+                            {fitMsg && <span className="text-[12px] font-medium text-[var(--accent)]">{fitMsg}</span>}
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Agregar fotos a este caso — chico, debajo de los casos. */}
+                    {import.meta.env.DEV && fitEdit && !casoNuevo && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <label className="flex cursor-pointer items-center gap-1.5 border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-[11px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
+                          <Plus size={12} strokeWidth={2} aria-hidden="true" />
+                          Agregar más fotos de este caso
+                          <input type="file" accept="image/*" multiple className="hidden"
+                            onChange={(e) => {
+                              const [a, d] = e.target.files;
+                              if (a && d) agregarPar(kase, a, d);
+                              else setFitMsg("Elegí las dos juntas: primero el antes y después el después.");
+                              e.target.value = "";
+                            }} />
+                        </label>
+                        <label className="flex cursor-pointer items-center gap-1.5 border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-[11px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
+                          <Plus size={12} strokeWidth={2} aria-hidden="true" />
+                          Agregar foto social / post operatorio
+                          <input type="file" accept="image/*" className="hidden"
+                            onChange={(e) => { if (e.target.files[0]) agregarSuelta(kase, e.target.files[0]); e.target.value = ""; }} />
+                        </label>
+                      </div>
+                    )}
+
+                    {/* Caso nuevo: dos recuadros vacios esperando el antes y el despues. */}
+                    {import.meta.env.DEV && fitEdit && casoNuevo && casoNuevo.slug === proc.slug && (
+                      <div className="mt-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <p className="text-[12px] font-medium text-[var(--ink)]">Caso nuevo en {proc[lang].name}</p>
+                          <button type="button" onClick={() => setCasoNuevo(null)}
+                            className="cursor-pointer text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] transition-opacity hover:opacity-75">
+                            Cancelar
+                          </button>
+                        </div>
+                        <div className="res-pair mt-3 grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
+                          {[["antes", t.res.before], ["despues", t.res.after]].map(([lado, titulo]) => (
+                            <figure key={lado} className="overflow-hidden rounded-lg border border-dashed border-[var(--accent)]">
+                              <label style={{ aspectRatio: 0.75 }}
+                                className="group relative flex w-full cursor-pointer flex-col items-center justify-center gap-2 bg-[var(--photo)] text-[var(--muted)] transition-colors hover:bg-[var(--accent-soft)]">
+                                {casoNuevo[lado] ? (
+                                  <img src={casoNuevo[lado].url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                                ) : (
+                                  <>
+                                    <Plus size={26} strokeWidth={1.6} aria-hidden="true" />
+                                    <span className="text-[12px]">Agregar foto</span>
+                                  </>
+                                )}
+                                <input type="file" accept="image/*" className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (!file) return;
+                                    const elegido = { file, url: URL.createObjectURL(file) };
+                                    setCasoNuevo((c) => {
+                                      const siguiente = { ...c, [lado]: elegido };
+                                      if (siguiente.antes && siguiente.despues) crearCaso(siguiente);
+                                      return siguiente;
+                                    });
+                                    e.target.value = "";
+                                  }} />
+                              </label>
+                              <figcaption className="border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                                {titulo}
+                              </figcaption>
+                            </figure>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Before / after */}
-                    <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      {marcos.map(({ caption, src, fit, entera, frame, sensitive }) => {
+                    {!(import.meta.env.DEV && casoNuevo) && (<>
+                    {/* items-end: cuando un recuadro se achica (la foto se corrio),
+                        los dos quedan alineados por abajo — la linea de abajo
+                        sigue pareja entre el antes y el despues. */}
+                    <div ref={parRef} className="res-pair mt-5 grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
+                      {marcos.map(({ caption, src, fit, entera, frame, sensitive, fitKey }) => {
                         const oculta = sensitive && !revealedSensitive.has(src);
+                        const editando = import.meta.env.DEV && fitEdit && !!fitKey;
+                        // Solo se usa encuadre propio si esta guardado (o si se esta
+                        // editando ahora): sin eso el par vuelve al recorte por defecto.
+                        const crudo = fitKey && (fits[fitKey] || editando || fit) ? fitOf(fitKey) : null;
+                        const moviendo = fitMoving === fitKey;
+                        // Tamano del recuadro: el del par (el antes y el despues
+                        // comparten medida). Las fotos sueltas no lo usan.
+                        const marcoPar = fitKey ? marcoOf(fitKey, frame) : null;
+                        const marcoActual = marcoPar ? { ratio: marcoPar[0], ancho: marcoPar[1] } : null;
+                        const recorte = crudo && !moviendo && marcoActual ? fitRender(crudo, marcoActual) : null;
+                        const fitAjustado = recorte ? recorte.img : crudo ? fitStyle(crudo) : null;
                         return (
-                        <figure key={caption} className="overflow-hidden rounded-lg border border-[var(--line)]">
+                        <figure key={caption} style={recorte?.caja ?? (marcoActual ? { width: `${marcoActual.ancho * 100}%` } : undefined)}
+                          className="overflow-hidden rounded-lg border border-[var(--line)]">
                           <button type="button"
-                            onClick={() => oculta
-                              ? revealSensitive(src)
-                              : setLightbox({ src, alt: `${proc[lang].name} · ${caption}`, watermark: kase.watermark })}
-                            style={{ aspectRatio: frame }}
-                            className={`group relative block w-full overflow-hidden bg-[var(--photo)] ${oculta ? "cursor-pointer" : "cursor-zoom-in"}`}>
+                            onClick={() => {
+                              if (editando) return;
+                              oculta
+                                ? revealSensitive(src)
+                                : setLightbox({ src, alt: `${proc[lang].name} · ${caption}`, watermark: kase.watermark });
+                            }}
+                            onPointerDown={editando ? (e) => onFitDown(e, fitKey) : undefined}
+                            onPointerMove={editando ? onFitMove : undefined}
+                            onPointerUp={editando ? onFitUp : undefined}
+                            onPointerCancel={editando ? onFitUp : undefined}
+                            style={{ aspectRatio: recorte ? recorte.proporcion : marcoActual ? marcoActual.ratio : frame }}
+                            className={`group relative block w-full overflow-hidden bg-[var(--photo)] ${
+                              editando ? "cursor-grab touch-none active:cursor-grabbing" : oculta ? "cursor-pointer" : "cursor-zoom-in"}`}>
                             {/* La foto se agranda sobre la zona del procedimiento y se apoya en
                                 el mismo punto de la cara que su par, asi el antes y el despues
                                 quedan alineados. El archivo no se recorta: al hacer click el
                                 lightbox lo muestra entero. */}
-                            <img key={src} src={src} alt={`${proc[lang].name} · ${caption}`} loading="lazy"
-                              style={fit ?? (entera ? undefined : { objectPosition: kase.focus })}
-                              className={`transition-transform duration-300 ${oculta ? "scale-110 blur-2xl" : "group-hover:scale-[1.03]"} ${
-                                fit ? "absolute max-w-none object-cover"
+                            <img key={src} src={editando || versiones[`${kase.slug}/${kase.caseId}/${caption === t.res.before ? angle?.beforeFile : angle?.afterFile}`]
+                                ? conVersion(src, kase, caption === t.res.before ? angle?.beforeFile : angle?.afterFile) : src}
+                              alt={`${proc[lang].name} · ${caption}`} loading="lazy" draggable={false}
+                              style={fitAjustado ?? (entera ? undefined : { objectPosition: kase.focus })}
+                              className={`${editando ? "" : "transition-transform duration-300"} ${oculta ? "scale-110 blur-2xl" : editando ? "" : "group-hover:scale-[1.03]"} ${
+                                fitAjustado ? "absolute max-w-none object-cover"
                                     : entera ? "h-full w-full object-contain" : "h-full w-full object-cover"}`} />
                             {kase.watermark && !oculta && <Watermark />}
                             {oculta ? (
@@ -1891,14 +2258,79 @@ export default function App() {
                                 <ZoomIn size={22} strokeWidth={1.5} className="text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
                               </span>
                             )}
+                            {/* Manijas para estirar el recuadro, como una ventana:
+                                el borde derecho cambia el ancho y el de abajo el alto. */}
+                            {editando && (
+                              <>
+                                {/* Senal de que la foto se puede arrastrar para cualquier lado. */}
+                                <span aria-hidden="true"
+                                  className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--ink)]/45 text-white">
+                                  <Move size={22} strokeWidth={1.8} />
+                                </span>
+                                {/* Bordes para estirar el recuadro, con su flecha. */}
+                                <span onPointerDown={(e) => onMarcoDown(e, [angle.beforeKey, angle.afterKey], "e", frame, e.currentTarget.closest("figure")?.parentElement)}
+                                  onPointerMove={onMarcoMove} onPointerUp={onMarcoUp} onPointerCancel={onMarcoUp}
+                                  title="Estirar el ancho"
+                                  className="absolute inset-y-0 right-0 z-20 flex w-6 cursor-ew-resize touch-none items-center justify-center bg-[var(--accent)]/70 text-white transition-colors hover:bg-[var(--accent)]">
+                                  <MoveHorizontal size={16} strokeWidth={2} aria-hidden="true" />
+                                </span>
+                                <span onPointerDown={(e) => onMarcoDown(e, [angle.beforeKey, angle.afterKey], "s", frame, e.currentTarget.closest("figure")?.parentElement)}
+                                  onPointerMove={onMarcoMove} onPointerUp={onMarcoUp} onPointerCancel={onMarcoUp}
+                                  title="Estirar el alto"
+                                  className="absolute inset-x-0 bottom-0 z-20 flex h-6 cursor-ns-resize touch-none items-center justify-center bg-[var(--accent)]/70 text-white transition-colors hover:bg-[var(--accent)]">
+                                  <MoveVertical size={16} strokeWidth={2} aria-hidden="true" />
+                                </span>
+                              </>
+                            )}
                           </button>
                           <figcaption className="border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
                             {caption}
                           </figcaption>
+                          {editando && (
+                            <>
+                              <div className="flex items-center gap-2 border-t border-dashed border-[var(--line)] bg-[var(--surface)] px-4 py-2.5">
+                                <button type="button" aria-label="Alejar" title="Alejar"
+                                  onClick={() => setFitZoom(fitKey, Math.max(40, fitOf(fitKey)[0] - 5))}
+                                  className="flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center border border-[var(--line)] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
+                                  <Minus size={14} strokeWidth={2} />
+                                </button>
+                                <button type="button" aria-label="Acercar" title="Acercar"
+                                  onClick={() => setFitZoom(fitKey, Math.min(300, fitOf(fitKey)[0] + 5))}
+                                  className="flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center border border-[var(--line)] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
+                                  <Plus size={14} strokeWidth={2} />
+                                </button>
+                                <input type="range" min="40" max="300" step="1" value={fitOf(fitKey)[0]}
+                                  onChange={(e) => setFitZoom(fitKey, Number(e.target.value))}
+                                  aria-label={"Zoom " + caption} className="flex-1 cursor-ew-resize accent-[var(--accent)]" />
+                                <span className="w-11 text-right text-[11px] tabular-nums text-[var(--faint)]">{Math.round(fitOf(fitKey)[0])}%</span>
+                                <button type="button" onClick={() => setFit(fitKey, [100, 100, 0, 0])}
+                                  className="flex-shrink-0 cursor-pointer text-[11px] uppercase tracking-[0.14em] text-[var(--accent)] transition-opacity hover:opacity-75">
+                                  Centrar
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-2 border-t border-dashed border-[var(--line)] bg-[var(--surface)] px-4 py-2.5">
+                                <label className="cursor-pointer border border-[var(--line)] px-3 py-1.5 text-[11px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
+                                  Reemplazar
+                                  <input type="file" accept="image/*" className="hidden"
+                                    onChange={(e) => {
+                                      const archivo = caption === t.res.before ? angle.beforeFile : angle.afterFile;
+                                      if (e.target.files[0]) reemplazarFoto(kase, archivo, e.target.files[0]);
+                                      e.target.value = "";
+                                    }} />
+                                </label>
+                                <button type="button" onClick={() => quitarAngulo(kase, angle)}
+                                  className="cursor-pointer border border-[var(--line)] px-3 py-1.5 text-[11px] text-[#C0706D] transition-colors hover:border-[#C0706D]">
+                                  Quitar esta foto
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </figure>
                         );
                       })}
                     </div>
+
+                    </>)}
 
                     {/* Fotos sueltas del caso: no tienen par, se muestran solas y enteras. */}
                     {sueltas.length > 0 && (
@@ -1906,10 +2338,11 @@ export default function App() {
                         <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.apart}</p>
                         <div className="mt-3">
                         <SwipeRow className="gap-3" hint={t.res.swipe} watch={`${proc.slug}-${ci}-${sueltas.length}`}>
-                          {sueltas.map(({ image, frame, sensitive }, k) => {
+                          {sueltas.map(({ image, frame, sensitive, file }, k) => {
                             const oculta = sensitive && !revealedSensitive.has(image);
                             return (
-                            <button key={k} type="button"
+                            <div key={k} className="flex flex-shrink-0 flex-col gap-1">
+                            <button type="button"
                               onClick={() => oculta
                                 ? revealSensitive(image)
                                 : setLightbox({ src: image, alt: `${proc[lang].name} · ${t.res.apart}`, watermark: kase.watermark })}
@@ -1928,6 +2361,21 @@ export default function App() {
                                 </span>
                               )}
                             </button>
+                            {/* Reemplazar o quitar la foto suelta — solo en el editor. */}
+                            {import.meta.env.DEV && fitEdit && (
+                              <div className="flex items-center gap-1">
+                                <label className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[10px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
+                                  Reemplazar
+                                  <input type="file" accept="image/*" className="hidden"
+                                    onChange={(e) => { if (e.target.files[0]) reemplazarFoto(kase, file, e.target.files[0]); e.target.value = ""; }} />
+                                </label>
+                                <button type="button" onClick={() => quitarSuelta(kase, file)}
+                                  className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[10px] text-[#C0706D] transition-colors hover:border-[#C0706D]">
+                                  Quitar
+                                </button>
+                              </div>
+                            )}
+                            </div>
                             );
                           })}
                         </SwipeRow>

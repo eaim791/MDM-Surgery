@@ -215,6 +215,14 @@ html {
    se aplica por ancho (sm:) porque el problema es puramente de alto: un
    notebook y un monitor externo pueden compartir el mismo ancho de 1366px
    pero uno tiene la mitad de alto disponible que el otro. */
+/* Par antes/despues en pantallas bajas (notebook): a ancho completo las dos
+   fotos (3:4) ocupaban casi toda la ventana y no entraba nada mas en
+   pantalla. Se acota el ancho del par — las dos fotos se achican juntas,
+   manteniendo su proporcion y su encuadre. */
+@media (max-height: 850px) {
+  .res-pair { max-width: 44rem; }
+}
+
 @media (max-height: 850px) {
   .proc-sticky { padding-top: 1.5rem; padding-bottom: 1.5rem; }
   .proc-rail-viewport { margin-top: 1.25rem; }
