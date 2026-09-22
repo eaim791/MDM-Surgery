@@ -1203,6 +1203,23 @@ export default function App() {
   ]);
   const quitarSuelta = (kase, archivo) =>
     encolar([{ accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${archivo}` }]);
+  // Archivos de un caso: los pares y las sueltas, tal como estan hoy en pantalla.
+  const archivosDe = (kase) => [
+    ...kase.angles.flatMap((a) => [a.beforeFile, a.afterFile]),
+    ...kase.apart.map((x) => x.file),
+  ].filter(Boolean);
+  /* Quitar el caso entero. Las fotos viven en una sola carpeta, asi que si el
+     caso se muestra en mas de un procedimiento se va de todos: el aviso lo
+     dice antes de tocar nada. */
+  const quitarCaso = (kase) => {
+    const files = archivosDe(kase);
+    if (!files.length) return;
+    const ok = window.confirm(
+      `Se va a quitar el caso entero (${files.length} ${files.length === 1 ? "foto" : "fotos"}). ` +
+      "Si este caso aparece en más de un procedimiento, se va de todos. ¿Seguimos?");
+    if (!ok) return;
+    encolar(files.map((f) => ({ accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${f}` })));
+  };
   const agregarPar = async (kase, fileAntes, fileDespues) => {
     const n = Math.max(proximoNumero(kase, "antes"), proximoNumero(kase, "despues"));
     encolar([
@@ -2479,6 +2496,10 @@ export default function App() {
                           <input type="file" accept="image/*" className="hidden"
                             onChange={(e) => { if (e.target.files[0]) agregarSuelta(kase, e.target.files[0]); e.target.value = ""; }} />
                         </label>
+                        <button type="button" onClick={() => quitarCaso(kase)}
+                          className="ml-auto cursor-pointer border border-[var(--line)] px-3 py-1.5 text-[11px] text-[#C0706D] transition-colors hover:border-[#C0706D]">
+                          Quitar este caso
+                        </button>
                       </div>
                     )}
 
