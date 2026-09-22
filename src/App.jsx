@@ -1158,7 +1158,14 @@ export default function App() {
   // La foto se convierte a webp en el navegador (misma receta que el resto del
   // sitio: lado mayor 1800px y bajo 200 KB), asi el servidor solo la guarda.
   const aWebp = async (file) => {
-    const bitmap = await createImageBitmap(file);
+    // Leer la foto. Falla, por ejemplo, con los HEIC del iPhone en un
+    // navegador que no los entiende: ahi no se puede seguir.
+    let bitmap;
+    try {
+      bitmap = await createImageBitmap(file);
+    } catch {
+      throw new Error(`No pude abrir "${file.name}". Si es una foto de iPhone (.HEIC), guardala como JPG y probá de nuevo.`);
+    }
     const escala = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height));
     const lienzo = document.createElement("canvas");
     lienzo.width = Math.round(bitmap.width * escala);
@@ -1169,10 +1176,28 @@ export default function App() {
       blob = await new Promise((r) => lienzo.toBlob(r, "image/webp", calidad));
       if (blob && blob.size <= 200 * 1024) break;
     }
+    // El sitio solo publica webp. Algunos navegadores (Safari viejo) devuelven
+    // un PNG igual, o nada: antes esto fallaba callado y no pasaba nada.
+    if (!blob) throw new Error("Este navegador no pudo convertir la foto. Probá desde Chrome.");
+    if (blob.type !== "image/webp") {
+      throw new Error("Este navegador no sabe guardar en webp, que es el formato del sitio. Probá desde Chrome (o actualizá Safari).");
+    }
     const buffer = await blob.arrayBuffer();
     let binario = "";
     for (const byte of new Uint8Array(buffer)) binario += String.fromCharCode(byte);
     return { datos: btoa(binario), url: URL.createObjectURL(blob) };
+  };
+  /* Preparar fotos puede tardar unos segundos y puede fallar. Antes no se
+     avisaba ninguna de las dos cosas: el doctor elegia la foto, apretaba
+     "abrir" y no pasaba absolutamente nada, sin ninguna explicacion. */
+  const conAviso = async (tarea) => {
+    setFitBusy(true);
+    setFitMsg("Preparando la foto…");
+    try {
+      await tarea();
+    } catch (e) {
+      setFitMsg(e.message || "No se pudo preparar la foto.");
+    } finally { setFitBusy(false); }
   };
   // Una foto que vuelve del borrador llega en base64: se arma de nuevo para verla.
   const urlDeBase64 = (datos) => {
@@ -2485,7 +2510,7 @@ export default function App() {
                           <input type="file" accept="image/*" multiple className="hidden"
                             onChange={(e) => {
                               const [a, d] = e.target.files;
-                              if (a && d) agregarPar(kase, a, d);
+                              if (a && d) conAviso(() => agregarPar(kase, a, d));
                               else setFitMsg("Elegí las dos juntas: primero el antes y después el después.");
                               e.target.value = "";
                             }} />
@@ -2494,7 +2519,7 @@ export default function App() {
                           <Plus size={12} strokeWidth={2} aria-hidden="true" />
                           Agregar foto social / post operatorio
                           <input type="file" accept="image/*" className="hidden"
-                            onChange={(e) => { if (e.target.files[0]) agregarSuelta(kase, e.target.files[0]); e.target.value = ""; }} />
+                            onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) conAviso(() => agregarSuelta(kase, f)); }} />
                         </label>
                         <button type="button" onClick={() => quitarCaso(kase)}
                           className="ml-auto cursor-pointer border border-[var(--line)] px-3 py-1.5 text-[11px] text-[#C0706D] transition-colors hover:border-[#C0706D]">
@@ -2533,7 +2558,7 @@ export default function App() {
                                     const elegido = { file, url: URL.createObjectURL(file) };
                                     setCasoNuevo((c) => {
                                       const siguiente = { ...c, [lado]: elegido };
-                                      if (siguiente.antes && siguiente.despues) crearCaso(siguiente);
+                                      if (siguiente.antes && siguiente.despues) conAviso(() => crearCaso(siguiente));
                                       return siguiente;
                                     });
                                     e.target.value = "";
@@ -2661,8 +2686,9 @@ export default function App() {
                                   <input type="file" accept="image/*" className="hidden"
                                     onChange={(e) => {
                                       const archivo = caption === t.res.before ? angle.beforeFile : angle.afterFile;
-                                      if (e.target.files[0]) reemplazarFoto(kase, archivo, e.target.files[0]);
+                                      const f = e.target.files[0];
                                       e.target.value = "";
+                                      if (f) conAviso(() => reemplazarFoto(kase, archivo, f));
                                     }} />
                                 </label>
                               </div>
@@ -2724,7 +2750,7 @@ export default function App() {
                                 <label className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[10px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
                                   Reemplazar
                                   <input type="file" accept="image/*" className="hidden"
-                                    onChange={(e) => { if (e.target.files[0]) reemplazarFoto(kase, file, e.target.files[0]); e.target.value = ""; }} />
+                                    onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) conAviso(() => reemplazarFoto(kase, file, f)); }} />
                                 </label>
                                 <button type="button" onClick={() => quitarSuelta(kase, file)}
                                   className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[10px] text-[#C0706D] transition-colors hover:border-[#C0706D]">
