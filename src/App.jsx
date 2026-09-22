@@ -693,6 +693,26 @@ function SilkRibbon({ className = "", flip = false, rotate = 0 }) {
 
 /* ---------------------------------- APP ----------------------------------- */
 
+/* Fotos de iPhone (.HEIC): Chrome no las sabe leer, ni en la compu ni en
+   Android. El lector pesa 1,3 MB, asi que no viaja con el sitio: se baja solo
+   la primera vez que aparece una foto HEIC, y nunca si no aparece ninguna. */
+const LECTOR_HEIC = "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js";
+let bajandoHeic = null;
+const lectorHeic = () => {
+  if (window.heic2any) return Promise.resolve(window.heic2any);
+  bajandoHeic ??= new Promise((listo, falla) => {
+    const script = document.createElement("script");
+    script.src = LECTOR_HEIC;
+    script.onload = () => (window.heic2any ? listo(window.heic2any) : falla(new Error("no cargó")));
+    script.onerror = () => { bajandoHeic = null; falla(new Error("sin conexión")); };
+    document.head.appendChild(script);
+  });
+  return bajandoHeic;
+};
+// Chrome suele dejar el tipo vacío en los HEIC, así que también mira el nombre.
+const esHeic = (file) =>
+  /^image\/hei[cf]/i.test(file.type || "") || /\.hei[cf]$/i.test(file.name || "");
+
 export default function App() {
   const [open, setOpen] = useState(false);
   const [openSubmenus, setOpenSubmenus] = useState(() => new Set());
@@ -1164,7 +1184,18 @@ export default function App() {
     try {
       bitmap = await createImageBitmap(file);
     } catch {
-      throw new Error(`No pude abrir "${file.name}". Si es una foto de iPhone (.HEIC), guardala como JPG y probá de nuevo.`);
+      if (!esHeic(file)) {
+        throw new Error(`No pude abrir "${file.name}". Probá con un JPG o un PNG.`);
+      }
+      // Es una foto de iPhone: se baja el lector y se pasa a JPG primero.
+      try {
+        setFitMsg("Es una foto de iPhone: convirtiéndola, puede tardar unos segundos…");
+        const heic2any = await lectorHeic();
+        const jpg = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+        bitmap = await createImageBitmap(Array.isArray(jpg) ? jpg[0] : jpg);
+      } catch {
+        throw new Error(`No pude convertir "${file.name}". Exportá la foto como JPG y probá de nuevo.`);
+      }
     }
     const escala = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height));
     const lienzo = document.createElement("canvas");
