@@ -42,18 +42,28 @@ export default async (req) => {
         await store.set(`archivo/${archivo}`, datos);
         return json({ ok: true });
       }
-      const { fotos = {}, marcos = {}, archivos = [] } = await req.json();
+      const { fotos = {}, marcos = {}, archivos = [], visto, forzar = false } = await req.json();
       for (const a of archivos) {
         if (!RUTA_OK.test(a.ruta)) return json({ ok: false, error: `Ruta no permitida: ${a.ruta}` }, 400);
       }
-      // Las fotos que se sacaron del borrador dejan de ocupar lugar.
       const previo = await store.get(INDICE, { type: "json" });
+      /* El borrador es uno solo y lo comparten las dos personas que tienen la
+         contrasena. Si el que esta guardando arranco de una version mas vieja
+         que la guardada, se le avisa en vez de pisar el trabajo del otro.
+         Una pestana abierta desde antes de este cambio no manda "visto": en
+         ese caso no se puede comparar y se la deja guardar, para no romperle
+         el guardado a quien todavia tiene la pagina vieja cargada. */
+      if (!forzar && visto !== undefined && previo?.guardado && previo.guardado > visto) {
+        return json({ ok: false, conflicto: true, guardado: previo.guardado }, 409);
+      }
+      // Las fotos que se sacaron del borrador dejan de ocupar lugar.
       const siguen = new Set(archivos.map((a) => a.ruta));
       for (const a of previo?.archivos ?? []) {
         if (!siguen.has(a.ruta)) await store.delete(`archivo/${a.ruta}`);
       }
-      await store.setJSON(INDICE, { fotos, marcos, archivos, guardado: Date.now() });
-      return json({ ok: true });
+      const guardado = Date.now();
+      await store.setJSON(INDICE, { fotos, marcos, archivos, guardado });
+      return json({ ok: true, guardado });
     }
 
     if (req.method === "DELETE") {

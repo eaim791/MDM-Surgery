@@ -981,7 +981,8 @@ export default function App() {
   };
   const salirDelEditor = () => {
     localStorage.removeItem("mdm-editor");
-    borradorCargado.current = false; subidos.current = new Set();
+    borradorCargado.current = false; subidos.current = new Set(); visto.current = 0;
+    setConflicto(null); setGuardadoEstado("");
     setSesion(""); setFitEdit(false); setArchivos([]); setFits({}); setMarcoEdits({});
     setFirmaGuardada("");
   };
@@ -1015,15 +1016,24 @@ export default function App() {
   // Fotos que ya viajaron al borrador: no se vuelven a subir en cada guardado.
   const subidos = useRef(new Set());
   const borradorCargado = useRef(false);
+  // Cuando se guardo por ultima vez el borrador que tiene esta pestana: sirve
+  // para darse cuenta de que la otra persona guardo algo mas nuevo.
+  const visto = useRef(0);
+  const [conflicto, setConflicto] = useState(null);
+  // "", "guardando", "guardado" o el motivo por el que no se pudo.
+  const [guardadoEstado, setGuardadoEstado] = useState("");
   const conPase = (url, opciones = {}) =>
     fetch(url, { ...opciones, headers: { ...(opciones.headers || {}), authorization: `Bearer ${sesion}` } });
-  // Los cambios sin guardar viven solo en esta pestana: el navegador avisa.
+  /* Aviso al cerrar, mientras haya algo sin guardar o un guardado en curso.
+     El navegador muestra su propio texto (no se puede cambiar) y en el celular
+     muchas veces ni aparece: por eso lo importante es el keepalive de arriba y
+     que el guardado en el servidor sea de una sola escritura. */
   useEffect(() => {
-    if (!sinGuardar) return;
+    if (!sinGuardar && guardadoEstado !== "guardando") return;
     const avisar = (e) => { e.preventDefault(); e.returnValue = ""; };
     window.addEventListener("beforeunload", avisar);
     return () => window.removeEventListener("beforeunload", avisar);
-  }, [sinGuardar]);
+  }, [sinGuardar, guardadoEstado]);
   // Al entrar (o al recargar con la sesion abierta) vuelve lo que habia quedado.
   useEffect(() => {
     if (import.meta.env.DEV || !sesion || borradorCargado.current) return;
@@ -1044,10 +1054,12 @@ export default function App() {
         }
         if (!recuperados.length && !Object.keys(fotos).length && !Object.keys(marcos).length) return;
         subidos.current = new Set(recuperados.filter((a) => a.accion === "guardar").map((a) => a.ruta));
+        visto.current = j.borrador.guardado ?? 0;
         setFits(fotos); setMarcoEdits(marcos); setArchivos(recuperados);
         setFirmaGuardada(firmaDe(fotos, marcos, recuperados));
         setFitEdit(true);
-        setFitMsg("Recuperé los cambios que habías dejado sin publicar.");
+        setFitMsg(`Recuperé los cambios sin publicar que había guardados${
+          j.borrador.guardado ? ` (${new Date(j.borrador.guardado).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })})` : ""}.`);
       } catch (e) {
         setFitMsg(`No pude recuperar el borrador: ${e.message}`);
       }
@@ -1299,7 +1311,7 @@ export default function App() {
   /* Guarda en el borrador de la nube: primero las fotos que todavia no
      viajaron (una por una, porque son pesadas) y despues la lista y los
      encuadres. No toca la pagina que ven las visitas. */
-  const guardarBorrador = async () => {
+  const guardarBorrador = async (forzar = false) => {
     for (const a of archivos) {
       if (a.accion !== "guardar" || subidos.current.has(a.ruta)) continue;
       const r = await conPase(`/api/borrador?archivo=${encodeURIComponent(a.ruta)}`,
@@ -1311,13 +1323,42 @@ export default function App() {
     }
     const r = await conPase("/api/borrador", {
       method: "POST",
-      body: JSON.stringify({ fotos: fits, marcos: marcoEdits, archivos: archivos.map(({ accion, ruta }) => ({ accion, ruta })) }),
+      // keepalive: aunque se cierre la pestana en el medio, el navegador
+      // termina de enviar esto (son unos pocos KB, entra en el limite).
+      keepalive: true,
+      body: JSON.stringify({
+        fotos: fits, marcos: marcoEdits,
+        archivos: archivos.map(({ accion, ruta }) => ({ accion, ruta })),
+        visto: visto.current, forzar,
+      }),
     });
     const j = await r.json();
     if (r.status === 401) { salirDelEditor(); throw new Error("Se venció la sesión, volvé a entrar"); }
+    if (j.conflicto) { setConflicto(j.guardado); return false; }
     if (!j.ok) throw new Error(j.error);
+    visto.current = j.guardado ?? Date.now();
+    setConflicto(null);
     setFirmaGuardada(firma);
+    return true;
   };
+  /* Guarda solo: unos segundos despues del ultimo retoque, no mientras se
+     arrastra la foto. Asi no hay que acordarse de apretar nada y no se pierde
+     el trabajo si se cierra la pagina o se corta la luz. */
+  useEffect(() => {
+    if (import.meta.env.DEV || !sesion || !sinGuardar || fitBusy || conflicto) return;
+    const t = setTimeout(async () => {
+      setGuardadoEstado("guardando");
+      try {
+        const fue = await guardarBorrador();
+        setGuardadoEstado(fue ? "guardado" : "");
+      } catch (e) {
+        setGuardadoEstado(`No se pudo guardar: ${e.message}`);
+      }
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [firma, sesion, sinGuardar, fitBusy, conflicto]);
+  // Traer lo que guardo la otra persona, dejando de lado lo de esta pestana.
+  const traerDelOtro = () => { borradorCargado.current = false; window.location.reload(); };
   const actualizarPagina = async () => {
     if (!pendientes) return;
     setFitBusy(true); setFitMsg("Guardando…");
@@ -1325,8 +1366,8 @@ export default function App() {
       if (import.meta.env.DEV) {
         await guardarLocal();
         setFitMsg("Guardado en esta computadora");
-      } else {
-        await guardarBorrador();
+      } else if (await guardarBorrador()) {
+        setGuardadoEstado("guardado");
         setFitMsg("Guardado. Podés cerrar la página y seguir después. Para que lo vean todos, tocá la nube.");
       }
     } catch (e) {
@@ -1361,7 +1402,8 @@ export default function App() {
         if (j.sinCambios) { setFitMsg(`No había nada para publicar.${noEstaban}`); return; }
         // Ya esta en la pagina de verdad: el borrador deja de hacer falta.
         await conPase("/api/borrador", { method: "DELETE" }).catch(() => {});
-        subidos.current = new Set();
+        subidos.current = new Set(); visto.current = 0;
+        setConflicto(null); setGuardadoEstado("");
         setFits({}); setMarcoEdits({}); setArchivos([]); setFirmaGuardada("");
         // El numero del commit confirma que llego a GitHub de verdad.
         setFitMsg(`Publicado (${j.commit}, ${j.archivos} archivos). En un par de minutos se ve en la página.${noEstaban}`);
@@ -1779,7 +1821,40 @@ export default function App() {
       {/* Boton flotante para publicar (solo en desarrollo): va arriba del boton
           de contacto y sube el contenido a internet — un deploy por cada uso,
           por eso pide confirmacion antes. */}
-      {puedeEditar && fitMsg && (
+      {puedeEditar && (fitBusy || guardadoEstado === "guardando") && (
+        <div role="alert" aria-live="assertive"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-6">
+          <div className="max-w-xs border border-[var(--line)] bg-[var(--surface)] px-6 py-5 text-center text-[13px] leading-relaxed text-[var(--ink)] shadow-[0_8px_24px_var(--shadow)]">
+            <span aria-hidden="true" className="mx-auto mb-3 block h-1.5 w-8 animate-pulse bg-[var(--accent)]" />
+            {fitBusy && fitMsg ? fitMsg : "Guardando…"}
+            <span className="mt-2 block text-[var(--muted)]">Esperá un segundo y no cierres la página.</span>
+          </div>
+        </div>
+      )}
+      {puedeEditar && conflicto && (
+        <div role="alert"
+          className="fixed bottom-40 right-6 z-40 max-w-[17rem] border border-[#C0706D] bg-[var(--surface)] px-4 py-3 text-[12px] leading-relaxed text-[var(--ink)] shadow-[0_8px_24px_var(--shadow)] sm:bottom-44 sm:right-8">
+          La otra persona guardó cambios después que vos
+          ({new Date(conflicto).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}).
+          Si guardás igual, lo suyo se pierde.
+          <span className="mt-2 flex flex-wrap gap-2">
+            <button type="button" onClick={traerDelOtro}
+              className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[11px] transition-colors hover:border-[var(--ink)]">
+              Ver lo suyo
+            </button>
+            <button type="button"
+              onClick={async () => {
+                setGuardadoEstado("guardando");
+                try { await guardarBorrador(true); setGuardadoEstado("guardado"); }
+                catch (e) { setGuardadoEstado(`No se pudo guardar: ${e.message}`); }
+              }}
+              className="cursor-pointer border border-[#C0706D] px-2 py-1 text-[11px] text-[#C0706D] transition-opacity hover:opacity-75">
+              Guardar igual
+            </button>
+          </span>
+        </div>
+      )}
+      {puedeEditar && !conflicto && fitMsg && (
         <div role="status"
           className="fixed bottom-40 right-6 z-40 max-w-[17rem] border border-[var(--line)] bg-[var(--surface)] px-4 py-3 text-[12px] leading-relaxed text-[var(--ink)] shadow-[0_8px_24px_var(--shadow)] sm:bottom-44 sm:right-8">
           {fitMsg}
@@ -1788,6 +1863,11 @@ export default function App() {
             Cerrar
           </button>
         </div>
+      )}
+      {puedeEditar && fitEdit && !!guardadoEstado && (
+        <span className="fixed bottom-[4.25rem] right-6 z-40 max-w-[12rem] text-right text-[10px] uppercase tracking-[0.14em] text-[var(--faint)] sm:bottom-[5.25rem] sm:right-8">
+          {guardadoEstado === "guardando" ? "Guardando…" : guardadoEstado === "guardado" ? "Guardado" : guardadoEstado}
+        </span>
       )}
       {puedeEditar && (
         <button type="button" onClick={publicarPagina} disabled={fitBusy || !pendientes}
@@ -2367,7 +2447,7 @@ export default function App() {
                           <>
                             <button type="button" onClick={actualizarPagina} disabled={fitBusy || !sinGuardar}
                               className="cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[12px] font-medium text-[var(--surface)] transition-opacity hover:opacity-85 disabled:cursor-default disabled:opacity-40">
-                              {import.meta.env.DEV ? "Guardar cambios" : sinGuardar ? "Listo, guardar" : "Guardado"}{pendientes ? " (" + pendientes + ")" : ""}
+                              {import.meta.env.DEV ? "Guardar cambios" : sinGuardar ? "Guardar ahora" : "Guardado"}{pendientes ? " (" + pendientes + ")" : ""}
                             </button>
                             <span className="text-[12px] text-[var(--muted)]">
                               Arrastrá la foto para moverla · Estirá los bordes con flechas para el tamaño ·
