@@ -1184,6 +1184,17 @@ export default function App() {
     try {
       bitmap = await createImageBitmap(file);
     } catch {
+      /* Un archivo que OneDrive o iCloud todavia no bajaron a la computadora
+         (el de la nubecita o la X) se puede elegir en el cuadro de dialogo,
+         pero al leerlo no hay nada. No es un problema de formato, asi que
+         decirle que pruebe con un JPG lo manda para el lado equivocado. */
+      let ilegible = file.size === 0;
+      if (!ilegible) {
+        try { await file.slice(0, 4).arrayBuffer(); } catch { ilegible = true; }
+      }
+      if (ilegible) {
+        throw new Error(`No pude leer "${file.name}". Puede que esté en OneDrive o iCloud sin bajar a esta computadora (el archivo tiene una nubecita o una X): abrilo una vez desde la carpeta y probá de nuevo.`);
+      }
       if (!esHeic(file)) {
         throw new Error(`No pude abrir "${file.name}". Probá con un JPG o un PNG.`);
       }
