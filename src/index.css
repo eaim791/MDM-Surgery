@@ -10,6 +10,12 @@
   --muted: #5B636B;
   --faint: #676E75;
   --line: #E3E5E7;
+  /* Borde de campos de formulario (input/select/textarea): --line da 1.26:1
+     de contraste contra --bg, por debajo del 3:1 que pide WCAG 1.4.11 para
+     distinguir el límite de un componente interactivo en reposo. --field-line
+     es un tono intermedio entre --line y --muted, solo para esos bordes —
+     --line sigue como divisor decorativo en el resto del sitio. */
+  --field-line: #7D8285;
   --chip: #F1F2F3;
   --band: rgba(255, 255, 255, 0.85);
   --inv-bg: #1E2427;
@@ -46,6 +52,7 @@
   --muted: #9AA2A7;
   --faint: #858D92;
   --line: #2B3033;
+  --field-line: #6B727A;
   --chip: #252A2D;
   --band: rgba(21, 24, 26, 0.86);
   --inv-bg: #ECEEEF;
@@ -103,19 +110,18 @@ html {
   border-radius: 2px;
 }
 
-/* Texto a mano alzada (pantalla de carga + slogan, ver HandwrittenText en
-   App.jsx): el propio texto va relleno solido, sin problema de letra hueca,
-   porque Sacramento es una script realmente monolineal (su glifo
-   YA es una linea fina, no una forma con area gruesa) — trazar el contorno
-   de una tipografia comun en cambio siempre deja un hueco en el medio de
-   cada letra, por mas fina que sea la tipografia o el trazo. Lo que se
-   anima no es el texto sino la mascara que lo revela: un trazo curvo con
+/* Texto a mano alzada del slogan (ver HandwrittenText y Slogan en App.jsx —
+   el loading ya no usa esto, ver .loader-mark mas abajo): el propio texto va
+   relleno solido, sin problema de letra hueca, porque una script fina
+   rellena normal no deja el hueco en el medio de cada letra que si deja
+   trazar el contorno de una tipografia comun. Lo que se anima no es el
+   texto sino la mascara que lo revela: un trazo curvo con
    stroke-dasharray/-dashoffset, la misma tecnica y la misma curva ease-out
    que .doodle-flourish, asi que el resultado final se ve como una mano
    escribiendo con tinta real en vez de una cortina de clip-path corriendose. */
 .handwritten-fill {
   fill: var(--ink);
-  font-family: "Sacramento", cursive;
+  font-family: "Mrs Saint Delafield", cursive;
   font-weight: 400;
 }
 .handwritten-reveal { stroke-dasharray: 1; stroke-dashoffset: 1; }
@@ -136,12 +142,21 @@ html {
   to { stroke-dashoffset: 0; }
 }
 
-/* min() con vw: Sacramento es ancha y a 42px fijos "MDM Surgery & Team"
-   se salia de los costados en celulares de 375px. */
-.loader-write { font-size: min(42px, 8.4vw); }
-@media (min-width: 640px) {
-  .loader-write { font-size: 54px; }
+/* Loading: el monograma "MDM" entra desenfocado y grande y hace foco a su
+   tamaño final — reemplaza a la firma completa a mano alzada de antes,
+   mucho mas rapida de percibir (una palabra corta en vez de una frase) y
+   sin depender de que la fuente cursiva ya haya cargado para arrancar. */
+.loader-mark {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(10px);
+  transform: scale(1.15);
+  animation: loader-focus-in 0.8s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
 }
+@keyframes loader-focus-in {
+  to { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+
 .slogan-write { font-size: 52px; }
 @media (min-width: 640px) {
   .slogan-write { font-size: 64px; }

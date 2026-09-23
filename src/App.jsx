@@ -513,26 +513,29 @@ function ScrollSideDecor() {
   );
 }
 
-// Silueta de la pantalla de carga: "MDM Surgery & Team" a mano alzada con
-// boligrafo, mismo mecanismo que el trazo de abajo del slogan (ver
-// HandwrittenText, mas abajo) — el texto se rellena solido (tipografia
-// script realmente monolineal, sin el problema de letra hueca de un
-// tipo de letra comun trazado en su contorno) y se revela con una mascara
-// cuyo trazo se dibuja con stroke-dasharray/-dashoffset, igual que
-// .doodle-flourish. Arranca siempre al montar, sin gatillo de scroll.
-// En la primera visita la cursiva todavia no esta en cache: sin esperarla,
-// el trazo arrancaba con la fuente de reemplazo (otra letra, otras metricas,
-// mas abajo del centro) y a mitad de camino saltaba a la real. Una sola
-// promesa compartida entre el loading y el slogan, con tope de 2.5s para no
-// colgar la pantalla de carga si la fuente no llega nunca.
+// Espera a que la cursiva del slogan (Mrs Saint Delafield) ya este en cache
+// antes de medir su ancho real en HandwrittenText: sin esperarla, la
+// primera visita media con la fuente de reemplazo (otra letra, otras
+// metricas) y el trazo arrancaba mal escalado. Tope de 2.5s para no
+// trabarse si la fuente no llega nunca. El loading (ver LoaderWordmark, mas
+// abajo) ya no depende de esto — usa una tipografia que ya esta en el
+// bundle desde el arranque.
 let handwritingReady;
 const waitForHandwriting = () => handwritingReady ??= Promise.race([
-  document.fonts?.load?.('1em "Sacramento"') ?? Promise.resolve(),
+  document.fonts?.load?.('1em "Mrs Saint Delafield"') ?? Promise.resolve(),
   new Promise((r) => setTimeout(r, 2500)),
 ]).catch(() => {});
 
+// Loading: "MDM" entra desenfocado y hace foco a su tamaño final (ver
+// .loader-mark en index.css) — reemplaza la firma completa a mano alzada de
+// antes por algo mucho mas corto de percibir (~0.8s en vez de tener que
+// esperar a que se escriba una frase entera).
 function LoaderWordmark() {
-  return <HandwrittenText text="MDM Surgery & Team" className="loader-write" duration={0.85} ready />;
+  return (
+    <span className="loader-mark font-display text-[15vw] font-medium text-[var(--ink)] sm:text-[64px]">
+      MDM
+    </span>
+  );
 }
 
 // Texto escrito a mano alzada, en cursiva monolineal, revelado por una
@@ -884,17 +887,14 @@ export default function App() {
   }, [fabVisible, reduce]);
 
   useEffect(() => {
-    // 880ms: el trazo a boligrafo de "MDM Surgery & Team" tarda 0.85s en
-    // dibujarse (ver LoaderWordmark) — con menos, el fade se lleva puesto
-    // el final del trazo antes de que termine de escribirse.
-    // El reloj arranca cuando la cursiva ya cargo (ver waitForHandwriting):
-    // en la primera visita la descarga de la fuente se comia parte de estos
-    // 880ms y el loading se iba antes de terminar de escribirse.
-    let alive = true, id;
-    waitForHandwriting().then(() => {
-      if (alive) id = setTimeout(() => setLoading(false), reduce ? 0 : 880);
-    });
-    return () => { alive = false; clearTimeout(id); };
+    // 800ms: lo que tarda en hacer foco el monograma (ver .loader-mark en
+    // index.css) — con menos, el fade de salida se lleva puesto el final de
+    // esa animación antes de que termine. A diferencia de la firma a mano
+    // alzada de antes, esto no depende de ninguna fuente cursiva, así que no
+    // hace falta esperar a que cargue nada para arrancar el reloj.
+    if (reduce) { setLoading(false); return; }
+    const id = setTimeout(() => setLoading(false), 800);
+    return () => clearTimeout(id);
   }, [reduce]);
 
   useEffect(() => {
@@ -1918,20 +1918,20 @@ export default function App() {
             <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fName}</span>
             <input type="text" value={cForm.name} placeholder={t.contact.fNamePh} maxLength={60}
               onChange={(e) => setCForm({ ...cForm, name: e.target.value })}
-              className="mt-2 w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+              className="mt-2 w-full rounded-lg border border-[var(--field-line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
           </label>
           <label className="block">
             <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fEmail}</span>
             <input type="email" value={cForm.email} placeholder={t.contact.fEmailPh} maxLength={90}
               onChange={(e) => setCForm({ ...cForm, email: e.target.value })}
-              className="mt-2 w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+              className="mt-2 w-full rounded-lg border border-[var(--field-line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
           </label>
         </div>
         <label className="block">
           <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fProc}</span>
           <select value={cForm.proc}
             onChange={(e) => setCForm({ ...cForm, proc: e.target.value })}
-            className="mt-2 w-full cursor-pointer rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors focus:border-[var(--ink)]">
+            className="mt-2 w-full cursor-pointer rounded-lg border border-[var(--field-line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors focus:border-[var(--ink)]">
             <option value="" className="text-[var(--surface)]">{t.contact.fProcPh}</option>
             {PROCEDURES.map((p) => (
               <option key={p.slug} value={p.slug} className="text-[var(--surface)]">{p[lang].name}</option>
@@ -1942,7 +1942,8 @@ export default function App() {
           <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fMsg}</span>
           <textarea id="contact-msg" rows={4} value={cForm.msg} placeholder={t.contact.fMsgPh} maxLength={800}
             onChange={(e) => setCForm({ ...cForm, msg: e.target.value })}
-            className="mt-2 w-full resize-y rounded-lg border border-[var(--line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+            className="mt-2 w-full resize-y rounded-lg border border-[var(--field-line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+          <span className="mt-1.5 block text-[11px] leading-relaxed text-[var(--faint)]">{t.contact.fMsgNote}</span>
         </label>
         {cErr && <p className="text-[12px] text-[#E0908D]">{cErr}</p>}
         <div className="flex flex-wrap items-center gap-4">
@@ -1972,10 +1973,8 @@ export default function App() {
           <motion.div key="loader" exit={{ opacity: 0, filter: "blur(6px)" }}
             transition={{ duration: reduce ? 0 : 0.4, ease: "easeInOut" }}
             className="fixed inset-0 z-[200] flex items-center justify-center bg-[var(--bg)]">
-            {/* Silueta a mano alzada: "MDM Surgery & Team" se escribe con
-                boligrafo, en la misma cursiva del slogan — sin anillo ni
-                logo compuesto, un solo trazo que se lee mientras se dibuja.
-                Ver LoaderWordmark, arriba. */}
+            {/* El monograma "MDM" hace foco al aparecer, sin anillo ni
+                cursiva — ver LoaderWordmark, arriba. */}
             <LoaderWordmark />
           </motion.div>
         )}
@@ -2405,8 +2404,12 @@ export default function App() {
             {/* Lista numerada en vez de grid de cajas: la primera seccion despues
                 del hero no puede resolver otra vez con el mismo molde de tarjeta
                 con borde que usa el resto del sitio. */}
+            {/* pb-20 en movil: el ultimo item no puede terminar tapado por el FAB
+                flotante de contacto (fixed bottom-6 right-6, ~72px de alto) —
+                ver docs/audits/UX_UI_DEEP_AUDIT.md UX-01. En sm+ el FAB no
+                interfiere con este bloque, asi que no hace falta el espacio extra. */}
             <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}
-              className="mt-12 border-t border-[var(--line)]">
+              className="mt-12 border-t border-[var(--line)] pb-20 sm:pb-0">
               {AREAS.map((a) => (
                 <motion.div key={a.en.t} variants={fadeUp}
                   className="grid grid-cols-[2.75rem_1fr] gap-x-6 border-b border-[var(--line)] py-7 sm:grid-cols-[3.5rem_1fr]">
@@ -2630,7 +2633,12 @@ export default function App() {
                         {t.res.building}
                       </span>
                     </div>
-                    <div className="mt-3 flex min-h-[34px] items-center gap-3">
+                    {/* pr-14 en movil: sin este margen el ultimo "pill" de caso
+                        visible queda justo debajo del FAB flotante de contacto
+                        (fixed bottom-6 right-6) — ver UX-02 en
+                        docs/audits/UX_UI_DEEP_AUDIT.md. En sm+ el FAB no llega
+                        a esta fila, asi que no hace falta el recorte. */}
+                    <div className="mt-3 flex min-h-[34px] items-center gap-3 pr-14 sm:pr-0">
                       <SwipeRow rowRef={casesRef} className="items-center gap-2" hint={t.res.swipe} watch={`${proc.slug}-${cases.length}`}>
                         {cases.map((c, k) => (
                           <button key={c.caseId} type="button" aria-pressed={k === ci} data-caso={c.caseId}
@@ -3437,25 +3445,25 @@ export default function App() {
               <Eyebrow>{t.loc.eyebrow}</Eyebrow>
               <SectionTitle>{t.loc.title}</SectionTitle>
             </motion.div>
+            {/* Una tarjeta por ciudad (no por pais): con paises que comparten
+                nombre de ciudad (Cordoba existe en Argentina y en Espana), el
+                titulo siempre lleva "Ciudad, Pais" para que nunca quede
+                ambiguo — antes esa aclaracion dependia de agruparlas bajo la
+                tarjeta del pais, que se perdia si se leia una tarjeta sola. */}
             <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}
-              className="mt-10 grid grid-cols-1 items-start gap-x-4 gap-y-10 md:grid-cols-3">
-              {LOCATIONS.map((group) => {
-                const CountryIcon = countryIcon(group.country.es);
+              className="mt-10 grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {LOCATIONS.flatMap((group) => group.cities.map((c) => ({ ...c, country: group.country }))).map((c) => {
+                const CountryIcon = countryIcon(c.country.es);
                 return (
-                <motion.div key={group.country.es} variants={fadeUp}
+                <motion.div key={`${c.country.es}-${c.city.es}`} variants={fadeUp}
                   className="border border-[var(--line)] bg-[var(--surface)] p-7">
                   <div className="flex items-center gap-2">
-                    <CountryIcon size={17} strokeWidth={1.9} className="text-[var(--accent)]" />
-                    <h3 className="font-display text-xl font-normal text-[var(--ink)]">{group.country[lang]}</h3>
+                    <CountryIcon size={17} strokeWidth={1.9} className="flex-shrink-0 text-[var(--accent)]" />
+                    <h3 className="font-display text-lg font-normal leading-snug text-[var(--ink)]">
+                      {c.city[lang]}, {c.country[lang]}
+                    </h3>
                   </div>
-                  <div className="mt-4 space-y-3">
-                    {group.cities.map((c) => (
-                      <div key={c.city.es} className="rounded-lg border border-[var(--line)] p-4">
-                        <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--faint)]">{c.city[lang]}</p>
-                        <p className="mt-1.5 text-[13px] leading-relaxed text-[var(--muted)]">{c[lang]}</p>
-                      </div>
-                    ))}
-                  </div>
+                  <p className="mt-3 text-[13px] leading-relaxed text-[var(--muted)]">{c[lang]}</p>
                 </motion.div>
                 );
               })}

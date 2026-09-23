@@ -11,6 +11,7 @@
     <meta name="description" content="Dr. Marcelo Di Maggio — cirugía plástica, estética y reconstructiva en Buenos Aires, Córdoba, Madrid y Nueva York. Armonización facial y corporal, feminización y masculinización, rejuvenecimiento." />
     <meta name="theme-color" content="#F4F4F5" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#15181A" media="(prefers-color-scheme: dark)" />
+    <link rel="canonical" href="https://mdmsurgery.com/" />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="MDM Surgery" />
@@ -19,6 +20,7 @@
     <meta property="og:image" content="/og-image.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://mdmsurgery.com/" />
     <meta property="og:locale" content="es_AR" />
     <meta property="og:locale:alternate" content="en_US" />
 
@@ -26,6 +28,33 @@
     <meta name="twitter:title" content="MDM Surgery — Marcelo Di Maggio" />
     <meta name="twitter:description" content="Cirugía plástica, estética y reconstructiva en Buenos Aires, Córdoba, Madrid y Nueva York." />
     <meta name="twitter:image" content="/og-image.jpg" />
+
+    <!-- JSON-LD: solo datos verificados en src/data.js (equipo, sedes, redes).
+         Sin domicilio postal ni teléfono — no están confirmados en el repo.
+         Ver docs/MDM_SURGERY_MASTER_AUDIT.md (SEO) antes de ampliar esto. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Physician",
+        "name": "Marcelo Di Maggio",
+        "url": "https://mdmsurgery.com/",
+        "image": "https://mdmsurgery.com/og-image.jpg",
+        "medicalSpecialty": ["Plastic Surgery", "Reconstructive Surgery"],
+        "sameAs": [
+          "https://www.facebook.com/mdm.marcelodimaggio",
+          "https://x.com/DiMaggioM",
+          "https://www.youtube.com/channel/UCQARmZLuKwdXnl_DW5AGLOA",
+          "https://www.instagram.com/mdmsurgery",
+          "https://www.linkedin.com/in/marcelo-di-maggio-72712323"
+        ],
+        "areaServed": [
+          { "@type": "City", "name": "Buenos Aires" },
+          { "@type": "City", "name": "Córdoba" },
+          { "@type": "City", "name": "Madrid" },
+          { "@type": "City", "name": "New York" }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
