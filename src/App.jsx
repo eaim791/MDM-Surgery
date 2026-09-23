@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useReducedMotion, useInView, useScroll, useTra
 import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
   Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
-  Droplet, EyeOff, Construction, ChevronsRight, ArrowUpRight, MessageCircle,
+  Droplet, Eye, EyeOff, Construction, GripVertical, ChevronsRight, ArrowUpRight, MessageCircle,
   Plus, Minus, Move, MoveHorizontal, MoveVertical, UploadCloud, Lock,
 } from "lucide-react";
 import {
@@ -17,7 +17,7 @@ import marceloPhoto from "./assets/marcelodimaggio.webp";
 import {
   PROCEDURES, PROCEDURES_WITH_CASES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
   LOCATIONS, SEDES, TESTIMONIALS, casesFor, CERTIFICATES, PAPERS,
-  ENCUADRE_FOTOS, ENCUADRE_MARCOS, marcoGuardado, fitStyle, fitRender,
+  ENCUADRE_FOTOS, ENCUADRE_MARCOS, marcoGuardado, fitStyle, fitRender, CENSURA_GUARDADA, ORDEN_GUARDADO, ordenarCasos,
 } from "./data.js";
 
 /* Velo del video del hero: atenua el centro-izquierda para que el texto se lea. */
@@ -1003,7 +1003,7 @@ export default function App() {
     localStorage.removeItem("mdm-editor");
     borradorCargado.current = false; subidos.current = new Set(); visto.current = 0;
     setConflicto(null); setGuardadoEstado("");
-    setSesion(""); setFitEdit(false); setArchivos([]); setFits({}); setMarcoEdits({});
+    setSesion(""); setFitEdit(false); setArchivos([]); setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({});
     setFirmaGuardada("");
   };
 
@@ -1012,6 +1012,10 @@ export default function App() {
   const [archivos, setArchivos] = useState([]);
   const [fits, setFits] = useState({});
   const [marcoEdits, setMarcoEdits] = useState({});
+  // Fotos tapadas o destapadas a mano desde el editor: { clave: true|false }.
+  const [censuras, setCensuras] = useState({});
+  // Orden de los casos arrastrado a mano: { slug: [caseId, ...] }.
+  const [ordenes, setOrdenes] = useState({});
   const [fitMsg, setFitMsg] = useState("");
   // Caso que se esta creando: { slug, carpeta, antes, despues } con las fotos
   // elegidas todavia sin subir (se ven como vista previa).
@@ -1023,14 +1027,15 @@ export default function App() {
   const fitDrag = useRef(null);
   const marcoDrag = useRef(null);
   const [fitMoving, setFitMoving] = useState(null);
-  const pendientes = Object.keys(fits).length + Object.keys(marcoEdits).length + archivos.length;
+  const pendientes = Object.keys(fits).length + Object.keys(marcoEdits).length
+    + Object.keys(censuras).length + Object.keys(ordenes).length + archivos.length;
   /* Borrador en la nube: "Listo, guardar" manda los cambios a Netlify (funcion
      borrador.mjs) sin tocar la pagina publica. Asi se puede cerrar la pagina y
      seguir despues, o desde otra computadora, y recien al tocar la nube se
      publica para todo el mundo. En desarrollo no hace falta: se escribe en el
      disco de esta compu. */
-  const firmaDe = (f, m, a) => JSON.stringify([f, m, a.map((x) => x.accion + x.ruta)]);
-  const firma = firmaDe(fits, marcoEdits, archivos);
+  const firmaDe = (f, m, a, c = {}, o = {}) => JSON.stringify([f, m, a.map((x) => x.accion + x.ruta), c, o]);
+  const firma = firmaDe(fits, marcoEdits, archivos, censuras, ordenes);
   const [firmaGuardada, setFirmaGuardada] = useState("");
   const sinGuardar = pendientes > 0 && (import.meta.env.DEV || firma !== firmaGuardada);
   // Fotos que ya viajaron al borrador: no se vuelven a subir en cada guardado.
@@ -1064,7 +1069,7 @@ export default function App() {
         if (r.status === 401) return salirDelEditor();
         const j = await r.json();
         if (!j.ok || !j.borrador) return;
-        const { fotos = {}, marcos = {}, archivos: lista = [] } = j.borrador;
+        const { fotos = {}, marcos = {}, censura = {}, orden = {}, archivos: lista = [] } = j.borrador;
         const recuperados = [];
         for (const a of lista) {
           if (a.accion !== "guardar") { recuperados.push(a); continue; }
@@ -1072,11 +1077,12 @@ export default function App() {
           const jf = await rf.json();
           if (jf.ok) recuperados.push({ ...a, datos: jf.datos, url: urlDeBase64(jf.datos) });
         }
-        if (!recuperados.length && !Object.keys(fotos).length && !Object.keys(marcos).length) return;
+        if (!recuperados.length && !Object.keys(fotos).length && !Object.keys(marcos).length
+            && !Object.keys(censura).length && !Object.keys(orden).length) return;
         subidos.current = new Set(recuperados.filter((a) => a.accion === "guardar").map((a) => a.ruta));
         visto.current = j.borrador.guardado ?? 0;
-        setFits(fotos); setMarcoEdits(marcos); setArchivos(recuperados);
-        setFirmaGuardada(firmaDe(fotos, marcos, recuperados));
+        setFits(fotos); setMarcoEdits(marcos); setCensuras(censura); setOrdenes(orden); setArchivos(recuperados);
+        setFirmaGuardada(firmaDe(fotos, marcos, recuperados, censura, orden));
         setFitEdit(true);
         setFitMsg(`Recuperé los cambios sin publicar que había guardados${
           j.borrador.guardado ? ` (${new Date(j.borrador.guardado).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })})` : ""}.`);
@@ -1087,6 +1093,11 @@ export default function App() {
   }, [sesion]);
 
   const fitOf = (key) => fits[key] ?? ENCUADRE_FOTOS[key] ?? [100, 100, 0, 0];
+  /* Censura: lo que se toco en esta sesion manda; si no, lo ya guardado; si
+     tampoco, lo que viene calculado de la foto (por procedimiento o lista). */
+  const censuraDe = (key, porDefecto) =>
+    censuras[key] ?? (typeof CENSURA_GUARDADA[key] === "boolean" ? CENSURA_GUARDADA[key] : porDefecto);
+  const cambiarCensura = (key, valor) => setCensuras((p) => ({ ...p, [key]: valor }));
   const marcoOf = (key, base) => marcoEdits[key] ?? (ENCUADRE_MARCOS[key] !== undefined
     ? [marcoGuardado(ENCUADRE_MARCOS[key]).ratio, marcoGuardado(ENCUADRE_MARCOS[key]).ancho]
     : [base.ratio, base.ancho]);
@@ -1104,6 +1115,7 @@ export default function App() {
 
   const onFitDown = (e, key) => {
     e.preventDefault();
+    bloquearScroll();
     fitDrag.current = { key, x: e.clientX, y: e.clientY, start: fitOf(key),
                         rect: e.currentTarget.getBoundingClientRect() };
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -1119,14 +1131,47 @@ export default function App() {
                    d.start[2] + ((e.clientX - d.x) / d.rect.width) * 100,
                    d.start[3] + ((e.clientY - d.y) / d.rect.height) * 100]);
   };
-  const onFitUp = () => { fitDrag.current = null; setFitMoving(null); };
+  const onFitUp = () => { fitDrag.current = null; setFitMoving(null); soltarScroll(); };
   // Al mover o ampliar, el recuadro cambia de alto y todo lo de abajo se corre:
   // la pagina parecia moverse sola. Se anota donde estaba el par justo antes
   // del cambio y despues se corrige el scroll esa misma distancia — solo en
   // ese momento, para no pelear con el scroll normal del usuario.
   const parRef = useRef(null);
   const parTop = useRef(null);
-  const anclarPar = () => { parTop.current = parRef.current?.getBoundingClientRect().top ?? null; };
+  /* Mientras se arrastra (la foto o un borde del recuadro) la pagina queda
+     clavada donde esta. Antes se corregia el scroll DESPUES de cada cambio,
+     asi que igual se alcanzaba a mover y daba saltitos; ahora directamente no
+     se mueve hasta soltar. */
+  const bloqueo = useRef(null);
+  const soltarScroll = () => {
+    if (!bloqueo.current) return;
+    window.removeEventListener("scroll", bloqueo.current.mantener);
+    window.removeEventListener("pointerup", bloqueo.current.porLasDudas);
+    window.removeEventListener("pointercancel", bloqueo.current.porLasDudas);
+    document.documentElement.style.overflowAnchor = "";
+    bloqueo.current = null;
+  };
+  const bloquearScroll = () => {
+    if (bloqueo.current) return;
+    const y = window.scrollY;
+    /* Chrome reacomoda el scroll solo cuando algo de arriba cambia de alto
+       ("scroll anchoring"), y lo hace en el medio del calculo de la pagina:
+       no alcanza con escuchar el scroll, hay que apagarlo mientras dura el
+       arrastre. Era esto lo que dejaba la pagina moviendose de a poquito. */
+    document.documentElement.style.overflowAnchor = "none";
+    const mantener = () => { if (window.scrollY !== y) window.scrollTo(0, y); };
+    // Si por algun motivo no llega el pointerup del elemento, se suelta igual.
+    const porLasDudas = () => soltarScroll();
+    window.addEventListener("scroll", mantener, { passive: true });
+    window.addEventListener("pointerup", porLasDudas);
+    window.addEventListener("pointercancel", porLasDudas);
+    bloqueo.current = { mantener, porLasDudas };
+  };
+  useEffect(() => soltarScroll, []);
+  // Con la pagina clavada no hace falta corregir nada: seria pelearse sola.
+  const anclarPar = () => {
+    parTop.current = bloqueo.current ? null : (parRef.current?.getBoundingClientRect().top ?? null);
+  };
   useLayoutEffect(() => {
     if (parTop.current === null || !parRef.current) return;
     const delta = parRef.current.getBoundingClientRect().top - parTop.current;
@@ -1143,6 +1188,7 @@ export default function App() {
     // que se mide el ancho del recuadro.
     const columnas = grilla ? getComputedStyle(grilla).gridTemplateColumns.split(" ") : [];
     const celdaW = parseFloat(columnas[0]) || grilla?.getBoundingClientRect().width || 1;
+    bloquearScroll();
     marcoDrag.current = { keys, modo, x: e.clientX, y: e.clientY, ratio, ancho, celdaW };
     e.currentTarget.setPointerCapture(e.pointerId);
     setFitMoving(keys[0]);
@@ -1157,7 +1203,7 @@ export default function App() {
     const ancho = Math.min(1, nuevoAnchoPx / d.celdaW);
     setMarcoPar(d.keys, [(ancho * d.celdaW) / nuevoAltoPx, ancho]);
   };
-  const onMarcoUp = () => { marcoDrag.current = null; setFitMoving(null); };
+  const onMarcoUp = () => { marcoDrag.current = null; setFitMoving(null); soltarScroll(); };
 
   // El zoom crece desde el centro del recuadro, asi lo que se esta mirando no
   // se escapa de cuadro al acercar.
@@ -1248,6 +1294,66 @@ export default function App() {
     for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
     return URL.createObjectURL(new Blob([bytes], { type: "image/webp" }));
   };
+  /* ---- Recortar ----
+     El encuadre (mover y ampliar) solo cambia lo que se ve: la foto sigue
+     entera y el tamano del recuadro lo comparten el antes y el despues.
+     Recortar corta el archivo de verdad, asi se puede sacar algo del borde
+     de una sola foto. La recortada entra en la cola como un reemplazo mas. */
+  const [recorte, setRecorte] = useState(null);
+  const recorteRef = useRef(null);
+  const recorteDrag = useRef(null);
+  const SEL_MINIMA = 0.05;
+  const abrirRecorte = (kase, archivo, src, fitKey = null) =>
+    setRecorte({ kase, archivo, src, fitKey, sel: null });
+  // La seleccion se dibuja arrastrando, en proporciones de 0 a 1 sobre la foto.
+  const puntoEnFoto = (e) => {
+    const caja = recorteRef.current.getBoundingClientRect();
+    return {
+      x: Math.min(1, Math.max(0, (e.clientX - caja.left) / caja.width)),
+      y: Math.min(1, Math.max(0, (e.clientY - caja.top) / caja.height)),
+    };
+  };
+  const onRecorteDown = (e) => {
+    e.preventDefault();
+    recorteDrag.current = puntoEnFoto(e);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setRecorte((r) => ({ ...r, sel: null }));
+  };
+  const onRecorteMove = (e) => {
+    const ini = recorteDrag.current;
+    if (!ini) return;
+    const fin = puntoEnFoto(e);
+    setRecorte((r) => ({ ...r, sel: {
+      x: Math.min(ini.x, fin.x), y: Math.min(ini.y, fin.y),
+      w: Math.abs(fin.x - ini.x), h: Math.abs(fin.y - ini.y),
+    } }));
+  };
+  const onRecorteUp = () => {
+    recorteDrag.current = null;
+    // Un toque suelto, sin arrastrar, no deja una seleccion inservible.
+    setRecorte((r) => (r?.sel && (r.sel.w < SEL_MINIMA || r.sel.h < SEL_MINIMA) ? { ...r, sel: null } : r));
+  };
+  const aplicarRecorte = () => conAviso(async () => {
+    const { kase, archivo, src, fitKey, sel } = recorte;
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const x = Math.round(sel.x * img.naturalWidth);
+    const y = Math.round(sel.y * img.naturalHeight);
+    const ancho = Math.max(1, Math.round(sel.w * img.naturalWidth));
+    const alto = Math.max(1, Math.round(sel.h * img.naturalHeight));
+    const lienzo = document.createElement("canvas");
+    lienzo.width = ancho; lienzo.height = alto;
+    lienzo.getContext("2d").drawImage(img, x, y, ancho, alto, 0, 0, ancho, alto);
+    const png = await new Promise((r) => lienzo.toBlob(r, "image/png"));
+    if (!png) throw new Error("No se pudo recortar la foto.");
+    // Pasa por el mismo camino que una foto nueva: webp, 1800px, bajo 200 KB.
+    await reemplazarFoto(kase, archivo, new File([png], archivo, { type: "image/png" }));
+    // La foto es otra: el encuadre guardado ya no corresponde.
+    if (fitKey) setFits((p) => ({ ...p, [fitKey]: [100, 100, 0, 0] }));
+    setRecorte(null);
+  });
+
   const prepararFoto = async (ruta, file) => {
     const { datos, url } = await aWebp(file);
     return { accion: "guardar", ruta, datos, url };
@@ -1312,9 +1418,54 @@ export default function App() {
   /* Los cambios preparados se ven en la pagina antes de publicar: esta funcion
      arma la lista de casos "como va a quedar" — con las fotos reemplazadas,
      sin las quitadas y con las nuevas (incluido un caso nuevo entero). */
+  /* Arrastrar un caso para cambiarlo de lugar. El numero que se ve sale de la
+     posicion, asi que al soltar se renumeran todos solos. Se agarra de la
+     manijita: asi en el telefono el dedo sigue sirviendo para deslizar la
+     fila de casos. */
+  const pillDrag = useRef(null);
+  const onPillDown = (e, slug, caseId, lista) => {
+    e.preventDefault();
+    e.stopPropagation();
+    bloquearScroll();
+    pillDrag.current = { slug, caseId };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setOrdenes((p) => (p[slug] ? p : { ...p, [slug]: lista }));
+  };
+  const onPillMove = (e) => {
+    const d = pillDrag.current;
+    if (!d || !casesRef.current) return;
+    const pastillas = [...casesRef.current.querySelectorAll("[data-caso]")];
+    if (!pastillas.length) return;
+    // Cuantos centros quedaron a la izquierda del dedo: es estable aunque la
+    // fila se reacomode mientras se arrastra.
+    const centros = pastillas.map((el) => { const r = el.getBoundingClientRect(); return r.left + r.width / 2; });
+    const destino = Math.max(0, Math.min(pastillas.length - 1, centros.filter((c) => c < e.clientX).length));
+    setOrdenes((p) => {
+      const actual = p[d.slug];
+      if (!actual) return p;
+      const desde = actual.indexOf(d.caseId);
+      if (desde === -1 || desde === destino) return p;
+      const nueva = actual.slice();
+      nueva.splice(destino, 0, nueva.splice(desde, 1)[0]);
+      return { ...p, [d.slug]: nueva };
+    });
+  };
+  const onPillUp = () => {
+    const d = pillDrag.current;
+    pillDrag.current = null;
+    soltarScroll();
+    if (d) setActiveCase((ordenes[d.slug] ?? []).indexOf(d.caseId));
+  };
+  // El orden pendiente se aplica antes de numerar, asi "Caso 03" es siempre el
+  // tercero de la fila, se haya movido o no.
+  const ordenarYNumerar = (lista, slug) => {
+    if (!ordenes[slug]?.length) return lista;
+    return ordenarCasos(slug, lista, ordenes).map((c, i) => ({ ...c, n: String(i + 1).padStart(2, "0") }));
+  };
+
   const sinExt = (f) => f.replace(/\.[^.]+$/, "");
   const casosConPendientes = (casos, slug) => {
-    if (!archivos.length) return casos;
+    if (!archivos.length) return ordenarYNumerar(casos, slug);
     const porCaso = new Map();
     for (const a of archivos) {
       const [s0, caso, archivo] = a.ruta.split("/");
@@ -1322,7 +1473,7 @@ export default function App() {
       if (!porCaso.has(caso)) porCaso.set(caso, []);
       porCaso.get(caso).push({ ...a, archivo });
     }
-    if (!porCaso.size) return casos;
+    if (!porCaso.size) return ordenarYNumerar(casos, slug);
     const conOps = (base, ops) => {
       const fuera = new Set(ops.filter((o) => o.accion === "borrar").map((o) => o.archivo));
       const puestas = new Map(ops.filter((o) => o.accion === "guardar").map((o) => [o.archivo, o]));
@@ -1368,8 +1519,8 @@ export default function App() {
       lista.push(conOps({ caseId: caso, slug, angles: [], apart: [], focus: "50% 35%",
                           watermark: true, note: null, archivos: { antes: [], despues: [], aparte: [] } }, ops));
     }
-    return lista
-      .filter((c) => c.angles.length || c.apart.length)
+    const visibles = lista.filter((c) => c.angles.length || c.apart.length);
+    return (ordenes[slug]?.length ? ordenarCasos(slug, visibles, ordenes) : visibles)
       .map((c, i) => ({ ...c, n: String(i + 1).padStart(2, "0") }));
   };
 
@@ -1377,8 +1528,9 @@ export default function App() {
      lo sube a GitHub en un commit y dispara la reconstruccion. En desarrollo se
      escribe en el disco de esta compu (endpoints de vite.config.js). */
   const guardarLocal = async () => {
-    if (Object.keys(fits).length || Object.keys(marcoEdits).length) {
-      const r = await fetch("/__editor/encuadre", { method: "POST", body: JSON.stringify({ fotos: fits, marcos: marcoEdits }) });
+    if (Object.keys(fits).length || Object.keys(marcoEdits).length || Object.keys(censuras).length
+        || Object.keys(ordenes).length) {
+      const r = await fetch("/__editor/encuadre", { method: "POST", body: JSON.stringify({ fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes }) });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
     }
@@ -1390,7 +1542,7 @@ export default function App() {
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
     }
-    setFits({}); setMarcoEdits({}); setArchivos([]);
+    setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setArchivos([]);
   };
   /* Guarda en el borrador de la nube: primero las fotos que todavia no
      viajaron (una por una, porque son pesadas) y despues la lista y los
@@ -1411,7 +1563,7 @@ export default function App() {
       // termina de enviar esto (son unos pocos KB, entra en el limite).
       keepalive: true,
       body: JSON.stringify({
-        fotos: fits, marcos: marcoEdits,
+        fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes,
         archivos: archivos.map(({ accion, ruta }) => ({ accion, ruta })),
         visto: visto.current, forzar,
       }),
@@ -1473,7 +1625,7 @@ export default function App() {
           method: "POST",
           headers: { authorization: `Bearer ${sesion}` },
           body: JSON.stringify({
-            fotos: fits, marcos: marcoEdits,
+            fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes,
             archivos: archivos.map(({ accion, ruta, datos }) => ({ accion, ruta, datos })),
           }),
         });
@@ -1488,7 +1640,7 @@ export default function App() {
         await conPase("/api/borrador", { method: "DELETE" }).catch(() => {});
         subidos.current = new Set(); visto.current = 0;
         setConflicto(null); setGuardadoEstado("");
-        setFits({}); setMarcoEdits({}); setArchivos([]); setFirmaGuardada("");
+        setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setArchivos([]); setFirmaGuardada("");
         // El numero del commit confirma que llego a GitHub de verdad.
         setFitMsg(`Publicado (${j.commit}, ${j.archivos} archivos). En un par de minutos se ve en la página.${noEstaban}`);
       }
@@ -1905,6 +2057,43 @@ export default function App() {
       {/* Boton flotante para publicar (solo en desarrollo): va arriba del boton
           de contacto y sube el contenido a internet — un deploy por cada uso,
           por eso pide confirmacion antes. */}
+      {puedeEditar && recorte && (
+        <div className="fixed inset-0 z-[115] flex flex-col items-center justify-center gap-4 bg-black/80 p-4">
+          <p className="text-center text-[12px] leading-relaxed text-white/80">
+            Arrastrá sobre la foto para elegir la parte que querés dejar.
+          </p>
+          <div ref={recorteRef}
+            onPointerDown={onRecorteDown} onPointerMove={onRecorteMove}
+            onPointerUp={onRecorteUp} onPointerCancel={onRecorteUp}
+            className="relative max-h-[65vh] cursor-crosshair touch-none select-none">
+            <img src={recorte.src} alt="" draggable={false} className="max-h-[65vh] w-auto" />
+            {recorte.sel && (
+              <>
+                {/* Lo que queda afuera se oscurece, para ver como va a quedar. */}
+                <div className="pointer-events-none absolute inset-0 bg-black/55"
+                  style={{ clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${recorte.sel.x * 100}% ${recorte.sel.y * 100}%, ${recorte.sel.x * 100}% ${(recorte.sel.y + recorte.sel.h) * 100}%, ${(recorte.sel.x + recorte.sel.w) * 100}% ${(recorte.sel.y + recorte.sel.h) * 100}%, ${(recorte.sel.x + recorte.sel.w) * 100}% ${recorte.sel.y * 100}%, ${recorte.sel.x * 100}% ${recorte.sel.y * 100}%)` }} />
+                <div className="pointer-events-none absolute border-2 border-white"
+                  style={{ left: `${recorte.sel.x * 100}%`, top: `${recorte.sel.y * 100}%`,
+                           width: `${recorte.sel.w * 100}%`, height: `${recorte.sel.h * 100}%` }} />
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button type="button" onClick={aplicarRecorte} disabled={!recorte.sel}
+              className="cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[12px] font-medium text-white transition-opacity hover:opacity-85 disabled:cursor-default disabled:opacity-40">
+              Recortar
+            </button>
+            <button type="button" onClick={() => setRecorte((r) => ({ ...r, sel: null }))}
+              className="cursor-pointer border border-white/40 px-4 py-2 text-[12px] text-white transition-colors hover:border-white">
+              Empezar de nuevo
+            </button>
+            <button type="button" onClick={() => setRecorte(null)}
+              className="cursor-pointer px-4 py-2 text-[12px] text-white/70 transition-opacity hover:opacity-75">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
       {puedeEditar && (fitBusy || guardadoEstado === "guardando") && (
         <div role="alert" aria-live="assertive"
           className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-6">
@@ -2444,12 +2633,22 @@ export default function App() {
                     <div className="mt-3 flex min-h-[34px] items-center gap-3">
                       <SwipeRow rowRef={casesRef} className="items-center gap-2" hint={t.res.swipe} watch={`${proc.slug}-${cases.length}`}>
                         {cases.map((c, k) => (
-                          <button key={c.n} type="button" aria-pressed={k === ci}
+                          <button key={c.caseId} type="button" aria-pressed={k === ci} data-caso={c.caseId}
                             onClick={() => { setActiveCase(k); setActiveAngle(0); }}
-                            className={`flex-shrink-0 cursor-pointer rounded-full border px-4 py-1.5 text-[11px] uppercase tracking-[0.16em] transition-colors duration-200 active:scale-95 ${
+                            className={`flex flex-shrink-0 items-center gap-2 rounded-full border py-1.5 text-[11px] uppercase tracking-[0.16em] transition-colors duration-200 active:scale-95 ${
+                              puedeEditar && fitEdit ? "cursor-pointer pl-2 pr-4" : "cursor-pointer px-4"} ${
                               k === ci
                                 ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]"
                                 : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"}`}>
+                            {/* Manijita para arrastrar el caso a otro lugar. */}
+                            {puedeEditar && fitEdit && (
+                              <span onPointerDown={(e) => onPillDown(e, proc.slug, c.caseId, cases.map((x) => x.caseId))}
+                                onPointerMove={onPillMove} onPointerUp={onPillUp} onPointerCancel={onPillUp}
+                                title="Arrastrar para cambiar de lugar"
+                                className="-my-1.5 flex cursor-grab touch-none items-center rounded-full px-1 py-1.5 opacity-60 transition-opacity hover:opacity-100 active:cursor-grabbing">
+                                <GripVertical size={13} strokeWidth={2} aria-hidden="true" />
+                              </span>
+                            )}
                             {t.res.case} {c.n}
                           </button>
                         ))}
@@ -2622,8 +2821,9 @@ export default function App() {
                         sigue pareja entre el antes y el despues. */}
                     <div ref={parRef} className="res-pair mt-5 grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
                       {marcos.map(({ caption, src, fit, entera, frame, sensitive, fitKey }) => {
-                        const oculta = sensitive && !revealedSensitive.has(src);
                         const editando = puedeEditar && fitEdit && !!fitKey;
+                        const censurada = fitKey ? censuraDe(fitKey, sensitive) : sensitive;
+                        const oculta = censurada && !revealedSensitive.has(src);
                         // Solo se usa encuadre propio si esta guardado (o si se esta
                         // editando ahora): sin eso el par vuelve al recorte por defecto.
                         const crudo = fitKey && (fits[fitKey] || editando || fit) ? fitOf(fitKey) : null;
@@ -2636,7 +2836,7 @@ export default function App() {
                         const fitAjustado = recorte ? recorte.img : crudo ? fitStyle(crudo) : null;
                         return (
                         <figure key={caption} style={recorte?.caja ?? (marcoActual ? { width: `${marcoActual.ancho * 100}%` } : undefined)}
-                          className="overflow-hidden rounded-lg border border-[var(--line)]">
+                          className={`rounded-lg border border-[var(--line)] ${moviendo ? "relative z-30 overflow-visible" : "overflow-hidden"}`}>
                           <button type="button"
                             onClick={() => {
                               if (editando) return;
@@ -2649,17 +2849,27 @@ export default function App() {
                             onPointerUp={editando ? onFitUp : undefined}
                             onPointerCancel={editando ? onFitUp : undefined}
                             style={{ aspectRatio: recorte ? recorte.proporcion : marcoActual ? marcoActual.ratio : frame }}
-                            className={`group relative block w-full overflow-hidden bg-[var(--photo)] ${
+                            className={`group relative block w-full bg-[var(--photo)] ${moviendo ? "overflow-visible" : "overflow-hidden"} ${
                               editando ? "cursor-grab touch-none active:cursor-grabbing" : oculta ? "cursor-pointer" : "cursor-zoom-in"}`}>
                             {/* La foto se agranda sobre la zona del procedimiento y se apoya en
                                 el mismo punto de la cara que su par, asi el antes y el despues
                                 quedan alineados. El archivo no se recorta: al hacer click el
                                 lightbox lo muestra entero. */}
-                            <img key={src} src={src} alt={`${proc[lang].name} · ${caption}`} loading="lazy" draggable={false}
-                              style={fitAjustado ?? (entera ? undefined : { objectPosition: kase.focus })}
-                              className={`${editando ? "" : "transition-transform duration-300"} ${oculta ? "scale-110 blur-2xl" : editando ? "" : "group-hover:scale-[1.03]"} ${
-                                fitAjustado ? "absolute max-w-none object-cover"
-                                    : entera ? "h-full w-full object-contain" : "h-full w-full object-cover"}`} />
+                            {moviendo && fitAjustado && (
+                              <img src={src} alt="" aria-hidden="true" draggable={false} style={fitAjustado}
+                                className="pointer-events-none absolute max-w-none object-cover opacity-25" />
+                            )}
+                            <span className={`absolute inset-0 ${moviendo ? "overflow-hidden" : ""}`}>
+                              <img key={src} src={src} alt={`${proc[lang].name} · ${caption}`} loading="lazy" draggable={false}
+                                style={fitAjustado ?? (entera ? undefined : { objectPosition: kase.focus })}
+                                className={`${editando ? "" : "transition-transform duration-300"} ${oculta ? "scale-110 blur-2xl" : editando ? "" : "group-hover:scale-[1.03]"} ${
+                                  fitAjustado ? "absolute max-w-none object-cover"
+                                      : entera ? "h-full w-full object-contain" : "h-full w-full object-cover"}`} />
+                            </span>
+                            {/* El borde marca donde corta el recuadro. */}
+                            {moviendo && (
+                              <span aria-hidden="true" className="pointer-events-none absolute inset-0 border-2 border-[var(--accent)]" />
+                            )}
                             {kase.watermark && !oculta && <Watermark />}
                             {oculta ? (
                               <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/45 px-4 text-center text-white">
@@ -2733,6 +2943,21 @@ export default function App() {
                                       if (f) conAviso(() => reemplazarFoto(kase, archivo, f));
                                     }} />
                                 </label>
+                                <button type="button"
+                                  onClick={() => abrirRecorte(kase, caption === t.res.before ? angle.beforeFile : angle.afterFile, src, fitKey)}
+                                  className="cursor-pointer border border-[var(--line)] px-3 py-1.5 text-[11px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
+                                  Recortar
+                                </button>
+                                {/* Tapar la foto: sale borrosa hasta que la visita
+                                    decide verla. Se elige por foto. */}
+                                <button type="button" onClick={() => cambiarCensura(fitKey, !censurada)}
+                                  title={censurada ? "Se muestra borrosa" : "Se muestra normal"}
+                                  className={`flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-[11px] transition-colors ${
+                                    censurada ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                                              : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--ink)]"}`}>
+                                  {censurada ? <EyeOff size={12} strokeWidth={2} /> : <Eye size={12} strokeWidth={2} />}
+                                  {censurada ? "Tapada" : "Tapar"}
+                                </button>
                               </div>
                             </>
                           )}
@@ -2763,8 +2988,9 @@ export default function App() {
                         <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--faint)]">{t.res.apart}</p>
                         <div className="mt-3">
                         <SwipeRow className="gap-3" hint={t.res.swipe} watch={`${proc.slug}-${ci}-${sueltas.length}`}>
-                          {sueltas.map(({ image, frame, sensitive, file }, k) => {
-                            const oculta = sensitive && !revealedSensitive.has(image);
+                          {sueltas.map(({ image, frame, sensitive, file, key: sueltaKey }, k) => {
+                            const censurada = sueltaKey ? censuraDe(sueltaKey, sensitive) : sensitive;
+                            const oculta = censurada && !revealedSensitive.has(image);
                             return (
                             <div key={k} className="flex flex-shrink-0 flex-col gap-1">
                             <button type="button"
@@ -2794,6 +3020,19 @@ export default function App() {
                                   <input type="file" accept="image/*" className="hidden"
                                     onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) conAviso(() => reemplazarFoto(kase, file, f)); }} />
                                 </label>
+                                <button type="button" onClick={() => abrirRecorte(kase, file, image)}
+                                  className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[10px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
+                                  Recortar
+                                </button>
+                                {sueltaKey && (
+                                  <button type="button" onClick={() => cambiarCensura(sueltaKey, !censurada)}
+                                    title={censurada ? "Se muestra borrosa" : "Se muestra normal"}
+                                    className={`cursor-pointer border px-2 py-1 text-[10px] transition-colors ${
+                                      censurada ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                                                : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--ink)]"}`}>
+                                    {censurada ? "Tapada" : "Tapar"}
+                                  </button>
+                                )}
                                 <button type="button" onClick={() => quitarSuelta(kase, file)}
                                   className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[10px] text-[#C0706D] transition-colors hover:border-[#C0706D]">
                                   Quitar

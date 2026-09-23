@@ -35,6 +35,23 @@ export const fitStyle = (r) => ({
 });
 export const ENCUADRE_FOTOS = ENCUADRES.fotos;
 export const ENCUADRE_MARCOS = ENCUADRES.marcos;
+// Fotos que el editor marco (o desmarco) a mano: pisan las listas de abajo.
+export const CENSURA_GUARDADA = ENCUADRES.censura ?? {};
+/* Orden de los casos elegido desde el editor: { slug: [caseId, ...] }. Manda
+   sobre el orden automatico; los casos que no estan en la lista van despues,
+   como siempre. El numero que se ve ("Caso 03") sale de la posicion, asi que
+   reordenar renumera solo. */
+export const ORDEN_GUARDADO = ENCUADRES.orden ?? {};
+export const ordenarCasos = (slug, cases, orden = ORDEN_GUARDADO) => {
+  const elegido = orden?.[slug];
+  if (!elegido?.length) return cases;
+  const lugar = new Map(elegido.map((id, i) => [id, i]));
+  return cases.slice().sort((a, b) => {
+    const ia = lugar.has(a.caseId) ? lugar.get(a.caseId) : Infinity;
+    const ib = lugar.has(b.caseId) ? lugar.get(b.caseId) : Infinity;
+    return ia - ib;
+  });
+};
 // Se llama en el render (no al cargar el modulo): comoMarco se define mas abajo.
 export const marcoGuardado = (v) => comoMarco(v);
 
@@ -168,8 +185,14 @@ const FOTOS_SENSIBLES = new Set([
 /* Procedimientos donde TODAS las fotos quedan borroneadas por defecto (pedido
    del cliente), no solo las puntuales de FOTOS_SENSIBLES de arriba. */
 const PROCEDIMIENTOS_SENSIBLES = new Set(["breast", "body-remodeling", "hair-implants"]);
-const esSensible = (slug, caseId, file) =>
-  PROCEDIMIENTOS_SENSIBLES.has(slug) || FOTOS_SENSIBLES.has(clave(slug, caseId, file));
+/* Si desde el editor se decidio algo para esta foto, vale eso; si no, las
+   listas de arriba. Asi se puede tapar una foto puntual, o destapar una de un
+   procedimiento que por defecto va tapado. */
+export const esSensible = (slug, caseId, file) => {
+  const elegido = CENSURA_GUARDADA[clave(slug, caseId, file)];
+  if (typeof elegido === "boolean") return elegido;
+  return PROCEDIMIENTOS_SENSIBLES.has(slug) || FOTOS_SENSIBLES.has(clave(slug, caseId, file));
+};
 
 /* Casos que no son cirugia sino un tratamiento con Acido Hialuronico: el resultado
    se puede confundir con uno quirurgico en las fotos, asi que se aclara junto al
@@ -227,6 +250,7 @@ const CASES_BY_SLUG = (() => {
     });
     const apart = (raw.apart ?? []).slice().sort(byBase)
       .map((x) => ({ image: x.image, frame: aparteDe(slug, caseId, x.file), file: x.file,
+                     key: clave(slug, caseId, x.file),
                      sensitive: esSensible(slug, caseId, x.file) }));
     return { caseId, angles, apart, focus: FOCO[slug] ?? FOCO_DEFECTO,
              // Para el editor: de que procedimiento es la carpeta y que archivos tiene.
@@ -259,9 +283,11 @@ const CASES_BY_SLUG = (() => {
     Object.entries(bySlug).map(([slug, cases]) => {
       const alFinal = CASOS_AL_FINAL[slug] ?? [];
       const alPrincipio = CASOS_AL_PRINCIPIO[slug] ?? [];
-      const list = cases
+      const list = ordenarCasos(slug, cases)
         .slice()
         .sort((a, b) => {
+          // Si el editor fijo un orden para este procedimiento, se respeta.
+          if (ORDEN_GUARDADO[slug]?.length) return 0;
           const pa = alPrincipio.indexOf(a.caseId), pb = alPrincipio.indexOf(b.caseId);
           if (pa !== -1 || pb !== -1) return pa === -1 ? 1 : pb === -1 ? -1 : pa - pb;
           const ia = alFinal.indexOf(a.caseId), ib = alFinal.indexOf(b.caseId);

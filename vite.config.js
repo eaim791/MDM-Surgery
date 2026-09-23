@@ -38,7 +38,7 @@ function editorApi() {
       server.middlewares.use('/__editor/encuadre', async (req, res) => {
         if (req.method !== 'POST') return responder(res, { ok: false }, 405)
         try {
-          const { fotos = {}, marcos = {} } = await leerCuerpo(req)
+          const { fotos = {}, marcos = {}, censura = {}, orden = {} } = await leerCuerpo(req)
           const ruta = 'src/encuadre.json'
           const datos = JSON.parse(readFileSync(ruta, 'utf-8'))
           const redondear = (n) => Math.round(n * 100) / 100
@@ -50,8 +50,21 @@ function editorApi() {
             if (valor === null) delete datos.marcos[clave]
             else datos.marcos[clave] = Array.isArray(valor) ? valor.map(redondear) : redondear(valor)
           }
+          // Censura: true tapa la foto, false la destapa aunque su procedimiento
+          // vaya tapado por defecto, y null vuelve a lo que diga data.js.
+          datos.censura ??= {}
+          for (const [clave, valor] of Object.entries(censura)) {
+            if (valor === null) delete datos.censura[clave]
+            else datos.censura[clave] = !!valor
+          }
+          // Orden de los casos, arrastrado desde el editor.
+          datos.orden ??= {}
+          for (const [slug, lista] of Object.entries(orden)) {
+            if (!Array.isArray(lista) || !lista.length) delete datos.orden[slug]
+            else datos.orden[slug] = lista.map(String)
+          }
           writeFileSync(ruta, JSON.stringify(datos))
-          responder(res, { ok: true, guardadas: Object.keys(fotos).length + Object.keys(marcos).length })
+          responder(res, { ok: true, guardadas: Object.keys(fotos).length + Object.keys(marcos).length + Object.keys(censura).length + Object.keys(orden).length })
         } catch (e) {
           responder(res, { ok: false, error: String(e.message || e) }, 500)
         }

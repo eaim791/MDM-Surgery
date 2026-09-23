@@ -38,11 +38,12 @@ export default async (req) => {
   }
 
   try {
-    const { fotos = {}, marcos = {}, archivos = [] } = await req.json();
+    const { fotos = {}, marcos = {}, censura = {}, orden = {}, archivos = [] } = await req.json();
     for (const a of archivos) {
       if (!RUTA_OK.test(a.ruta)) return json({ ok: false, error: `Ruta no permitida: ${a.ruta}` }, 400);
     }
-    if (!archivos.length && !Object.keys(fotos).length && !Object.keys(marcos).length) {
+    if (!archivos.length && !Object.keys(fotos).length && !Object.keys(marcos).length
+        && !Object.keys(censura).length && !Object.keys(orden).length) {
       return json({ ok: true, sinCambios: true });
     }
 
@@ -52,7 +53,8 @@ export default async (req) => {
 
     // 2. Encuadres: se lee el archivo actual y se le aplican los cambios.
     const arbol = [];
-    if (Object.keys(fotos).length || Object.keys(marcos).length) {
+    if (Object.keys(fotos).length || Object.keys(marcos).length || Object.keys(censura).length
+        || Object.keys(orden).length) {
       const actual = await gh(`/contents/${ENCUADRES}?ref=${RAMA}`);
       // De base64 a texto pasando por bytes: las claves tienen acentos
       // ("Julieta Espósito") y atob solo devuelve bytes sueltos.
@@ -66,6 +68,18 @@ export default async (req) => {
       for (const [clave, valor] of Object.entries(marcos)) {
         if (valor === null) delete datos.marcos[clave];
         else datos.marcos[clave] = Array.isArray(valor) ? valor.map(redondear) : redondear(valor);
+      }
+      // Censura elegida foto por foto desde el editor.
+      datos.censura ??= {};
+      for (const [clave, valor] of Object.entries(censura)) {
+        if (valor === null) delete datos.censura[clave];
+        else datos.censura[clave] = !!valor;
+      }
+      // Orden de los casos de cada procedimiento, arrastrado desde el editor.
+      datos.orden ??= {};
+      for (const [slug, lista] of Object.entries(orden)) {
+        if (!Array.isArray(lista) || !lista.length) delete datos.orden[slug];
+        else datos.orden[slug] = lista.map(String);
       }
       const blob = await gh("/git/blobs", {
         method: "POST",

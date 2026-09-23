@@ -42,7 +42,7 @@ export default async (req) => {
         await store.set(`archivo/${archivo}`, datos);
         return json({ ok: true });
       }
-      const { fotos = {}, marcos = {}, archivos = [], visto, forzar = false } = await req.json();
+      const { fotos = {}, marcos = {}, censura = {}, orden = {}, archivos = [], visto, forzar = false } = await req.json();
       for (const a of archivos) {
         if (!RUTA_OK.test(a.ruta)) return json({ ok: false, error: `Ruta no permitida: ${a.ruta}` }, 400);
       }
@@ -62,7 +62,7 @@ export default async (req) => {
         if (!siguen.has(a.ruta)) await store.delete(`archivo/${a.ruta}`);
       }
       const guardado = Date.now();
-      await store.setJSON(INDICE, { fotos, marcos, archivos, guardado });
+      await store.setJSON(INDICE, { fotos, marcos, censura, orden, archivos, guardado });
       return json({ ok: true, guardado });
     }
 
