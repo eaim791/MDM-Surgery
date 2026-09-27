@@ -4,7 +4,7 @@ import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
   Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
   Droplet, Eye, EyeOff, Construction, GripVertical, ChevronsRight, ArrowUpRight, MessageCircle,
-  Plus, Minus, Move, MoveHorizontal, MoveVertical, UploadCloud, Lock,
+  Plus, Minus, Move, MoveHorizontal, MoveVertical, UploadCloud, Lock, ArrowLeftRight, RotateCcw,
 } from "lucide-react";
 import {
   SunIcon, MoonIcon, GlobeIcon, ObeliskIcon, SpireIcon, SkylineIcon, EnvelopeIcon, SealIcon,
@@ -1011,7 +1011,7 @@ export default function App() {
     borradorCargado.current = false; subidos.current = new Set(); visto.current = 0;
     setConflicto(null); setGuardadoEstado("");
     setSesion(""); setFitEdit(false); setArchivos([]); setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({});
-    setFirmaGuardada("");
+    setFirmaGuardada(""); olvidarPasos();
   };
 
   const [fitEdit, setFitEdit] = useState(false);
@@ -1036,6 +1036,31 @@ export default function App() {
   const [fitMoving, setFitMoving] = useState(null);
   const pendientes = Object.keys(fits).length + Object.keys(marcoEdits).length
     + Object.keys(censuras).length + Object.keys(ordenes).length + archivos.length;
+  /* Deshacer: una copia de como estaba el editor antes de cada cambio, para
+     volver un paso atras (por ejemplo, un caso quitado por error). Vale hasta
+     publicar: lo publicado ya esta en la pagina. */
+  const historial = useRef([]);
+  const [pasos, setPasos] = useState(0);
+  const igualAlActual = (s) => s.archivos === archivos && s.fits === fits && s.marcoEdits === marcoEdits
+    && s.censuras === censuras && s.ordenes === ordenes;
+  const anotarPaso = () => {
+    const ultimo = historial.current[historial.current.length - 1];
+    if (ultimo && igualAlActual(ultimo)) return;
+    historial.current = [...historial.current.slice(-29), { archivos, fits, marcoEdits, censuras, ordenes }];
+    setPasos(historial.current.length);
+  };
+  const olvidarPasos = () => { historial.current = []; setPasos(0); };
+  const deshacer = () => {
+    // Un toque que no cambio nada (tocar una foto sin moverla) deja una copia
+    // igual a lo actual: se saltea para que cada "Deshacer" haga algo visible.
+    let previo = historial.current.pop();
+    while (previo && igualAlActual(previo)) previo = historial.current.pop();
+    setPasos(historial.current.length);
+    if (!previo) return;
+    setArchivos(previo.archivos); setFits(previo.fits); setMarcoEdits(previo.marcoEdits);
+    setCensuras(previo.censuras); setOrdenes(previo.ordenes); setCasoNuevo(null);
+    setFitMsg("Listo: volvió a como estaba antes del último cambio.");
+  };
   /* Borrador en la nube: "Listo, guardar" manda los cambios a Netlify (funcion
      borrador.mjs) sin tocar la pagina publica. Asi se puede cerrar la pagina y
      seguir despues, o desde otra computadora, y recien al tocar la nube se
@@ -1088,7 +1113,7 @@ export default function App() {
             && !Object.keys(censura).length && !Object.keys(orden).length) return;
         subidos.current = new Set(recuperados.filter((a) => a.accion === "guardar").map((a) => a.ruta));
         visto.current = j.borrador.guardado ?? 0;
-        setFits(fotos); setMarcoEdits(marcos); setCensuras(censura); setOrdenes(orden); setArchivos(recuperados);
+        setFits(fotos); setMarcoEdits(marcos); setCensuras(censura); setOrdenes(orden); setArchivos(recuperados); olvidarPasos();
         setFirmaGuardada(firmaDe(fotos, marcos, recuperados, censura, orden));
         setFitEdit(true);
         setFitMsg(`Recuperé los cambios sin publicar que había guardados${
@@ -1104,7 +1129,7 @@ export default function App() {
      tampoco, lo que viene calculado de la foto (por procedimiento o lista). */
   const censuraDe = (key, porDefecto) =>
     censuras[key] ?? (typeof CENSURA_GUARDADA[key] === "boolean" ? CENSURA_GUARDADA[key] : porDefecto);
-  const cambiarCensura = (key, valor) => setCensuras((p) => ({ ...p, [key]: valor }));
+  const cambiarCensura = (key, valor) => { anotarPaso(); setCensuras((p) => ({ ...p, [key]: valor })); };
   const marcoOf = (key, base) => marcoEdits[key] ?? (ENCUADRE_MARCOS[key] !== undefined
     ? [marcoGuardado(ENCUADRE_MARCOS[key]).ratio, marcoGuardado(ENCUADRE_MARCOS[key]).ancho]
     : [base.ratio, base.ancho]);
@@ -1122,6 +1147,7 @@ export default function App() {
 
   const onFitDown = (e, key) => {
     e.preventDefault();
+    anotarPaso();
     bloquearScroll();
     fitDrag.current = { key, x: e.clientX, y: e.clientY, start: fitOf(key),
                         rect: e.currentTarget.getBoundingClientRect() };
@@ -1190,6 +1216,7 @@ export default function App() {
   const onMarcoDown = (e, keys, modo, base, grilla) => {
     e.preventDefault();
     e.stopPropagation();
+    anotarPaso();
     const [ratio, ancho] = marcoOf(keys[0], base);
     // Ancho de UNA columna de la grilla (el par son dos), que es el 100% del
     // que se mide el ancho del recuadro.
@@ -1225,6 +1252,7 @@ export default function App() {
   // el sitio se actualiza una sola vez.
   const enSitio = (ruta) => FOTOS_EN_SITIO.has(ruta.normalize("NFC"));
   const encolar = (nuevas) => {
+    anotarPaso();
     for (const n of nuevas) subidos.current.delete(n.ruta);
     // Quitar una foto agregada en esta misma tanda (todavia no esta en el
     // sitio) es solo sacarla de la cola: mandar a borrar un archivo que no
@@ -1397,12 +1425,58 @@ export default function App() {
   };
   const reemplazarFoto = async (kase, archivo, file) =>
     encolar([await prepararFoto(`${kase.slug}/${kase.caseId}/${archivo}`, file)]);
-  const quitarAngulo = (kase, angle) => encolar([
-    { accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${angle.beforeFile}` },
-    { accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${angle.afterFile}` },
-  ]);
-  const quitarSuelta = (kase, archivo) =>
+  /* La foto tal como esta hoy, en base64: si todavia esta en la cola se usa
+     esa (fetch de un blob: lo bloquea la CSP del sitio); si ya esta
+     publicada, se baja del propio sitio sin volver a comprimirla. */
+  const leerFoto = async (ruta, src) => {
+    const enCola = archivos.find((a) => a.accion === "guardar" && a.ruta === ruta && a.datos);
+    if (enCola) return { datos: enCola.datos, url: enCola.url };
+    const r = await fetch(src);
+    if (!r.ok) throw new Error(`No pude leer la foto ${ruta.split("/").pop()} (${r.status}).`);
+    const blob = await r.blob();
+    const datos = await new Promise((ok, mal) => {
+      const lector = new FileReader();
+      lector.onload = () => ok(String(lector.result).split(",")[1]);
+      lector.onerror = () => mal(new Error("No pude leer la foto."));
+      lector.readAsDataURL(blob);
+    });
+    return { datos, url: URL.createObjectURL(blob) };
+  };
+  /* Intercambiar el antes y el despues de un par: cada archivo pasa a tener
+     la foto del otro. El encuadre y la censura viajan con su foto. */
+  const intercambiarPar = async (kase, angle) => {
+    const base = `${kase.slug}/${kase.caseId}/`;
+    const [a, d] = await Promise.all([
+      leerFoto(base + angle.beforeFile, angle.before),
+      leerFoto(base + angle.afterFile, angle.after),
+    ]);
+    encolar([
+      { accion: "guardar", ruta: base + angle.beforeFile, datos: d.datos, url: d.url },
+      { accion: "guardar", ruta: base + angle.afterFile, datos: a.datos, url: a.url },
+    ]);
+    const bk = angle.beforeKey, ak = angle.afterKey;
+    const fa = fits[bk] ?? ENCUADRE_FOTOS[bk], fd = fits[ak] ?? ENCUADRE_FOTOS[ak];
+    if (fa || fd) setFits((p) => ({ ...p, [bk]: fd ?? [100, 100, 0, 0], [ak]: fa ?? [100, 100, 0, 0] }));
+    const ca = censuraDe(bk, angle.beforeSensitive), cd = censuraDe(ak, angle.afterSensitive);
+    if (ca !== cd) setCensuras((p) => ({ ...p, [bk]: cd, [ak]: ca }));
+    setFitMsg("Antes y después intercambiados. Falta publicar.");
+  };
+  /* Al quitar, el aviso dice que se quito: los casos y las fotos se
+     renumeran solos, el de al lado ocupa el mismo lugar y parecia que no
+     habia pasado nada. */
+  const avisoQuitado = (que) =>
+    setFitMsg(`Quitaste ${que}. Ya no se ve acá; para que se vaya también de la página, tocá la nube.`);
+  const quitarAngulo = (kase, angle) => {
+    encolar([
+      { accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${angle.beforeFile}` },
+      { accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${angle.afterFile}` },
+    ]);
+    avisoQuitado(`un antes y después del ${t.res.case} ${kase.n}`);
+  };
+  const quitarSuelta = (kase, archivo) => {
     encolar([{ accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${archivo}` }]);
+    avisoQuitado(`una foto del ${t.res.case} ${kase.n}`);
+  };
   // Archivos de un caso: los pares y las sueltas, tal como estan hoy en pantalla.
   const archivosDe = (kase) => [
     ...kase.angles.flatMap((a) => [a.beforeFile, a.afterFile]),
@@ -1419,6 +1493,7 @@ export default function App() {
       "Si este caso aparece en más de un procedimiento, se va de todos. ¿Seguimos?");
     if (!ok) return;
     encolar(files.map((f) => ({ accion: "borrar", ruta: `${kase.slug}/${kase.caseId}/${f}` })));
+    avisoQuitado(`el ${t.res.case} ${kase.n} (${files.length} ${files.length === 1 ? "foto" : "fotos"})`);
   };
   const agregarPar = async (kase, fileAntes, fileDespues) => {
     const n = Math.max(proximoNumero(kase, "antes"), proximoNumero(kase, "despues"));
@@ -1465,6 +1540,7 @@ export default function App() {
   const onPillDown = (e, slug, caseId, lista) => {
     e.preventDefault();
     e.stopPropagation();
+    anotarPaso();
     bloquearScroll();
     pillDrag.current = { slug, caseId };
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -1586,7 +1662,7 @@ export default function App() {
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
     }
-    setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setArchivos([]);
+    setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setArchivos([]); olvidarPasos();
   };
   /* Guarda en el borrador de la nube: primero las fotos que todavia no
      viajaron (una por una, porque son pesadas) y despues la lista y los
@@ -1684,7 +1760,7 @@ export default function App() {
         await conPase("/api/borrador", { method: "DELETE" }).catch(() => {});
         subidos.current = new Set(); visto.current = 0;
         setConflicto(null); setGuardadoEstado("");
-        setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setArchivos([]); setFirmaGuardada("");
+        setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setArchivos([]); setFirmaGuardada(""); olvidarPasos();
         // El numero del commit confirma que llego a GitHub de verdad.
         setFitMsg(`Publicado (${j.commit}, ${j.archivos} archivos). En un par de minutos se ve en la página.${noEstaban}`);
       }
@@ -2811,6 +2887,12 @@ export default function App() {
                               className="cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[12px] font-medium text-[var(--surface)] transition-opacity hover:opacity-85 disabled:cursor-default disabled:opacity-40">
                               {import.meta.env.DEV ? "Guardar cambios" : sinGuardar ? "Guardar ahora" : "Guardado"}{pendientes ? " (" + pendientes + ")" : ""}
                             </button>
+                            <button type="button" onClick={deshacer} disabled={fitBusy || !pasos}
+                              title="Vuelve un paso atrás: por ejemplo, si quitaste un caso por error"
+                              className="flex cursor-pointer items-center gap-1.5 border border-[var(--ink)] px-3 py-2 text-[12px] font-medium text-[var(--ink)] transition-opacity hover:opacity-75 disabled:cursor-default disabled:opacity-40">
+                              <RotateCcw size={13} strokeWidth={2} aria-hidden="true" />
+                              Deshacer
+                            </button>
                             <span className="text-[12px] text-[var(--muted)]">
                               Arrastrá la foto para moverla · Estirá los bordes con flechas para el tamaño ·
                               El antes y el después cambian juntos
@@ -2901,7 +2983,17 @@ export default function App() {
                     {/* items-end: cuando un recuadro se achica (la foto se corrio),
                         los dos quedan alineados por abajo — la linea de abajo
                         sigue pareja entre el antes y el despues. */}
-                    <div ref={parRef} className="res-pair mt-5 grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
+                    <div ref={parRef} className="res-pair relative mt-5 grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
+                      {/* Intercambiar el antes y el despues: en el medio, entre las
+                          dos fotos. Absoluto a proposito, asi no ocupa una celda de
+                          la grilla ni mueve la alineacion de abajo (items-end). */}
+                      {puedeEditar && fitEdit && angle && (
+                        <button type="button" onClick={() => conAviso(() => intercambiarPar(kase, angle))}
+                          title="Intercambiar el antes y el después" aria-label="Intercambiar el antes y el después"
+                          className="absolute left-1/2 top-1/2 z-10 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)] shadow-[0_4px_14px_var(--shadow)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--surface)] active:scale-90">
+                          <ArrowLeftRight size={16} strokeWidth={2} aria-hidden="true" />
+                        </button>
+                      )}
                       {marcos.map(({ caption, src, fit, entera, frame, sensitive, fitKey }) => {
                         const editando = puedeEditar && fitEdit && !!fitKey;
                         const censurada = fitKey ? censuraDe(fitKey, sensitive) : sensitive;
