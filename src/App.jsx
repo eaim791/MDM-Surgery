@@ -1521,12 +1521,17 @@ export default function App() {
     const usados = carpetas.map((id) => Number((id.match(/caso-(\d+)/) ?? [])[1] ?? 0));
     return `caso-${String(Math.max(0, ...usados) + 1).padStart(2, "0")}`;
   };
-  const crearCaso = async (caso) => {
+  // "cuantos": casos que ya se ven; el nuevo aparece ultimo, asi que queda
+  // abierto ese (antes se quedaba en el caso anterior y lo siguiente que se
+  // agregaba caia ahi).
+  const crearCaso = async (caso, cuantos) => {
     encolar([
       await prepararFoto(`${caso.slug}/${caso.carpeta}/antes-0.webp`, caso.antes.file),
       await prepararFoto(`${caso.slug}/${caso.carpeta}/despues-0.webp`, caso.despues.file),
     ]);
     setCasoNuevo(null);
+    setActiveCase(cuantos);
+    setActiveAngle(0);
   };
 
   /* Los cambios preparados se ven en la pagina antes de publicar: esta funcion
@@ -1604,7 +1609,11 @@ export default function App() {
         .filter((x) => !fuera.has(x.file))
         .map((x) => ({ ...x, image: puestas.get(x.file)?.url ?? x.image }));
       const yaEstaban = new Set([...base.angles.flatMap((a) => [a.beforeFile, a.afterFile]), ...base.apart.map((x) => x.file)]);
-      const nuevas = [...puestas.values()].filter((g) => !yaEstaban.has(g.archivo));
+      // Por numero de archivo, no por orden de llegada a la cola: reemplazar,
+      // recortar o intercambiar vuelve a poner la foto al final de la cola, y
+      // el par de un caso sin publicar saltaba de lugar (se veia "el siguiente").
+      const nuevas = [...puestas.values()].filter((g) => !yaEstaban.has(g.archivo))
+        .sort((x, y) => x.archivo.localeCompare(y.archivo, undefined, { numeric: true }));
       const num = (f) => (f.match(/(\d+)/) ?? [])[1];
       const clave = (f) => `${base.slug ?? slug}/${base.caseId}/${sinExt(f)}`.normalize("NFC");
       for (const a of nuevas.filter((g) => /antes/i.test(g.archivo))) {
@@ -2972,7 +2981,7 @@ export default function App() {
                                     // Fuera del setState: React puede llamar dos veces a la
                                     // funcion que se le pasa, y esto encolaria las fotos dos veces.
                                     if (siguiente.antes && siguiente.despues) {
-                                      conAviso(() => (siguiente.existente ? agregarParNuevo(kase, siguiente) : crearCaso(siguiente)));
+                                      conAviso(() => (siguiente.existente ? agregarParNuevo(kase, siguiente) : crearCaso(siguiente, cases.length)));
                                     }
                                   }} />
                               </label>
