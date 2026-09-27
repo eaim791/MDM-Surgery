@@ -18,6 +18,7 @@ import {
   PROCEDURES, PROCEDURES_WITH_CASES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
   LOCATIONS, SEDES, TESTIMONIALS, casesFor, CERTIFICATES, PAPERS,
   ENCUADRE_FOTOS, ENCUADRE_MARCOS, marcoGuardado, fitStyle, fitRender, CENSURA_GUARDADA, ORDEN_GUARDADO, ordenarCasos,
+  ENCUADRE_APARTE, FOTOS_EN_SITIO,
 } from "./data.js";
 
 /* Velo del video del hero: atenua el centro-izquierda para que el texto se lea. */
@@ -744,6 +745,12 @@ export default function App() {
   const contactMountedAt = useRef(Date.now());
   const [testPage, setTestPage] = useState(0);
   const [lightbox, setLightbox] = useState(null);
+  // Documento legal abierto desde el pie de pagina: "medical" | "cookies" |
+  // null. "privacy"/"terms" ya estan soportados por LegalModal pero todavia
+  // no tienen boton en el pie — faltan datos del cliente (responsable del
+  // tratamiento, domicilio, email de privacidad) para publicarlos; ver
+  // docs/legal/LEGAL_REVIEW_PENDING.md.
+  const [legalOpen, setLegalOpen] = useState(null);
   // Fotos de quirofano/exposicion marcadas como sensibles (ver FOTOS_SENSIBLES en
   // data.js): arrancan borroneadas con un aviso: el usuario elige verlas. La clave
   // es la propia URL de la imagen, asi que revelar una no revela otra por error.
@@ -1216,9 +1223,14 @@ export default function App() {
   // Las fotos no se escriben en el momento: quedan en cola (con su vista
   // previa) y se suben todas juntas al publicar. Asi el doctor acomoda todo y
   // el sitio se actualiza una sola vez.
+  const enSitio = (ruta) => FOTOS_EN_SITIO.has(ruta.normalize("NFC"));
   const encolar = (nuevas) => {
     for (const n of nuevas) subidos.current.delete(n.ruta);
-    setArchivos((p) => [...p.filter((a) => !nuevas.some((n) => n.ruta === a.ruta)), ...nuevas]);
+    // Quitar una foto agregada en esta misma tanda (todavia no esta en el
+    // sitio) es solo sacarla de la cola: mandar a borrar un archivo que no
+    // existe terminaba en un "No encontre en el sitio" que confundia al publicar.
+    const utiles = nuevas.filter((n) => n.accion !== "borrar" || enSitio(n.ruta));
+    setArchivos((p) => [...p.filter((a) => !nuevas.some((n) => n.ruta === a.ruta)), ...utiles]);
     setFitMsg("Preparado. Falta publicar.");
   };
   // La foto se convierte a webp en el navegador (misma receta que el resto del
@@ -1360,11 +1372,26 @@ export default function App() {
   };
   // Siguiente numero libre para "antes-N.webp" / "despues-N.webp" / "fotoaparte-N.webp",
   // contando tambien lo que ya esta en cola.
+  /* Nombres ya usados dentro de una carpeta: fotos publicadas (se vean o no)
+     y tambien los que siguen anotados en encuadre.json de fotos que ya se
+     quitaron — si una foto nueva heredara uno de esos nombres, aparecia con
+     el zoom, el recuadro o la censura de la foto vieja. */
+  const nombresUsados = (prefijo) => {
+    const p = prefijo.normalize("NFC");
+    const deEncuadre = [ENCUADRE_FOTOS, ENCUADRE_MARCOS, ENCUADRE_APARTE, CENSURA_GUARDADA]
+      .flatMap((o) => Object.keys(o ?? {}));
+    return [...FOTOS_EN_SITIO, ...deEncuadre]
+      .map((k) => k.normalize("NFC"))
+      .filter((k) => k.startsWith(p))
+      .map((k) => k.slice(p.length));
+  };
   const proximoNumero = (kase, tipo) => {
     const enCola = archivos
       .filter((a) => a.accion === "guardar" && a.ruta.startsWith(`${kase.slug}/${kase.caseId}/`))
       .map((a) => a.ruta.split("/")[2]);
-    const nombres = [...(kase.archivos?.[tipo] ?? []), ...enCola.filter((f) => f.toLowerCase().includes(tipo === "aparte" ? "aparte" : tipo))];
+    const delTipo = (f) => f.toLowerCase().includes(tipo === "aparte" ? "aparte" : tipo);
+    const nombres = [...(kase.archivos?.[tipo] ?? []), ...enCola.filter(delTipo),
+                     ...nombresUsados(`${kase.slug}/${kase.caseId}/`).filter(delTipo)];
     const usados = nombres.map((f) => Number((f.match(/(\d+)/) ?? [])[1] ?? -1));
     return Math.max(-1, ...usados) + 1;
   };
@@ -1400,11 +1427,23 @@ export default function App() {
       await prepararFoto(`${kase.slug}/${kase.caseId}/despues-${n}.webp`, fileDespues),
     ]);
   };
+  // Par agregado a un caso que ya existe: al terminar se muestra ese par, para
+  // que se vea que entro (antes quedaba al final sin aviso y se volvia a
+  // agregar el mismo par creyendo que no habia pasado nada).
+  const agregarParNuevo = async (kase, par) => {
+    await agregarPar(kase, par.antes.file, par.despues.file);
+    setCasoNuevo(null);
+    setActiveAngle(kase.angles.length);
+  };
   const agregarSuelta = async (kase, file) =>
     encolar([await prepararFoto(`${kase.slug}/${kase.caseId}/fotoaparte-${proximoNumero(kase, "aparte")}.webp`, file)]);
   // Nombre de carpeta libre para el caso nuevo: caso-01, caso-02, ...
-  const proximaCarpeta = (casos) => {
-    const usados = casos.map((c) => Number((c.caseId.match(/caso-(\d+)/) ?? [])[1] ?? 0));
+  // Tambien cuentan las carpetas que existen pero no se ven (sin par) y las
+  // que solo quedaron en encuadre.json: si no, un caso nuevo podia caer en
+  // una carpeta con fotos viejas adentro.
+  const proximaCarpeta = (casos, slug) => {
+    const carpetas = [...casos.map((c) => c.caseId), ...nombresUsados(`${slug}/`).map((k) => k.split("/")[0])];
+    const usados = carpetas.map((id) => Number((id.match(/caso-(\d+)/) ?? [])[1] ?? 0));
     return `caso-${String(Math.max(0, ...usados) + 1).padStart(2, "0")}`;
   };
   const crearCaso = async (caso) => {
@@ -1500,7 +1539,12 @@ export default function App() {
         });
       }
       for (const g of nuevas.filter((x) => /aparte/i.test(x.archivo))) {
-        apart.push({ image: g.url, file: g.archivo, frame: 4 / 5, sensitive: false });
+        // Sin "key" (igual que beforeKey/afterKey arriba) el boton Tapar se
+        // escondia: cambiarCensura(key, ...) con key undefined guardaria la
+        // censura bajo la clave literal "undefined", pisando la de cualquier
+        // otra foto suelta nueva del mismo caso y ensuciando encuadre.json al
+        // publicar.
+        apart.push({ image: g.url, file: g.archivo, frame: 4 / 5, sensitive: false, key: clave(g.archivo) });
       }
       const archivosCaso = {
         antes: [...(base.archivos?.antes ?? []), ...nuevas.filter((g) => /antes/i.test(g.archivo)).map((g) => g.archivo)],
@@ -2244,6 +2288,33 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Documentos legales (Aviso Medico, Politica de Cookies desde el pie
+          de pagina). "privacy"/"terms" ya funcionan con este mismo modal en
+          cuanto tengan boton propio — hoy no lo tienen porque faltan datos
+          del cliente para publicarlos (ver docs/legal/LEGAL_REVIEW_PENDING.md).
+          Mismo patron visual que el resto de los modales del sitio. */}
+      <AnimatePresence>
+        {legalOpen && t.legal[legalOpen] && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setLegalOpen(null)} role="dialog" aria-modal="true"
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-6">
+            <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-[var(--surface)] p-8 shadow-[0_20px_60px_var(--shadow)]">
+              <button type="button" onClick={() => setLegalOpen(null)} aria-label={t.contact.close}
+                className="absolute right-5 top-5 cursor-pointer text-[var(--muted)] transition-colors hover:text-[var(--ink)] active:scale-90">
+                <X size={18} />
+              </button>
+              <h3 className="pr-8 font-display text-[22px] font-normal text-[var(--ink)]">{t.legal[legalOpen].title}</h3>
+              <div className="mt-4 space-y-3 text-[13px] leading-relaxed text-[var(--muted)]">
+                {t.legal[legalOpen].body.map((p, i) => <p key={i}>{p}</p>)}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Lightbox — certificates & papers */}
       <AnimatePresence>
         {lightbox && (
@@ -2662,7 +2733,7 @@ export default function App() {
                         ))}
                         {puedeEditar && fitEdit && (
                           <button type="button"
-                            onClick={() => setCasoNuevo({ slug: proc.slug, carpeta: proximaCarpeta(cases), antes: null, despues: null })}
+                            onClick={() => setCasoNuevo({ slug: proc.slug, carpeta: proximaCarpeta(cases, proc.slug), antes: null, despues: null })}
                             className="flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-[var(--accent)] px-4 py-1.5 text-[11px] uppercase tracking-[0.16em] text-[var(--accent)] transition-colors duration-200 hover:bg-[var(--accent-soft)]">
                             <Plus size={13} strokeWidth={2} aria-hidden="true" />
                             Agregar caso
@@ -2753,17 +2824,16 @@ export default function App() {
                     {/* Agregar fotos a este caso — chico, debajo de los casos. */}
                     {puedeEditar && fitEdit && !casoNuevo && (
                       <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <label className="flex cursor-pointer items-center gap-1.5 border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-[11px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
+                        {/* Un recuadro para el antes y otro para el despues (ver
+                            "Caso nuevo" mas abajo): elegir las dos fotos juntas
+                            en un solo cuadro de dialogo dependia del orden en
+                            que el sistema las devolvia, y podian quedar al reves. */}
+                        <button type="button"
+                          onClick={() => setCasoNuevo({ slug: proc.slug, carpeta: kase.caseId, existente: true, antes: null, despues: null })}
+                          className="flex cursor-pointer items-center gap-1.5 border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-[11px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
                           <Plus size={12} strokeWidth={2} aria-hidden="true" />
-                          Agregar más fotos de este caso
-                          <input type="file" accept="image/*" multiple className="hidden"
-                            onChange={(e) => {
-                              const [a, d] = e.target.files;
-                              if (a && d) conAviso(() => agregarPar(kase, a, d));
-                              else setFitMsg("Elegí las dos juntas: primero el antes y después el después.");
-                              e.target.value = "";
-                            }} />
-                        </label>
+                          Agregar un antes y después a este caso
+                        </button>
                         <label className="flex cursor-pointer items-center gap-1.5 border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-[11px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
                           <Plus size={12} strokeWidth={2} aria-hidden="true" />
                           Agregar foto social / post operatorio
@@ -2778,10 +2848,13 @@ export default function App() {
                     )}
 
                     {/* Caso nuevo: dos recuadros vacios esperando el antes y el despues. */}
-                    {puedeEditar && fitEdit && casoNuevo && casoNuevo.slug === proc.slug && (
+                    {puedeEditar && fitEdit && casoNuevo && casoNuevo.slug === proc.slug
+                      && (!casoNuevo.existente || casoNuevo.carpeta === kase.caseId) && (
                       <div className="mt-4">
                         <div className="flex flex-wrap items-center gap-3">
-                          <p className="text-[12px] font-medium text-[var(--ink)]">Caso nuevo en {proc[lang].name}</p>
+                          <p className="text-[12px] font-medium text-[var(--ink)]">
+                            {casoNuevo.existente ? `Nuevo antes y después en ${t.res.case} ${kase.n}` : `Caso nuevo en ${proc[lang].name}`}
+                          </p>
                           <button type="button" onClick={() => setCasoNuevo(null)}
                             className="cursor-pointer text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] transition-opacity hover:opacity-75">
                             Cancelar
@@ -2804,13 +2877,14 @@ export default function App() {
                                   onChange={(e) => {
                                     const file = e.target.files[0];
                                     if (!file) return;
-                                    const elegido = { file, url: URL.createObjectURL(file) };
-                                    setCasoNuevo((c) => {
-                                      const siguiente = { ...c, [lado]: elegido };
-                                      if (siguiente.antes && siguiente.despues) conAviso(() => crearCaso(siguiente));
-                                      return siguiente;
-                                    });
+                                    const siguiente = { ...casoNuevo, [lado]: { file, url: URL.createObjectURL(file) } };
+                                    setCasoNuevo(siguiente);
                                     e.target.value = "";
+                                    // Fuera del setState: React puede llamar dos veces a la
+                                    // funcion que se le pasa, y esto encolaria las fotos dos veces.
+                                    if (siguiente.antes && siguiente.despues) {
+                                      conAviso(() => (siguiente.existente ? agregarParNuevo(kase, siguiente) : crearCaso(siguiente)));
+                                    }
                                   }} />
                               </label>
                               <figcaption className="border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
@@ -3542,6 +3616,21 @@ export default function App() {
             </div>
             <p className="mt-6 text-[11px] tracking-wide text-[var(--faint)]">
               © {new Date().getFullYear()} MDM Surgery — Marcelo Di Maggio &amp; Team.
+            </p>
+            {/* Solo 2 links por ahora: Privacidad y Terminos todavia no
+                tienen los datos del cliente que necesitan para publicarse
+                (ver docs/legal/LEGAL_REVIEW_PENDING.md) — agregarlos aca en
+                cuanto esten listos, el modal (LegalModal) ya los soporta. */}
+            <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] tracking-wide text-[var(--faint)]">
+              <button type="button" onClick={() => setLegalOpen("medical")}
+                className="cursor-pointer underline-offset-2 transition-colors hover:text-[var(--ink)] hover:underline">
+                {t.footer.legalMedical}
+              </button>
+              <span aria-hidden="true">·</span>
+              <button type="button" onClick={() => setLegalOpen("cookies")}
+                className="cursor-pointer underline-offset-2 transition-colors hover:text-[var(--ink)] hover:underline">
+                {t.footer.legalCookies}
+              </button>
             </p>
             <p className="mt-2 text-[11px] tracking-wide text-[var(--faint)]">
               {t.footer.madeBy}:{" "}

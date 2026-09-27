@@ -42,6 +42,12 @@ export const CENSURA_GUARDADA = ENCUADRES.censura ?? {};
    como siempre. El numero que se ve ("Caso 03") sale de la posicion, asi que
    reordenar renumera solo. */
 export const ORDEN_GUARDADO = ENCUADRES.orden ?? {};
+export const ENCUADRE_APARTE = ENCUADRES.aparte ?? {};
+/* Todas las fotos publicadas ("slug/caso/archivo.webp"), se muestren o no:
+   el editor las usa para no ponerle a una foto nueva el nombre de una que
+   ya existe (por ejemplo, en una carpeta que hoy no se ve por no tener par). */
+export const FOTOS_EN_SITIO = new Set(
+  Object.keys(CASE_IMAGES).map((p) => p.replace("./assets/procedimientos/", "").normalize("NFC")));
 export const ordenarCasos = (slug, cases, orden = ORDEN_GUARDADO) => {
   const elegido = orden?.[slug];
   if (!elegido?.length) return cases;

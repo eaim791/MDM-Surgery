@@ -85,7 +85,26 @@ export const UI = {
                checkEmailLooksWrong: "Este email no parece válido — revisá que esté completo.",
                checkEmailEdit: "Editar",
                checkEmailConfirm: "¡Está perfecto! Enviar" },
-    footer: { where: "Dónde trabajamos", follow: "Seguinos", madeBy: "Página hecha por" },
+    footer: { where: "Dónde trabajamos", follow: "Seguinos", madeBy: "Página hecha por",
+              legalMedical: "Aviso médico", legalCookies: "Política de cookies" },
+    // Privacidad y Términos ya funcionan con el mismo LegalModal en cuanto se
+    // les agregue contenido y un botón en el pie — faltan datos del cliente
+    // (responsable del tratamiento, domicilio, email de privacidad) para
+    // publicarlos. Ver docs/legal/LEGAL_REVIEW_PENDING.md y el borrador en
+    // docs/legal/BORRADORES_LEGALES.md.
+    legal: {
+      medical: { title: "Aviso médico", body: [
+        "La información publicada en este sitio tiene fines informativos y no reemplaza una consulta médica.",
+        "Los resultados de los procedimientos varían según la anatomía, el estado de salud y el plan quirúrgico de cada paciente; ningún resultado individual está garantizado.",
+        "Las fotos de \"antes y después\" corresponden a pacientes reales que autorizaron su publicación.",
+        "Ante una urgencia médica, comunicate con los servicios de emergencia de tu localidad — no utilices el formulario de contacto de este sitio para situaciones urgentes.",
+      ] },
+      cookies: { title: "Política de cookies", body: [
+        "Este sitio no usa cookies de seguimiento, analítica ni publicidad — no hay Google Analytics, píxeles de redes sociales ni gestores de etiquetas.",
+        "Lo único que se guarda en tu navegador (nunca en un servidor) es tu preferencia de idioma y de tema claro/oscuro.",
+        "Si en algún momento el sitio suma analítica, un mapa embebido o cualquier script de terceros, esta política se revisa antes de publicarlo.",
+      ] },
+    },
     a11y: { home: "Volver al inicio", menu: "Abrir menú", close: "Cerrar menú",
             theme: "Cambiar tema", lang: "Cambiar idioma", toProc: "Ver resultados de" },
   },
@@ -175,7 +194,21 @@ export const UI = {
                checkEmailLooksWrong: "This doesn't look like a valid email — check it's complete.",
                checkEmailEdit: "Edit",
                checkEmailConfirm: "Looks great! Send" },
-    footer: { where: "Where we work", follow: "Follow", madeBy: "Site made by" },
+    footer: { where: "Where we work", follow: "Follow", madeBy: "Site made by",
+              legalMedical: "Medical disclaimer", legalCookies: "Cookie policy" },
+    legal: {
+      medical: { title: "Medical disclaimer", body: [
+        "The information published on this site is for informational purposes and does not replace a medical consultation.",
+        "Procedure results vary based on each patient's anatomy, health status, and surgical plan; no individual result is guaranteed.",
+        "\"Before and after\" photos correspond to real patients who authorized their publication.",
+        "In a medical emergency, contact your local emergency services — do not use this site's contact form for urgent situations.",
+      ] },
+      cookies: { title: "Cookie policy", body: [
+        "This site does not use tracking, analytics, or advertising cookies — there is no Google Analytics, social media pixels, or tag managers.",
+        "The only thing stored in your browser (never on a server) is your language and light/dark theme preference.",
+        "If the site ever adds analytics, an embedded map, or any third-party script, this policy will be reviewed before it goes live.",
+      ] },
+    },
     a11y: { home: "Back to top", menu: "Open menu", close: "Close menu",
             theme: "Toggle theme", lang: "Switch language", toProc: "See results for" },
   },

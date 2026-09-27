@@ -26,6 +26,8 @@ updated: 2026-09-22
 
 - Sitio en producción. El 2026-09-22 se agrupó y pusheó a `main` una tanda grande: auditoría integral + hardening (privacidad/legal, seguridad, SEO, a11y, UX, frontend — ver `docs/MDM_SURGERY_MASTER_AUDIT.md`), la implementación de 5 hallazgos de UX (UX-01/02/03/04/06 — ver `docs/audits/UX_UI_DEEP_AUDIT.md`), y el rediseño de slogan (Mrs Saint Delafield) + loading (monograma con foco). Un solo deploy para todo. **[V]**
 - `git status` limpio tras el push, `main` sincronizado con `origin/main`. **[V]**
+- 2026-09-23: capa legal implementada — Aviso Médico y Política de Cookies ya están en el sitio (modal `LegalModal` en `src/App.jsx`, disparado desde 2 links nuevos en el pie de página, ES/EN). Política de Privacidad y Términos y Condiciones **no están publicados todavía**: el mismo componente ya los soporta, pero faltan datos del cliente (responsable del tratamiento, domicilio, email de privacidad — ver `docs/legal/LEGAL_REVIEW_PENDING.md`) y por eso no tienen botón en el pie. Sin checkbox de consentimiento en el formulario todavía (depende de que Privacidad esté publicada). **[V]**
+- 2026-09-27: se integraron los 3 commits del editor del doctor (546d4be, 4622401, 98d2e3c) sin tocarlos, se corrigieron bugs del editor (ver §15) y se pusheó todo junto con la capa legal. **[V]**
 - Editor de fotos remoto operativo: login, borrador en la nube y publicación a GitHub probados en producción. **[V]**
 - Sección **Resultados** marcada en la UI como "construyendo" (aviso deliberado al lado del selector de procedimientos). **[D]**
 - Testimonios: un solo testimonio real (Instagram `@maeru.jpg`) + bloque "próximamente". **[D]**
@@ -184,6 +186,8 @@ No hay estrategia de redes documentada en el repo. **[P]**
 - Auditoría integral (legal/privacidad, ciberseguridad, SEO, a11y, UX, frontend) + hardening seguro: `robots.txt`, `sitemap.xml`, canonical, `og:url`, JSON-LD `Physician`, headers de seguridad (CSP incluida) en `netlify.toml`, nota anti-datos-sensibles en el formulario de contacto, fix de la dependencia `nanoid` (HIGH) vía `npm audit fix`. Detalle en `docs/MDM_SURGERY_MASTER_AUDIT.md` y `docs/audits/`.
 - Auditoría profunda de UX/UI (`docs/audits/UX_UI_DEEP_AUDIT.md`) + implementación de 5 hallazgos aprobados por Emma: el FAB de contacto ya no tapa texto en "Qué hacemos" ni en los tabs de casos de Resultados (mobile, `pb-20 sm:pb-0` / `pr-14 sm:pr-0` en `src/App.jsx`); los bordes de los campos del formulario usan un nuevo token `--field-line` (`src/index.css`) con contraste WCAG 1.4.11 correcto; Sedes pasó de 3 tarjetas por país a 4 tarjetas por ciudad, cada una titulada "Ciudad, País" (decisión de Emma, para no confundir "Córdoba, Argentina" con "Córdoba, España"); el copy de "Hilos Tensores"/"Tensor Threads" se acortó en `src/data.js` para no cortarse a mitad de frase. Único pendiente de UX: UX-05 (detalle del wordmark del hero), dejado como polish opcional sin tocar.
 - Slogan y loading rediseñados a pedido de Emma, tras mostrarle variantes en un Artifact comparativo: el slogan ("La ciencia de la belleza...") pasó de Sacramento a **Mrs Saint Delafield** (`--handwritten-fill` en `src/index.css`, paquete `@fontsource/mrs-saint-delafield`); el loading dejó de escribir "MDM Surgery & Team" a mano alzada y ahora es el monograma "MDM" haciendo foco (`blur→0` + `scale`, ~0.8s, clase `.loader-mark`) — más corto de percibir y ya no depende de que cargue ninguna fuente cursiva para arrancar. `@fontsource/sacramento` se desinstaló (quedó sin uso). **Dato para el handoff**: un comentario viejo en el código (ya removido) advertía que Mrs Saint Delafield se había descartado antes por leerse peor letra por letra que Sacramento — se implementó igual porque Emma la vio en el comparativo y la eligió a propósito; si en producción se ve poco legible, ese es el motivo histórico a tener en cuenta antes de volver a cambiarla.
+- Editor, correcciones probadas de punta a punta en local (2026-09-27, sin tocar fotos): botón Tapar en fotos sueltas recién agregadas (les faltaba la clave); "Agregar más fotos de este caso" pasó a dos recuadros Antes/Después (el selector de dos fotos juntas podía invertirlas) y al terminar muestra el par agregado; los números de fotos nuevas y las carpetas de casos nuevos ya no reusan nombres de fotos publicadas (aunque no se vean) ni de entradas viejas de `encuadre.json` (heredaban zoom/recuadro/censura viejos); quitar una foto agregada en la misma tanda la saca de la cola en vez de mandar a borrar un archivo inexistente. `data.js` exporta `FOTOS_EN_SITIO` y `ENCUADRE_APARTE` para esto.
+- Capa legal implementada (2026-09-23): Aviso Médico y Política de Cookies, en ES/EN, mostrados en un modal (`LegalModal`, mismo patrón que el resto de los modales del sitio) disparado desde 2 links nuevos en el pie de página. Contenido en `src/i18n.js` (`legal.medical`, `legal.cookies`). Política de Privacidad y Términos y Condiciones quedaron con la estructura técnica lista (el mismo `LegalModal` ya los soporta) pero **sin publicar ni enlazar** — faltan datos del cliente, ver `docs/legal/LEGAL_REVIEW_PENDING.md`. Sin checkbox de consentimiento todavía (depende de que Privacidad esté publicada). No se tocó el formulario, el editor, las fotos ni la censura.
 
 ## 16. Important Decisions
 
@@ -217,6 +221,9 @@ No hay estrategia de redes documentada en el repo. **[P]**
 | `beforeunload` no es fiable en navegadores móviles; mitigado con `keepalive` y escritura atómica. | Mitigado **[V]** |
 | El repo vive dentro de `OneDrive`. Si se vuelve a vincular la cuenta, OneDrive puede dejar archivos "en la nube" y romper git y las builds. Ya causó un incidente de carga de fotos. | Riesgo activo **[V]** |
 | Carpeta vacía `mdm-surgery/` dentro del repo. | Cosmético **[V]** |
+| `forehead-orbital/Agustina Ferreyra` (sesión del doctor del 2026-09-27): `antes-3`/`antes-4` tienen la foto de DESPUÉS y `despues-3`/`despues-4` la de ANTES (nombres cruzados al subir con el selector viejo de dos fotos juntas); el par 4 es copia exacta del 3; `antes-2` (perfil) no tiene `despues-2`. En el sitio los pares se arman por posición, así que se ve "antes-2 + despues-3" y "antes-3 + despues-4". Emma pidió explícitamente **no tocar esas fotos ni cambiar el emparejamiento**. | Abierto, decisión del doctor/Emma **[V]** |
+| `facial-harmonization/caso-09`: `despues-4.webp` es idéntica a `despues-1.webp`. | Abierto, decisión del doctor **[V]** |
+| Los pares antes/después se arman **por posición** en `data.js` (no por número). Si falta un archivo, los pares siguientes se corren. Se probó emparejar por número y se revirtió a pedido de Emma. | Conocido, decisión de Emma **[D]** |
 | `/api/login` no tiene rate limiting ni bloqueo por IP (solo un delay fijo de 1,2 s por request, que no frena intentos en paralelo). | Abierto, HIGH — ver `docs/audits/CYBERSECURITY.md` SEC-01 **[V]** |
 | `esbuild`/`vite` con aviso MODERATE de `npm audit` (afecta solo al server de dev local, no a producción). Requiere `vite@8` para resolverse, cambio mayor. | Abierto, diferido a propósito **[V]** |
 | Sin Política de Privacidad, Aviso Médico ni Términos y Condiciones publicados, pese a que el formulario recolecta datos personales en 3+ jurisdicciones. Borradores tecnológicos listos en `docs/legal/BORRADORES_LEGALES.md`, sin publicar. | Abierto, requiere datos del cliente + revisión jurídica **[V]** |
@@ -229,8 +236,9 @@ No hay estrategia de redes documentada en el repo. **[P]**
 4. Documentar fuera del repo: DNS/registrador, Google Workspace, cuenta de Netlify y de Formspree. **[P]**
 5. Decidir si mover el repo fuera de OneDrive. **[P]**
 6. Verificar con uso real el recorte y el reordenamiento por parte del doctor. **[P]**
-7. Completar los `[DATO REQUERIDO]` de `docs/legal/BORRADORES_LEGALES.md` (responsable del tratamiento, domicilio, email de privacidad) y mandar los 3 borradores a revisión jurídica. **[P]**
-8. Decidir dónde viven las páginas legales en el sitio (modal vs. ruta propia) y, con eso resuelto, agregar el checkbox de consentimiento al formulario. **[P]**
+7. ~~Decidir dónde viven las páginas legales en el sitio.~~ Resuelto 2026-09-23: modal `LegalModal`, mismo patrón que el resto de los modales del sitio — ver §15. **[V]**
+7b. Conseguir del cliente los datos de `docs/legal/LEGAL_REVIEW_PENDING.md` (responsable del tratamiento, domicilio, email de privacidad, retención, datos de Formspree) para poder publicar Política de Privacidad y Términos y Condiciones, y recién ahí agregar el checkbox de consentimiento al formulario. **[P]**
+8. Mandar los 4 documentos legales a revisión jurídica (Aviso Médico y Cookies ya publicados; ninguno pasó por abogado todavía). **[P]**
 9. Confirmar si la práctica en EE.UU. es entidad cubierta por HIPAA. **[P]**
 10. Revisar en GitHub el alcance real de `EDITOR_GITHUB_TOKEN` (fine-grained, limitado al repo). **[P]**
 11. Evaluar agregar rate limiting a `/api/login` (probar con Emma antes de publicar). **[P]**
@@ -349,6 +357,13 @@ ccfb5ea  Publica aunque alguna foto a quitar ya no este en el sitio
 5. Agrupar cambios y pedir OK explícito antes de pushear; al terminar, informar cuántos deploys se gastaron.
 6. Para verificar algo del editor en producción, no pedir la contraseña: pedirle a Emma que haga la prueba y pase el mensaje en pantalla.
 7. Al terminar una tanda de trabajo, actualizar §2, §15, §18, §19 y §27 de este documento.
+8. **Recordatorio legal**: si `docs/legal/LEGAL_REVIEW_PENDING.md` todavía
+   tiene puntos sin resolver, avisarlo brevemente (2-3 líneas, no repetir la
+   auditoría) al arrancar una sesión nueva relevante para el proyecto, o si
+   pasaron 30 días o más desde la fecha en `LAST_LEGAL_REVIEW_REMINDER` de
+   ese archivo. Si se avisa, actualizar esa fecha a hoy. Si no queda nada
+   pendiente en ese archivo, no decir nada al respecto. No repetir el aviso
+   dentro de la misma sesión.
 
 ## 27. Last Updated
 
@@ -360,3 +375,10 @@ ciudad, copy de Hilos Tensores), y el rediseño de slogan/loading (Mrs Saint
 Delafield + monograma con foco). Documentación en
 `docs/MDM_SURGERY_MASTER_AUDIT.md`, `docs/audits/` y `docs/legal/`. Ver §2,
 §15, §18, §19 para el detalle.
+
+2026-09-23 — capa legal implementada sobre ese mismo estado: Aviso Médico y
+Política de Cookies publicados (ES/EN, modal `LegalModal`); Privacidad y
+Términos con estructura técnica lista pero sin publicar (faltan datos del
+cliente). **Sin commitear, sin pushear** (pendiente de OK). Pendientes en
+`docs/legal/LEGAL_REVIEW_PENDING.md` — ver §2, §15, §19 y la instrucción de
+recordatorio en §26.8.
