@@ -1581,14 +1581,17 @@ export default function App() {
   const sinExt = (f) => f.replace(/\.[^.]+$/, "");
   const casosConPendientes = (casos, slug) => {
     if (!archivos.length) return ordenarYNumerar(casos, slug);
+    /* Por carpeta completa ("slug/caso"), no solo por el procedimiento que se
+       esta mirando: un caso compartido vive en la carpeta de su dueno, y antes
+       sus cambios no se veian desde el procedimiento que lo muestra prestado
+       (parecia que quitar, reemplazar o intercambiar no hacia nada). */
     const porCaso = new Map();
     for (const a of archivos) {
       const [s0, caso, archivo] = a.ruta.split("/");
-      if (s0 !== slug) continue;
-      if (!porCaso.has(caso)) porCaso.set(caso, []);
-      porCaso.get(caso).push({ ...a, archivo });
+      const k = `${s0}/${caso}`;
+      if (!porCaso.has(k)) porCaso.set(k, []);
+      porCaso.get(k).push({ ...a, archivo });
     }
-    if (!porCaso.size) return ordenarYNumerar(casos, slug);
     const conOps = (base, ops) => {
       const fuera = new Set(ops.filter((o) => o.accion === "borrar").map((o) => o.archivo));
       const puestas = new Map(ops.filter((o) => o.accion === "guardar").map((o) => [o.archivo, o]));
@@ -1603,7 +1606,7 @@ export default function App() {
       const yaEstaban = new Set([...base.angles.flatMap((a) => [a.beforeFile, a.afterFile]), ...base.apart.map((x) => x.file)]);
       const nuevas = [...puestas.values()].filter((g) => !yaEstaban.has(g.archivo));
       const num = (f) => (f.match(/(\d+)/) ?? [])[1];
-      const clave = (f) => `${slug}/${base.caseId}/${sinExt(f)}`.normalize("NFC");
+      const clave = (f) => `${base.slug ?? slug}/${base.caseId}/${sinExt(f)}`.normalize("NFC");
       for (const a of nuevas.filter((g) => /antes/i.test(g.archivo))) {
         const d = nuevas.find((g) => /despu|dsp|after/i.test(g.archivo) && num(g.archivo) === num(a.archivo));
         if (!d) continue;
@@ -1630,12 +1633,16 @@ export default function App() {
       return { ...base, angles, apart, archivos: archivosCaso };
     };
     const lista = casos.map((c) => {
-      const ops = porCaso.get(c.caseId);
+      const k = `${c.slug ?? slug}/${c.caseId}`;
+      const ops = porCaso.get(k);
       if (!ops) return c;
-      porCaso.delete(c.caseId);
+      porCaso.delete(k);
       return conOps(c, ops);
     });
-    for (const [caso, ops] of porCaso) {
+    // Casos nuevos: se crean en la carpeta del procedimiento que se esta mirando.
+    for (const [k, ops] of porCaso) {
+      const [s0, caso] = k.split("/");
+      if (s0 !== slug) continue;
       lista.push(conOps({ caseId: caso, slug, angles: [], apart: [], focus: "50% 35%",
                           watermark: true, note: null, archivos: { antes: [], despues: [], aparte: [] } }, ops));
     }

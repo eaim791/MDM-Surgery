@@ -214,7 +214,8 @@ No hay estrategia de redes documentada en el repo. **[P]**
 
 | Problema | Estado |
 |---|---|
-| Casos compartidos (`SHARED_CASES`): al editarlos desde el procedimiento "prestado", la vista previa no se actualiza ahí (sí en el dueño de las fotos). Publicar funciona bien. | Abierto, cosmético **[V]** |
+| ~~Casos compartidos (`SHARED_CASES`): al editarlos desde el procedimiento "prestado", la vista previa no se actualizaba ahí.~~ Resuelto 2026-09-27: `casosConPendientes` agrupa los cambios por carpeta completa ("slug/caso"). Era la causa de "quito el caso / intercambio y no se ve en vivo" que reportó Emma. | Resuelto **[V]** |
+| **Probar el editor en `npm run dev` escribe de verdad**: "Guardar cambios" en desarrollo guarda fotos y `encuadre.json` en el disco (y la nube hace commit + push). Dos veces en esta sesión quedaron fotos borradas o intercambiadas en la copia local por pruebas; se restauraron con `git restore`. Revisar `git status` antes de cada commit. | Riesgo activo **[V]** |
 | Fotos quirúrgicas `antes-2q`/`despues-2q` de Tomás Bruno sin difuminar, mientras el otro par del mismo caso sí está marcado como sensible. | Abierto — ahora se puede corregir desde el editor con "Tapar" **[V]** |
 | El recorte reemplaza la foto sin "deshacer" en el editor. Recuperable solo desde el historial de git. | Aceptado **[D]** |
 | Un solo borrador compartido: si los dos editan a la vez, uno pisa al otro (hay aviso, no fusión). | Aceptado con mitigación **[D]** |
