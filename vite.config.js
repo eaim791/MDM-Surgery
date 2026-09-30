@@ -38,7 +38,7 @@ function editorApi() {
       server.middlewares.use('/__editor/encuadre', async (req, res) => {
         if (req.method !== 'POST') return responder(res, { ok: false }, 405)
         try {
-          const { fotos = {}, marcos = {}, censura = {}, orden = {} } = await leerCuerpo(req)
+          const { fotos = {}, marcos = {}, censura = {}, orden = {}, compartidos = {} } = await leerCuerpo(req)
           const ruta = 'src/encuadre.json'
           const datos = JSON.parse(readFileSync(ruta, 'utf-8'))
           const redondear = (n) => Math.round(n * 100) / 100
@@ -63,8 +63,14 @@ function editorApi() {
             if (!Array.isArray(lista) || !lista.length) delete datos.orden[slug]
             else datos.orden[slug] = lista.map(String)
           }
+          // En que procedimientos se muestra cada caso ("procedimiento/caso": [slugs]).
+          datos.compartidos ??= {}
+          for (const [k, lista] of Object.entries(compartidos)) {
+            if (!Array.isArray(lista) || !lista.length) delete datos.compartidos[k]
+            else datos.compartidos[k] = [...new Set(lista.map(String))]
+          }
           writeFileSync(ruta, JSON.stringify(datos))
-          responder(res, { ok: true, guardadas: Object.keys(fotos).length + Object.keys(marcos).length + Object.keys(censura).length + Object.keys(orden).length })
+          responder(res, { ok: true, guardadas: Object.keys(fotos).length + Object.keys(marcos).length + Object.keys(censura).length + Object.keys(orden).length + Object.keys(compartidos).length })
         } catch (e) {
           responder(res, { ok: false, error: String(e.message || e) }, 500)
         }

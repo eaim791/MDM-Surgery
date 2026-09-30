@@ -4,7 +4,7 @@ import {
   Menu, X, ChevronDown, ArrowDown, ArrowRight, ArrowLeft, Instagram, Linkedin,
   Facebook, Youtube, Check, Star, Play, Award, FileText, ZoomIn, Loader2, SlidersHorizontal,
   Droplet, Eye, EyeOff, Construction, GripVertical, ChevronsRight, ArrowUpRight, MessageCircle,
-  Plus, Minus, Move, MoveHorizontal, MoveVertical, UploadCloud, Lock, ArrowLeftRight, RotateCcw,
+  Plus, Minus, Move, MoveHorizontal, MoveVertical, UploadCloud, Lock, ArrowLeftRight, RotateCcw, Trash2, ScanEye,
 } from "lucide-react";
 import {
   SunIcon, MoonIcon, GlobeIcon, ObeliskIcon, SpireIcon, SkylineIcon, EnvelopeIcon, SealIcon,
@@ -18,7 +18,7 @@ import {
   PROCEDURES, PROCEDURES_WITH_CASES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
   LOCATIONS, SEDES, TESTIMONIALS, casesFor, CERTIFICATES, PAPERS,
   ENCUADRE_FOTOS, ENCUADRE_MARCOS, marcoGuardado, fitStyle, fitRender, CENSURA_GUARDADA, ORDEN_GUARDADO, ordenarCasos,
-  ENCUADRE_APARTE, FOTOS_EN_SITIO,
+  ENCUADRE_APARTE, FOTOS_EN_SITIO, TODOS, apareceEn, claveCaso,
 } from "./data.js";
 
 /* Velo del video del hero: atenua el centro-izquierda para que el texto se lea. */
@@ -1011,7 +1011,7 @@ export default function App() {
     borradorCargado.current = false; subidos.current = new Set(); visto.current = 0;
     setConflicto(null); setGuardadoEstado("");
     setSesion(""); setFitEdit(false); setArchivos([]); setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({});
-    setFirmaGuardada(""); olvidarPasos();
+    setCompartidos({}); setFirmaGuardada(""); olvidarPasos();
   };
 
   const [fitEdit, setFitEdit] = useState(false);
@@ -1023,6 +1023,8 @@ export default function App() {
   const [censuras, setCensuras] = useState({});
   // Orden de los casos arrastrado a mano: { slug: [caseId, ...] }.
   const [ordenes, setOrdenes] = useState({});
+  // En que procedimientos se muestra cada caso, cambiado a mano: { "owner/caso": [slugs] }.
+  const [compartidos, setCompartidos] = useState({});
   const [fitMsg, setFitMsg] = useState("");
   // Caso que se esta creando: { slug, carpeta, antes, despues } con las fotos
   // elegidas todavia sin subir (se ven como vista previa).
@@ -1035,18 +1037,18 @@ export default function App() {
   const marcoDrag = useRef(null);
   const [fitMoving, setFitMoving] = useState(null);
   const pendientes = Object.keys(fits).length + Object.keys(marcoEdits).length
-    + Object.keys(censuras).length + Object.keys(ordenes).length + archivos.length;
+    + Object.keys(censuras).length + Object.keys(ordenes).length + Object.keys(compartidos).length + archivos.length;
   /* Deshacer: una copia de como estaba el editor antes de cada cambio, para
      volver un paso atras (por ejemplo, un caso quitado por error). Vale hasta
      publicar: lo publicado ya esta en la pagina. */
   const historial = useRef([]);
   const [pasos, setPasos] = useState(0);
   const igualAlActual = (s) => s.archivos === archivos && s.fits === fits && s.marcoEdits === marcoEdits
-    && s.censuras === censuras && s.ordenes === ordenes;
+    && s.censuras === censuras && s.ordenes === ordenes && s.compartidos === compartidos;
   const anotarPaso = () => {
     const ultimo = historial.current[historial.current.length - 1];
     if (ultimo && igualAlActual(ultimo)) return;
-    historial.current = [...historial.current.slice(-29), { archivos, fits, marcoEdits, censuras, ordenes }];
+    historial.current = [...historial.current.slice(-29), { archivos, fits, marcoEdits, censuras, ordenes, compartidos }];
     setPasos(historial.current.length);
   };
   const olvidarPasos = () => { historial.current = []; setPasos(0); };
@@ -1058,7 +1060,7 @@ export default function App() {
     setPasos(historial.current.length);
     if (!previo) return;
     setArchivos(previo.archivos); setFits(previo.fits); setMarcoEdits(previo.marcoEdits);
-    setCensuras(previo.censuras); setOrdenes(previo.ordenes); setCasoNuevo(null);
+    setCensuras(previo.censuras); setOrdenes(previo.ordenes); setCompartidos(previo.compartidos); setCasoNuevo(null);
     setFitMsg("Listo: volvió a como estaba antes del último cambio.");
   };
   /* Borrador en la nube: "Listo, guardar" manda los cambios a Netlify (funcion
@@ -1066,8 +1068,8 @@ export default function App() {
      seguir despues, o desde otra computadora, y recien al tocar la nube se
      publica para todo el mundo. En desarrollo no hace falta: se escribe en el
      disco de esta compu. */
-  const firmaDe = (f, m, a, c = {}, o = {}) => JSON.stringify([f, m, a.map((x) => x.accion + x.ruta), c, o]);
-  const firma = firmaDe(fits, marcoEdits, archivos, censuras, ordenes);
+  const firmaDe = (f, m, a, c = {}, o = {}, s = {}) => JSON.stringify([f, m, a.map((x) => x.accion + x.ruta), c, o, s]);
+  const firma = firmaDe(fits, marcoEdits, archivos, censuras, ordenes, compartidos);
   const [firmaGuardada, setFirmaGuardada] = useState("");
   const sinGuardar = pendientes > 0 && (import.meta.env.DEV || firma !== firmaGuardada);
   // Fotos que ya viajaron al borrador: no se vuelven a subir en cada guardado.
@@ -1101,7 +1103,7 @@ export default function App() {
         if (r.status === 401) return salirDelEditor();
         const j = await r.json();
         if (!j.ok || !j.borrador) return;
-        const { fotos = {}, marcos = {}, censura = {}, orden = {}, archivos: lista = [] } = j.borrador;
+        const { fotos = {}, marcos = {}, censura = {}, orden = {}, compartidos: comp = {}, archivos: lista = [] } = j.borrador;
         const recuperados = [];
         for (const a of lista) {
           if (a.accion !== "guardar") { recuperados.push(a); continue; }
@@ -1110,11 +1112,12 @@ export default function App() {
           if (jf.ok) recuperados.push({ ...a, datos: jf.datos, url: urlDeBase64(jf.datos) });
         }
         if (!recuperados.length && !Object.keys(fotos).length && !Object.keys(marcos).length
-            && !Object.keys(censura).length && !Object.keys(orden).length) return;
+            && !Object.keys(censura).length && !Object.keys(orden).length && !Object.keys(comp).length) return;
         subidos.current = new Set(recuperados.filter((a) => a.accion === "guardar").map((a) => a.ruta));
         visto.current = j.borrador.guardado ?? 0;
-        setFits(fotos); setMarcoEdits(marcos); setCensuras(censura); setOrdenes(orden); setArchivos(recuperados); olvidarPasos();
-        setFirmaGuardada(firmaDe(fotos, marcos, recuperados, censura, orden));
+        setFits(fotos); setMarcoEdits(marcos); setCensuras(censura); setOrdenes(orden); setCompartidos(comp);
+        setArchivos(recuperados); olvidarPasos();
+        setFirmaGuardada(firmaDe(fotos, marcos, recuperados, censura, orden, comp));
         setFitEdit(true);
         setFitMsg(`Recuperé los cambios sin publicar que había guardados${
           j.borrador.guardado ? ` (${new Date(j.borrador.guardado).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })})` : ""}.`);
@@ -1344,10 +1347,15 @@ export default function App() {
   const recorteDrag = useRef(null);
   const SEL_MINIMA = 0.05;
   const abrirRecorte = (kase, archivo, src, fitKey = null) =>
-    setRecorte({ kase, archivo, src, fitKey, sel: null });
+    setRecorte({ kase, archivo, src, fitKey, sel: null, modo: "recorte" });
+  // Misma seleccion que Recortar, pero para tapar los ojos (identidad).
+  const abrirOjos = (kase, archivo, src) =>
+    setRecorte({ kase, archivo, src, fitKey: null, sel: null, modo: "ojos" });
   // La seleccion se dibuja arrastrando, en proporciones de 0 a 1 sobre la foto.
   const puntoEnFoto = (e) => {
     const caja = recorteRef.current.getBoundingClientRect();
+    // Foto todavia sin tamano en pantalla: sin esto la seleccion quedaba en NaN.
+    if (!caja.width || !caja.height) return { x: 0, y: 0 };
     return {
       x: Math.min(1, Math.max(0, (e.clientX - caja.left) / caja.width)),
       y: Math.min(1, Math.max(0, (e.clientY - caja.top) / caja.height)),
@@ -1373,11 +1381,17 @@ export default function App() {
     // Un toque suelto, sin arrastrar, no deja una seleccion inservible.
     setRecorte((r) => (r?.sel && (r.sel.w < SEL_MINIMA || r.sel.h < SEL_MINIMA) ? { ...r, sel: null } : r));
   };
+  /* Con onload y no img.decode(): decode() no termina mientras la pestana
+     esta en segundo plano, y "Preparando la foto…" quedaba colgado. */
+  const cargarImagen = (src) => new Promise((ok, mal) => {
+    const img = new Image();
+    img.onload = () => ok(img);
+    img.onerror = () => mal(new Error("No pude abrir la foto para editarla. Recargá la página y probá de nuevo."));
+    img.src = src;
+  });
   const aplicarRecorte = () => conAviso(async () => {
     const { kase, archivo, src, fitKey, sel } = recorte;
-    const img = new Image();
-    img.src = src;
-    await img.decode();
+    const img = await cargarImagen(src);
     const x = Math.round(sel.x * img.naturalWidth);
     const y = Math.round(sel.y * img.naturalHeight);
     const ancho = Math.max(1, Math.round(sel.w * img.naturalWidth));
@@ -1392,6 +1406,42 @@ export default function App() {
     // La foto es otra: el encuadre guardado ya no corresponde.
     if (fitKey) setFits((p) => ({ ...p, [fitKey]: [100, 100, 0, 0] }));
     setRecorte(null);
+  });
+  /* Ocultar los ojos: se pinta sobre el archivo mismo (no una capa encima),
+     asi la foto publicada —y la que se abre en grande— ya no los muestra.
+     "difuminar": la zona se achica a pocos puntos y se vuelve a agrandar
+     suavizada; no queda informacion para reconstruir los ojos. "barra":
+     rectangulo negro. La foto mantiene su tamano, asi que el encuadre sigue
+     valiendo. */
+  const aplicarOjos = (estilo) => conAviso(async () => {
+    const { kase, archivo, src, sel } = recorte;
+    const img = await cargarImagen(src);
+    const W = img.naturalWidth, H = img.naturalHeight;
+    const lienzo = document.createElement("canvas");
+    lienzo.width = W; lienzo.height = H;
+    const g = lienzo.getContext("2d");
+    g.drawImage(img, 0, 0);
+    const x = Math.round(sel.x * W), y = Math.round(sel.y * H);
+    const w = Math.max(1, Math.round(sel.w * W)), h = Math.max(1, Math.round(sel.h * H));
+    if (estilo === "barra") {
+      g.fillStyle = "#000";
+      g.fillRect(x, y, w, h);
+    } else {
+      const chico = document.createElement("canvas");
+      chico.width = Math.max(2, Math.round(w / 24));
+      chico.height = Math.max(2, Math.round(h / 24));
+      const c = chico.getContext("2d");
+      c.imageSmoothingEnabled = true;
+      c.drawImage(lienzo, x, y, w, h, 0, 0, chico.width, chico.height);
+      g.imageSmoothingEnabled = true;
+      g.imageSmoothingQuality = "high";
+      g.drawImage(chico, 0, 0, chico.width, chico.height, x, y, w, h);
+    }
+    const png = await new Promise((r) => lienzo.toBlob(r, "image/png"));
+    if (!png) throw new Error("No se pudo tapar los ojos de la foto.");
+    await reemplazarFoto(kase, archivo, new File([png], archivo, { type: "image/png" }));
+    setRecorte(null);
+    setFitMsg(`Ojos ${estilo === "barra" ? "tapados" : "difuminados"}. Si no quedó bien, tocá Deshacer. Falta publicar (la nube).`);
   });
 
   const prepararFoto = async (ruta, file) => {
@@ -1584,6 +1634,32 @@ export default function App() {
   };
 
   const sinExt = (f) => f.replace(/\.[^.]+$/, "");
+  /* En que procedimientos se muestra un caso, con lo cambiado en el editor
+     todavia sin publicar. */
+  const apareceAhora = (kase) => compartidos[claveCaso(kase.slug, kase.caseId)] ?? apareceEn(kase.slug, kase.caseId);
+  const casosPara = (slug) => {
+    const base = casesFor(slug).filter((c) => apareceAhora(c).includes(slug));
+    const ya = new Set(base.map((c) => claveCaso(c.slug, c.caseId)));
+    const sumados = Object.entries(compartidos)
+      .filter(([k, lista]) => lista.includes(slug) && !ya.has(k) && TODOS[k])
+      .map(([k]) => TODOS[k])
+      .filter((c) => c.angles.length || c.apart.length);
+    return [...base, ...sumados].map((c, i) => ({ ...c, n: String(i + 1).padStart(2, "0") }));
+  };
+  const nombreProc = (slug) => PROCEDURES.find((p) => p.slug === slug)?.[lang].name ?? slug;
+  const cambiarApareceEn = (kase, slug, incluir) => {
+    const actual = apareceAhora(kase);
+    if (!incluir && actual.length === 1) {
+      setFitMsg(`Es el único procedimiento donde aparece este caso. Para sacarlo del todo, usá "Quitar este caso".`);
+      return;
+    }
+    const nueva = incluir ? [...actual, slug] : actual.filter((s) => s !== slug);
+    anotarPaso();
+    setCompartidos((p) => ({ ...p, [claveCaso(kase.slug, kase.caseId)]: nueva }));
+    setFitMsg(incluir
+      ? `Ahora el caso también aparece en ${nombreProc(slug)}. Falta publicar (la nube).`
+      : `Quitaste el caso de ${nombreProc(slug)}; sigue en ${nueva.map(nombreProc).join(", ")}. Las fotos no se borran. Falta publicar (la nube).`);
+  };
   const casosConPendientes = (casos, slug) => {
     if (!archivos.length) return ordenarYNumerar(casos, slug);
     /* Por carpeta completa ("slug/caso"), no solo por el procedimiento que se
@@ -1665,8 +1741,8 @@ export default function App() {
      escribe en el disco de esta compu (endpoints de vite.config.js). */
   const guardarLocal = async () => {
     if (Object.keys(fits).length || Object.keys(marcoEdits).length || Object.keys(censuras).length
-        || Object.keys(ordenes).length) {
-      const r = await fetch("/__editor/encuadre", { method: "POST", body: JSON.stringify({ fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes }) });
+        || Object.keys(ordenes).length || Object.keys(compartidos).length) {
+      const r = await fetch("/__editor/encuadre", { method: "POST", body: JSON.stringify({ fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes, compartidos }) });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
     }
@@ -1678,7 +1754,7 @@ export default function App() {
       const j = await r.json();
       if (!j.ok) throw new Error(j.error);
     }
-    setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setArchivos([]); olvidarPasos();
+    setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setCompartidos({}); setArchivos([]); olvidarPasos();
   };
   /* Guarda en el borrador de la nube: primero las fotos que todavia no
      viajaron (una por una, porque son pesadas) y despues la lista y los
@@ -1699,7 +1775,7 @@ export default function App() {
       // termina de enviar esto (son unos pocos KB, entra en el limite).
       keepalive: true,
       body: JSON.stringify({
-        fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes,
+        fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes, compartidos,
         archivos: archivos.map(({ accion, ruta }) => ({ accion, ruta })),
         visto: visto.current, forzar,
       }),
@@ -1761,7 +1837,7 @@ export default function App() {
           method: "POST",
           headers: { authorization: `Bearer ${sesion}` },
           body: JSON.stringify({
-            fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes,
+            fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes, compartidos,
             archivos: archivos.map(({ accion, ruta, datos }) => ({ accion, ruta, datos })),
           }),
         });
@@ -1776,7 +1852,7 @@ export default function App() {
         await conPase("/api/borrador", { method: "DELETE" }).catch(() => {});
         subidos.current = new Set(); visto.current = 0;
         setConflicto(null); setGuardadoEstado("");
-        setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setArchivos([]); setFirmaGuardada(""); olvidarPasos();
+        setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setCompartidos({}); setArchivos([]); setFirmaGuardada(""); olvidarPasos();
         // El numero del commit confirma que llego a GitHub de verdad.
         setFitMsg(`Publicado (${j.commit}, ${j.archivos} archivos). En un par de minutos se ve en la página.${noEstaban}`);
       }
@@ -2195,14 +2271,22 @@ export default function App() {
       {puedeEditar && recorte && (
         <div className="fixed inset-0 z-[115] flex flex-col items-center justify-center gap-4 bg-black/80 p-4">
           <p className="text-center text-[12px] leading-relaxed text-white/80">
-            Arrastrá sobre la foto para elegir la parte que querés dejar.
+            {recorte.modo === "ojos"
+              ? "Arrastrá sobre la foto para marcar la zona de los ojos (conviene dejar un poco de margen)."
+              : "Arrastrá sobre la foto para elegir la parte que querés dejar."}
           </p>
           <div ref={recorteRef}
             onPointerDown={onRecorteDown} onPointerMove={onRecorteMove}
             onPointerUp={onRecorteUp} onPointerCancel={onRecorteUp}
             className="relative max-h-[65vh] cursor-crosshair touch-none select-none">
             <img src={recorte.src} alt="" draggable={false} className="max-h-[65vh] w-auto" />
-            {recorte.sel && (
+            {recorte.sel && recorte.modo === "ojos" && (
+              // Para los ojos se marca la zona que se va a tapar (no lo que queda).
+              <div className="pointer-events-none absolute border-2 border-white bg-black/45"
+                style={{ left: `${recorte.sel.x * 100}%`, top: `${recorte.sel.y * 100}%`,
+                         width: `${recorte.sel.w * 100}%`, height: `${recorte.sel.h * 100}%` }} />
+            )}
+            {recorte.sel && recorte.modo !== "ojos" && (
               <>
                 {/* Lo que queda afuera se oscurece, para ver como va a quedar. */}
                 <div className="pointer-events-none absolute inset-0 bg-black/55"
@@ -2214,10 +2298,23 @@ export default function App() {
             )}
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <button type="button" onClick={aplicarRecorte} disabled={!recorte.sel}
-              className="cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[12px] font-medium text-white transition-opacity hover:opacity-85 disabled:cursor-default disabled:opacity-40">
-              Recortar
-            </button>
+            {recorte.modo === "ojos" ? (
+              <>
+                <button type="button" onClick={() => aplicarOjos("difuminar")} disabled={!recorte.sel}
+                  className="cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[12px] font-medium text-white transition-opacity hover:opacity-85 disabled:cursor-default disabled:opacity-40">
+                  Difuminar
+                </button>
+                <button type="button" onClick={() => aplicarOjos("barra")} disabled={!recorte.sel}
+                  className="cursor-pointer border border-white bg-black px-4 py-2 text-[12px] font-medium text-white transition-opacity hover:opacity-85 disabled:cursor-default disabled:opacity-40">
+                  Barra negra
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={aplicarRecorte} disabled={!recorte.sel}
+                className="cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[12px] font-medium text-white transition-opacity hover:opacity-85 disabled:cursor-default disabled:opacity-40">
+                Recortar
+              </button>
+            )}
             <button type="button" onClick={() => setRecorte((r) => ({ ...r, sel: null }))}
               className="cursor-pointer border border-white/40 px-4 py-2 text-[12px] text-white transition-colors hover:border-white">
               Empezar de nuevo
@@ -2741,8 +2838,15 @@ export default function App() {
             </motion.div>
 
             {(() => {
-              const proc = PROCEDURES_WITH_CASES.find((x) => x.slug === activeSlug) ?? PROCEDURES_WITH_CASES[0];
-              const cases = casosConPendientes(casesFor(proc.slug), proc.slug);
+              /* En el editor, los procedimientos con casos salen de lo que se
+                 ve ahora (con lo quitado y lo sumado sin publicar): si se
+                 quita el unico caso de uno, ese procedimiento sale de la lista
+                 en vez de quedar vacio (antes rompia la pagina). */
+              const conCasos = puedeEditar
+                ? PROCEDURES.filter((p) => casosConPendientes(casosPara(p.slug), p.slug).length > 0)
+                : PROCEDURES_WITH_CASES;
+              const proc = conCasos.find((x) => x.slug === activeSlug) ?? conCasos[0];
+              const cases = casosConPendientes(puedeEditar ? casosPara(proc.slug) : casesFor(proc.slug), proc.slug);
               const ci = Math.min(activeCase, cases.length - 1);
               const kase = cases[ci];
               const ai = Math.min(activeAngle, kase.angles.length - 1);
@@ -2780,7 +2884,7 @@ export default function App() {
                         <select id="res-filtro" value={proc.slug}
                           onChange={(e) => { setActiveSlug(e.target.value); setActiveCase(0); setActiveAngle(0); }}
                           className="relative w-full max-w-full cursor-pointer appearance-none truncate rounded-md border-[1.5px] border-[var(--accent)] bg-[var(--accent-soft)] py-2.5 pl-9 pr-9 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--ink)] transition-opacity duration-200 hover:opacity-85">
-                          {PROCEDURES_WITH_CASES.map((x) => (
+                          {conCasos.map((x) => (
                             <option key={x.slug} value={x.slug}>{x[lang].name}</option>
                           ))}
                         </select>
@@ -2944,6 +3048,45 @@ export default function App() {
                         </button>
                       </div>
                     )}
+
+                    {/* En que procedimientos se muestra este caso: tacho para sacarlo
+                        de uno (las fotos no se borran), + para mostrarlo tambien en
+                        otro. Las fotos siguen viviendo en la carpeta de su dueno. */}
+                    {puedeEditar && fitEdit && !casoNuevo && (() => {
+                      const aparece = apareceAhora(kase);
+                      const publicado = !!TODOS[claveCaso(kase.slug, kase.caseId)];
+                      return (
+                        <details className="mt-2 w-full max-w-md border border-[var(--line)] bg-[var(--surface)] text-[11px]">
+                          <summary className="cursor-pointer select-none px-3 py-1.5 text-[var(--ink)]">
+                            Aparece en: {aparece.map(nombreProc).join(" · ")}
+                          </summary>
+                          {publicado ? (
+                            <ul className="border-t border-[var(--line)] px-3 py-1.5">
+                              {PROCEDURES.map((p) => {
+                                const esta = aparece.includes(p.slug);
+                                const texto = esta ? `Quitar este caso de ${p[lang].name}` : `Mostrar este caso también en ${p[lang].name}`;
+                                return (
+                                  <li key={p.slug} className="flex items-center justify-between gap-3 py-0.5">
+                                    <span className={esta ? "font-medium text-[var(--ink)]" : "text-[var(--muted)]"}>{p[lang].name}</span>
+                                    <button type="button" onClick={() => cambiarApareceEn(kase, p.slug, !esta)}
+                                      title={texto} aria-label={texto}
+                                      className={`flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center border transition-colors ${
+                                        esta ? "border-[var(--line)] text-[#C0706D] hover:border-[#C0706D]"
+                                             : "border-[var(--line)] text-[var(--accent)] hover:border-[var(--accent)]"}`}>
+                                      {esta ? <Trash2 size={13} strokeWidth={2} aria-hidden="true" /> : <Plus size={13} strokeWidth={2} aria-hidden="true" />}
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          ) : (
+                            <p className="border-t border-[var(--line)] px-3 py-2 text-[var(--muted)]">
+                              Este caso todavía no está publicado: publicalo primero (la nube) y después vas a poder mostrarlo en otros procedimientos.
+                            </p>
+                          )}
+                        </details>
+                      );
+                    })()}
 
                     {/* Caso nuevo: dos recuadros vacios esperando el antes y el despues. */}
                     {puedeEditar && fitEdit && casoNuevo && casoNuevo.slug === proc.slug
@@ -3138,6 +3281,12 @@ export default function App() {
                                   className="cursor-pointer border border-[var(--line)] px-3 py-1.5 text-[11px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
                                   Recortar
                                 </button>
+                                <button type="button" title="Difuminar o tapar los ojos, para cuidar la identidad"
+                                  onClick={() => abrirOjos(kase, caption === t.res.before ? angle.beforeFile : angle.afterFile, src)}
+                                  className="flex cursor-pointer items-center gap-1.5 border border-[var(--line)] px-3 py-1.5 text-[11px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
+                                  <ScanEye size={12} strokeWidth={2} aria-hidden="true" />
+                                  Ojos
+                                </button>
                                 {/* Tapar la foto: sale borrosa hasta que la visita
                                     decide verla. Se elige por foto. */}
                                 <button type="button" onClick={() => cambiarCensura(fitKey, !censurada)}
@@ -3213,6 +3362,11 @@ export default function App() {
                                 <button type="button" onClick={() => abrirRecorte(kase, file, image)}
                                   className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[10px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
                                   Recortar
+                                </button>
+                                <button type="button" onClick={() => abrirOjos(kase, file, image)}
+                                  title="Difuminar o tapar los ojos, para cuidar la identidad"
+                                  className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[10px] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
+                                  Ojos
                                 </button>
                                 {sueltaKey && (
                                   <button type="button" onClick={() => cambiarCensura(sueltaKey, !censurada)}

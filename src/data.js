@@ -153,6 +153,23 @@ const SHARED_CASES = [
   { owner: "rhinoplasty", caseId: "Josefina Paredes", alsoIn: ["profiloplasty"] },
 ];
 
+/* En que procedimientos se muestra cada caso. Por defecto, en el suyo mas
+   los de SHARED_CASES; si el editor lo cambio, manda encuadre.json
+   (seccion "compartidos": { "owner/caso": [slugs] }). */
+export const claveCaso = (owner, caseId) => `${owner}/${caseId}`.normalize("NFC");
+export const APARECE_POR_DEFECTO = {};
+for (const { owner, caseId, alsoIn } of SHARED_CASES) {
+  APARECE_POR_DEFECTO[claveCaso(owner, caseId)] = [owner, ...alsoIn];
+}
+export const COMPARTIDOS_GUARDADOS = Object.fromEntries(
+  Object.entries(ENCUADRES.compartidos ?? {}).map(([k, v]) => [k.normalize("NFC"), v]));
+export const apareceEn = (owner, caseId) => {
+  const k = claveCaso(owner, caseId);
+  return COMPARTIDOS_GUARDADOS[k] ?? APARECE_POR_DEFECTO[k] ?? [owner];
+};
+// Todos los casos en disco, por "owner/caso", se muestren donde se muestren.
+export const TODOS = {};
+
 /* Casos que van al final del todo de su procedimiento en vez de por orden
    alfabetico (pedido del cliente) — el orden dentro de esta lista es el
    orden final entre ellos. */
@@ -267,21 +284,19 @@ const CASES_BY_SLUG = (() => {
              note: CASE_NOTES[`${slug}/${caseId}`] ?? null };
   };
 
-  // Un caso por carpeta en disco, agrupado por su propio procedimiento ("owner").
+  /* Un caso vive en la carpeta de su procedimiento ("owner") y se muestra en
+     cada procedimiento de su lista (apareceEn), reusando el mismo objeto ya
+     armado (mismo encuadre, mismas fotos). La lista puede no incluir al
+     propio dueno: asi se saca un caso de su procedimiento sin borrar fotos. */
   const bySlug = {};
   for (const slug of Object.keys(acc)) {
-    bySlug[slug] = Object.keys(acc[slug]).map((caseId) => buildCase(slug, caseId));
-  }
-
-  // Suma los casos compartidos a cada procedimiento de "alsoIn", reusando el
-  // mismo objeto ya armado (mismo encuadre, mismas fotos) del "owner" — sin
-  // volver a leer ni recalcular nada.
-  for (const { owner, caseId, alsoIn } of SHARED_CASES) {
-    const shared = bySlug[owner]?.find((c) => c.caseId === caseId);
-    if (!shared) continue;
-    for (const slug of alsoIn) {
-      bySlug[slug] ??= [];
-      bySlug[slug].push(shared);
+    for (const caseId of Object.keys(acc[slug])) {
+      const c = buildCase(slug, caseId);
+      TODOS[claveCaso(slug, caseId)] = c;
+      for (const s of apareceEn(slug, caseId)) {
+        bySlug[s] ??= [];
+        bySlug[s].push(c);
+      }
     }
   }
 

@@ -11,6 +11,7 @@ const BASE_FOTOS = "src/assets/procedimientos";
 const ENCUADRES = "src/encuadre.json";
 // Solo rutas "<procedimiento>/<caso>/<archivo>.webp": sin "..", sin salirse.
 const RUTA_OK = /^[^/\\]+\/[^/\\]+\/[^/\\]+\.webp$/;
+const SLUG_OK = /^[a-z0-9-]+$/;
 
 const gh = async (camino, opciones = {}) => {
   const r = await fetch(`https://api.github.com/repos/${REPO}${camino}`, {
@@ -38,12 +39,18 @@ export default async (req) => {
   }
 
   try {
-    const { fotos = {}, marcos = {}, censura = {}, orden = {}, archivos = [] } = await req.json();
+    const { fotos = {}, marcos = {}, censura = {}, orden = {}, compartidos = {}, archivos = [] } = await req.json();
     for (const a of archivos) {
       if (!RUTA_OK.test(a.ruta)) return json({ ok: false, error: `Ruta no permitida: ${a.ruta}` }, 400);
     }
+    // "procedimiento/caso": [procedimientos donde se muestra]. Solo nombres de procedimiento validos.
+    for (const [k, lista] of Object.entries(compartidos)) {
+      if (!/^[^/\\]+\/[^/\\]+$/.test(k) || !Array.isArray(lista) || !lista.every((s) => SLUG_OK.test(String(s)))) {
+        return json({ ok: false, error: `Lista de procedimientos no válida para ${k}` }, 400);
+      }
+    }
     if (!archivos.length && !Object.keys(fotos).length && !Object.keys(marcos).length
-        && !Object.keys(censura).length && !Object.keys(orden).length) {
+        && !Object.keys(censura).length && !Object.keys(orden).length && !Object.keys(compartidos).length) {
       return json({ ok: true, sinCambios: true });
     }
 
@@ -54,7 +61,7 @@ export default async (req) => {
     // 2. Encuadres: se lee el archivo actual y se le aplican los cambios.
     const arbol = [];
     if (Object.keys(fotos).length || Object.keys(marcos).length || Object.keys(censura).length
-        || Object.keys(orden).length) {
+        || Object.keys(orden).length || Object.keys(compartidos).length) {
       const actual = await gh(`/contents/${ENCUADRES}?ref=${RAMA}`);
       // De base64 a texto pasando por bytes: las claves tienen acentos
       // ("Julieta Espósito") y atob solo devuelve bytes sueltos.
@@ -80,6 +87,12 @@ export default async (req) => {
       for (const [slug, lista] of Object.entries(orden)) {
         if (!Array.isArray(lista) || !lista.length) delete datos.orden[slug];
         else datos.orden[slug] = lista.map(String);
+      }
+      // En que procedimientos se muestra cada caso, elegido desde el editor.
+      datos.compartidos ??= {};
+      for (const [k, lista] of Object.entries(compartidos)) {
+        if (!lista.length) delete datos.compartidos[k];
+        else datos.compartidos[k] = [...new Set(lista.map(String))];
       }
       const blob = await gh("/git/blobs", {
         method: "POST",
