@@ -1036,6 +1036,13 @@ export default function App() {
   const fitDrag = useRef(null);
   const marcoDrag = useRef(null);
   const [fitMoving, setFitMoving] = useState(null);
+  // Proporcion real (ancho / alto) de cada foto del editor, por src.
+  const [proporciones, setProporciones] = useState({});
+  const anotarProporcion = (src, img) => {
+    if (!img.naturalWidth || !img.naturalHeight) return;
+    const r = img.naturalWidth / img.naturalHeight;
+    setProporciones((p) => (p[src] === r ? p : { ...p, [src]: r }));
+  };
   const pendientes = Object.keys(fits).length + Object.keys(marcoEdits).length
     + Object.keys(censuras).length + Object.keys(ordenes).length + Object.keys(compartidos).length + archivos.length;
   /* Deshacer: una copia de como estaba el editor antes de cada cambio, para
@@ -1148,24 +1155,68 @@ export default function App() {
     return { ...p, ...Object.fromEntries(keys.filter(Boolean).map((k) => [k, v])) };
   }); };
 
-  const onFitDown = (e, key) => {
+  /* Una foto con otra proporcion que su caja quedaba recortada por dentro
+     (object-cover): al moverla se corria la caja y no la foto, y lo que
+     sobresalia nunca entraba al recuadro. Antes de mover o hacer zoom, la caja
+     toma la proporcion real del archivo, agrandandose desde el centro: lo que
+     se ve queda igual, pero ahora toda la foto se puede traer al recuadro. */
+  const conProporcionReal = (r, ratioMarco, ratioFoto) => {
+    const [w, h, l, t] = r;
+    if (!ratioFoto || !ratioMarco || !w || !h) return r;
+    const ratioCaja = (ratioMarco * w) / h;
+    if (Math.abs(ratioFoto / ratioCaja - 1) < 0.005) return r;
+    if (ratioFoto > ratioCaja) { const w2 = (h * ratioFoto) / ratioMarco; return [w2, h, l - (w2 - w) / 2, t]; }
+    const h2 = (w * ratioMarco) / ratioFoto;
+    return [w, h2, l, t - (h2 - h) / 2];
+  };
+  // Zoom que se muestra: 100% = la foto llena justo el recuadro.
+  const zoomDe = (r) => Math.min(r[0], r[1]);
+  /* Encuadre "libre" (quinto valor en 1): el recuadro ya no se achica hasta
+     la foto. Si la foto queda mas chica (zoom out) se ven franjas grises, y al
+     moverla no se sale del recuadro: si es mas grande que el recuadro, siempre
+     lo llena; si es mas chica, queda entera adentro. Los encuadres viejos
+     (sin el 1) se ven como siempre hasta que se los toca. */
+  const limitar = ([w, h, l, t]) => {
+    const eje = (pos, tam) => (tam >= 100 ? Math.min(0, Math.max(100 - tam, pos)) : Math.max(0, Math.min(100 - tam, pos)));
+    return [w, h, eje(l, w), eje(t, h), 1];
+  };
+  // Caja de la foto a un zoom dado y centrada en (cx, cy), con su proporcion real.
+  const cajaConZoom = (zoom, cx, cy, ratioMarco, ratioFoto) => {
+    const rel = ratioFoto / ratioMarco;
+    const [w, h] = rel >= 1 ? [zoom * rel, zoom] : [zoom, zoom / rel];
+    return limitar([w, h, cx - w / 2, cy - h / 2]);
+  };
+  // "Llenar": la foto cubre todo el recuadro. "Entera": se ve toda, con franjas.
+  const encajar = (key, modo, ratioMarco, ratioFoto) => {
+    anotarPaso();
+    if (!ratioFoto || !ratioMarco) return setFit(key, [100, 100, 0, 0, 1]);
+    const rel = ratioFoto / ratioMarco;
+    const zoom = modo === "entera" ? 100 * Math.min(rel, 1 / rel) : 100;
+    setFit(key, cajaConZoom(zoom, 50, 50, ratioMarco, ratioFoto));
+  };
+
+  const onFitDown = (e, key, ratioMarco, ratioFoto) => {
     e.preventDefault();
     anotarPaso();
     bloquearScroll();
-    fitDrag.current = { key, x: e.clientX, y: e.clientY, start: fitOf(key),
-                        rect: e.currentTarget.getBoundingClientRect() };
+    const actual = fitOf(key);
+    const start = conProporcionReal(actual, ratioMarco, ratioFoto);
+    // Tamano del recuadro entero en pantalla, sacado de la foto: con los
+    // encuadres viejos el boton puede estar achicado y no sirve de medida.
+    const img = e.currentTarget.querySelector("img[data-foto]")?.getBoundingClientRect();
+    const rect = img?.width && actual[0] && !actual[4]
+      ? { width: (img.width * 100) / actual[0], height: (img.height * 100) / actual[1] }
+      : e.currentTarget.getBoundingClientRect();
+    fitDrag.current = { key, x: e.clientX, y: e.clientY, start, rect };
     e.currentTarget.setPointerCapture(e.pointerId);
-    // Mientras dura el arrastre se muestra el recuadro completo (con el hueco
-    // gris a la vista) para ver adonde va la foto; al soltar, el recuadro se
-    // ajusta a lo que quedo dentro.
     setFitMoving(key);
   };
   const onFitMove = (e) => {
     const d = fitDrag.current;
     if (!d) return;
-    setFit(d.key, [d.start[0], d.start[1],
-                   d.start[2] + ((e.clientX - d.x) / d.rect.width) * 100,
-                   d.start[3] + ((e.clientY - d.y) / d.rect.height) * 100]);
+    setFit(d.key, limitar([d.start[0], d.start[1],
+                           d.start[2] + ((e.clientX - d.x) / d.rect.width) * 100,
+                           d.start[3] + ((e.clientY - d.y) / d.rect.height) * 100]));
   };
   const onFitUp = () => { fitDrag.current = null; setFitMoving(null); soltarScroll(); };
   // Al mover o ampliar, el recuadro cambia de alto y todo lo de abajo se corre:
@@ -1244,10 +1295,26 @@ export default function App() {
 
   // El zoom crece desde el centro del recuadro, asi lo que se esta mirando no
   // se escapa de cuadro al acercar.
-  const setFitZoom = (key, ancho) => {
-    const [w, h, l, t] = fitOf(key);
-    const alto = ancho * (h / w);
-    setFit(key, [ancho, alto, l - (ancho - w) / 2, t - (alto - h) / 2]);
+  const setFitZoom = (key, zoom, ratioMarco, ratioFoto) => {
+    const [w, h, l, t] = conProporcionReal(fitOf(key), ratioMarco, ratioFoto);
+    const actual = zoomDe([w, h]);
+    const f = (typeof zoom === "function" ? zoom(actual) : zoom) / actual;
+    const ancho = w * f, alto = h * f;
+    setFit(key, limitar([ancho, alto, l - (ancho - w) / 2, t - (alto - h) / 2]));
+  };
+  /* Forma del recuadro del par (vertical, cuadrado, horizontal o la de la
+     foto). Cada foto conserva su zoom y su centro, rehechos para la forma
+     nueva, asi no aparece recortada de otra manera. */
+  const cambiarRecuadro = (fotos, ratioNuevo, base) => {
+    anotarPaso();
+    const keys = fotos.map((f) => f.key);
+    const [ratioViejo, ancho] = marcoOf(keys[0], base);
+    for (const { key, ratioFoto } of fotos) {
+      if (!ratioFoto || !fits[key] && !ENCUADRE_FOTOS[key]) continue;
+      const [w, h, l, t] = conProporcionReal(fitOf(key), ratioViejo, ratioFoto);
+      setFit(key, cajaConZoom(zoomDe([w, h]), l + w / 2, t + h / 2, ratioNuevo, ratioFoto));
+    }
+    setMarcoPar(keys, [ratioNuevo, ancho]);
   };
 
   // Las fotos no se escriben en el momento: quedan en cola (con su vista
@@ -3165,11 +3232,13 @@ export default function App() {
                         // comparten medida). Las fotos sueltas no lo usan.
                         const marcoPar = fitKey ? marcoOf(fitKey, frame) : null;
                         const marcoActual = marcoPar ? { ratio: marcoPar[0], ancho: marcoPar[1] } : null;
-                        const recorte = crudo && !moviendo && marcoActual ? fitRender(crudo, marcoActual) : null;
+                        // Encuadre libre (crudo[4]): el recuadro no se achica, quedan franjas grises.
+                        const recorte = crudo && !crudo[4] && !moviendo && marcoActual ? fitRender(crudo, marcoActual) : null;
                         const fitAjustado = recorte ? recorte.img : crudo ? fitStyle(crudo) : null;
+                        const ratioFoto = proporciones[src];
                         return (
                         <figure key={caption} style={recorte?.caja ?? (marcoActual ? { width: `${marcoActual.ancho * 100}%` } : undefined)}
-                          className={`rounded-lg border border-[var(--line)] ${moviendo ? "relative z-30 overflow-visible" : "overflow-hidden"}`}>
+                          className={`overflow-hidden rounded-lg border border-[var(--line)] ${moviendo ? "relative z-30" : ""}`}>
                           <button type="button"
                             onClick={() => {
                               if (editando) return;
@@ -3177,23 +3246,21 @@ export default function App() {
                                 ? revealSensitive(src)
                                 : setLightbox({ src, alt: `${proc[lang].name} · ${caption}`, watermark: kase.watermark });
                             }}
-                            onPointerDown={editando ? (e) => onFitDown(e, fitKey) : undefined}
+                            onPointerDown={editando ? (e) => onFitDown(e, fitKey, marcoActual?.ratio, ratioFoto) : undefined}
                             onPointerMove={editando ? onFitMove : undefined}
                             onPointerUp={editando ? onFitUp : undefined}
                             onPointerCancel={editando ? onFitUp : undefined}
                             style={{ aspectRatio: recorte ? recorte.proporcion : marcoActual ? marcoActual.ratio : frame }}
-                            className={`group relative block w-full bg-[var(--photo)] ${moviendo ? "overflow-visible" : "overflow-hidden"} ${
+                            className={`group relative block w-full overflow-hidden bg-[var(--photo)] ${
                               editando ? "cursor-grab touch-none active:cursor-grabbing" : oculta ? "cursor-pointer" : "cursor-zoom-in"}`}>
                             {/* La foto se agranda sobre la zona del procedimiento y se apoya en
                                 el mismo punto de la cara que su par, asi el antes y el despues
                                 quedan alineados. El archivo no se recorta: al hacer click el
-                                lightbox lo muestra entero. */}
-                            {moviendo && fitAjustado && (
-                              <img src={src} alt="" aria-hidden="true" draggable={false} style={fitAjustado}
-                                className="pointer-events-none absolute max-w-none object-cover opacity-25" />
-                            )}
-                            <span className={`absolute inset-0 ${moviendo ? "overflow-hidden" : ""}`}>
-                              <img key={src} src={src} alt={`${proc[lang].name} · ${caption}`} loading="lazy" draggable={false}
+                                lightbox lo muestra entero. Al moverla solo se ve lo que
+                                queda dentro del recuadro. */}
+                            <span className="absolute inset-0 overflow-hidden">
+                              <img key={src} data-foto="" src={src} alt={`${proc[lang].name} · ${caption}`} loading="lazy" draggable={false}
+                                onLoad={(e) => anotarProporcion(src, e.currentTarget)}
                                 style={fitAjustado ?? (entera ? undefined : { objectPosition: kase.focus })}
                                 className={`${editando ? "" : "transition-transform duration-300"} ${oculta ? "scale-110 blur-2xl" : editando ? "" : "group-hover:scale-[1.03]"} ${
                                   fitAjustado ? "absolute max-w-none object-cover"
@@ -3245,24 +3312,33 @@ export default function App() {
                           </figcaption>
                           {editando && (
                             <>
-                              <div className="flex items-center gap-2 border-t border-dashed border-[var(--line)] bg-[var(--surface)] px-4 py-2.5">
+                              <div className="flex flex-wrap items-center gap-2 border-t border-dashed border-[var(--line)] bg-[var(--surface)] px-4 py-2.5">
                                 <button type="button" aria-label="Alejar" title="Alejar"
-                                  onClick={() => setFitZoom(fitKey, Math.max(40, fitOf(fitKey)[0] - 5))}
+                                  onClick={() => { anotarPaso(); setFitZoom(fitKey, (z) => Math.max(20, z - 5), marcoActual?.ratio, ratioFoto); }}
                                   className="flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center border border-[var(--line)] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
                                   <Minus size={14} strokeWidth={2} />
                                 </button>
                                 <button type="button" aria-label="Acercar" title="Acercar"
-                                  onClick={() => setFitZoom(fitKey, Math.min(300, fitOf(fitKey)[0] + 5))}
+                                  onClick={() => { anotarPaso(); setFitZoom(fitKey, (z) => Math.min(300, z + 5), marcoActual?.ratio, ratioFoto); }}
                                   className="flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center border border-[var(--line)] text-[var(--ink)] transition-colors hover:border-[var(--ink)]">
                                   <Plus size={14} strokeWidth={2} />
                                 </button>
-                                <input type="range" min="40" max="300" step="1" value={fitOf(fitKey)[0]}
-                                  onChange={(e) => setFitZoom(fitKey, Number(e.target.value))}
-                                  aria-label={"Zoom " + caption} className="flex-1 cursor-ew-resize accent-[var(--accent)]" />
-                                <span className="w-11 text-right text-[11px] tabular-nums text-[var(--faint)]">{Math.round(fitOf(fitKey)[0])}%</span>
-                                <button type="button" onClick={() => setFit(fitKey, [100, 100, 0, 0])}
+                                {/* 100% = la foto llena justo el recuadro; menos, se aleja y
+                                    quedan franjas grises a los costados o arriba y abajo. */}
+                                <input type="range" min="20" max="300" step="1" value={zoomDe(fitOf(fitKey))}
+                                  onPointerDown={() => anotarPaso()}
+                                  onChange={(e) => setFitZoom(fitKey, Number(e.target.value), marcoActual?.ratio, ratioFoto)}
+                                  aria-label={"Zoom " + caption} className="min-w-[80px] flex-1 cursor-ew-resize accent-[var(--accent)]" />
+                                <span className="w-11 text-right text-[11px] tabular-nums text-[var(--faint)]">{Math.round(zoomDe(fitOf(fitKey)))}%</span>
+                                <button type="button" title="La foto llena todo el recuadro"
+                                  onClick={() => encajar(fitKey, "llenar", marcoActual?.ratio, ratioFoto)}
                                   className="flex-shrink-0 cursor-pointer text-[11px] uppercase tracking-[0.14em] text-[var(--accent)] transition-opacity hover:opacity-75">
-                                  Centrar
+                                  Llenar
+                                </button>
+                                <button type="button" title="Se ve la foto entera, con franjas grises si hace falta"
+                                  onClick={() => encajar(fitKey, "entera", marcoActual?.ratio, ratioFoto)}
+                                  className="flex-shrink-0 cursor-pointer text-[11px] uppercase tracking-[0.14em] text-[var(--accent)] transition-opacity hover:opacity-75">
+                                  Entera
                                 </button>
                               </div>
                               <div className="flex items-center gap-2 border-t border-dashed border-[var(--line)] bg-[var(--surface)] px-4 py-2.5">
@@ -3307,6 +3383,45 @@ export default function App() {
                     {/* El antes y el despues son una sola cosa: la pagina los
                         muestra de a pares, una foto sola no se puede mostrar.
                         Por eso se quitan juntos, y el boton lo dice. */}
+                    {/* Forma del recuadro del par. Una foto horizontal en un recuadro
+                        vertical se ve chica o muy recortada: se avisa y se ofrece
+                        cambiar la forma (el recuadro cambia de tamano en la pagina). */}
+                    {puedeEditar && fitEdit && angle && (() => {
+                      const fotos = marcos.filter((m) => m.fitKey).map((m) => ({ key: m.fitKey, ratioFoto: proporciones[m.src] }));
+                      if (!fotos.length) return null;
+                      const base = marcos[0].frame;
+                      const ratioAhora = marcoOf(fotos[0].key, base)[0];
+                      // Si el antes y el despues tienen la misma forma, una sola opcion; si no, una por foto.
+                      const [ra, rd] = fotos.map((f) => f.ratioFoto);
+                      const parecidas = ra && rd && Math.abs(ra / rd - 1) < 0.03;
+                      const formas = [["Vertical", 4 / 5], ["Cuadrado", 1], ["Horizontal", 4 / 3],
+                        ...(parecidas || !rd ? [["Como la foto", ra]] : [["Como el antes", ra], ["Como el después", rd]])];
+                      const horizontal = fotos.some((f) => f.ratioFoto > 1.05) && ratioAhora < 1;
+                      return (
+                        <div className="mt-2 border border-dashed border-[var(--line)] bg-[var(--surface)] px-4 py-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[11px] text-[var(--muted)]">Recuadro:</span>
+                            {formas.map(([nombre, ratio]) => {
+                              const elegido = ratio && Math.abs(ratio - ratioAhora) < 0.01;
+                              return (
+                                <button key={nombre} type="button" disabled={!ratio}
+                                  onClick={() => cambiarRecuadro(fotos, ratio, base)}
+                                  className={`cursor-pointer border px-3 py-1.5 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                                    elegido ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                                            : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--ink)]"}`}>
+                                  {nombre}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {horizontal && (
+                            <p className="mt-2 text-[11px] leading-relaxed text-[#B5832F]">
+                              Hay una foto horizontal en un recuadro vertical: se ve recortada. Elegí «Horizontal» o «Como la foto» para verla entera (el recuadro de este par cambia de tamaño en la página), o tocá «Entera» debajo de la foto.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {puedeEditar && fitEdit && angle && (
                       <div className="mt-2 flex justify-end">
                         <button type="button"
