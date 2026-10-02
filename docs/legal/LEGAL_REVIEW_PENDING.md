@@ -29,8 +29,8 @@ y `docs/audits/LEGAL_PRIVACY.md` — no se repite acá.
    publicada y cada testimonio citado debe tener autorización — hoy es un
    proceso del consultorio, no del sitio. El equipo debería poder mostrar
    ese consentimiento si se lo piden. Puntual: confirmar el consentimiento
-   del testimonio con handle de Instagram (`@maeru.jpg`) para citarlo en el
-   sitio. [CONFIRMAR CON EL CLIENTE — no requiere cambios de código]
+   de los testimonios con handle de Instagram (`@maeru.jpg`,
+   `@artistadeloefimero`) para citarlos en el sitio. [CONFIRMAR CON EL CLIENTE — no requiere cambios de código]
 8. **Revisar si hay algún otro dato legal requerido** que no esté listado
    acá, a medida que avance la implementación (ej. al completar Política de
    Privacidad y Términos con los datos de los puntos 1-4).

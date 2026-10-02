@@ -636,6 +636,11 @@ export const TESTIMONIALS = [
           text: "Los sueños a veces se hacen realidad. Si mi yo de hace años se hubiera enterado de que iba a lograr la feminización facial, hubiera llorado de felicidad, igual que lloré al despertarme tras la cirugía. Gracias al doctor y a MDM Surgery por hacerlo posible: no podría estar más conforme." },
     en: { proc: "Facial Feminization", time: "During recovery",
           text: "Dreams sometimes come true. If my younger self had known I would get facial feminization, I would have cried with joy, just like I cried when I woke up after surgery. Thank you to the doctor and MDM Surgery for making it possible: I couldn't be happier." } },
+  // Publicado el 21/09/2026. La publicacion no dice cuanto tiempo paso desde la cirugia.
+  { initials: "@artistadeloefimero",
+    source: { type: "instagram", url: "https://www.instagram.com/artistadeloefimero/p/DdkM3tFpX-_/" },
+    es: { proc: "Feminización Facial", text: "Muy feliz de los resultados." },
+    en: { proc: "Facial Feminization", text: "Very happy with the results." } },
 ];
 
 /* Only the cases that actually have a before/after pair on disk. */
