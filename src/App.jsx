@@ -1540,8 +1540,13 @@ export default function App() {
     const usados = nombres.map((f) => Number((f.match(/(\d+)/) ?? [])[1] ?? -1));
     return Math.max(-1, ...usados) + 1;
   };
-  const reemplazarFoto = async (kase, archivo, file) =>
+  /* La foto nueva usa el mismo nombre de archivo que la vieja, y con eso
+     heredaba su zoom y su posicion (pensados para otra imagen): aparecia
+     recortada o corrida. Arranca llenando el recuadro, centrada y libre. */
+  const reemplazarFoto = async (kase, archivo, file, fitKey) => {
     encolar([await prepararFoto(`${kase.slug}/${kase.caseId}/${archivo}`, file)]);
+    if (fitKey) setFits((p) => ({ ...p, [fitKey]: [100, 100, 0, 0, 1] }));
+  };
   /* La foto tal como esta hoy, en base64: si todavia esta en la cola se usa
      esa (fetch de un blob: lo bloquea la CSP del sitio); si ya esta
      publicada, se baja del propio sitio sin volver a comprimirla. */
@@ -3349,7 +3354,7 @@ export default function App() {
                                       const archivo = caption === t.res.before ? angle.beforeFile : angle.afterFile;
                                       const f = e.target.files[0];
                                       e.target.value = "";
-                                      if (f) conAviso(() => reemplazarFoto(kase, archivo, f));
+                                      if (f) conAviso(() => reemplazarFoto(kase, archivo, f, fitKey));
                                     }} />
                                 </label>
                                 <button type="button"
