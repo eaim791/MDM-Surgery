@@ -1,3 +1,4 @@
+import { getStore } from "@netlify/blobs";
 import { json, paseValido, pedirPase } from "./_sesion.mjs";
 
 /* POST /api/publicar
@@ -12,6 +13,12 @@ const ENCUADRES = "src/encuadre.json";
 // Solo rutas "<procedimiento>/<caso>/<archivo>.webp": sin "..", sin salirse.
 const RUTA_OK = /^[^/\\]+\/[^/\\]+\/[^/\\]+\.webp$/;
 const SLUG_OK = /^[a-z0-9-]+$/;
+/* Las fotos no viajan en el pedido: Netlify no acepta pedidos de mas de ~6 MB
+   (error 413) y con muchas fotos se pasaba. El editor guarda el borrador justo
+   antes de publicar, asi que cada foto ya esta en el almacen del borrador
+   (borrador.mjs) y se toma de ahi. Las pruebas locales reemplazan el almacen
+   con globalThis.__almacenDePrueba. */
+const almacen = () => globalThis.__almacenDePrueba ?? getStore({ name: "editor-borrador", consistency: "strong" });
 
 const gh = async (camino, opciones = {}) => {
   const r = await fetch(`https://api.github.com/repos/${REPO}${camino}`, {
@@ -137,7 +144,9 @@ export default async (req) => {
 
     // 3b. Fotos nuevas: cada una va como blob, de a varias a la vez.
     const nuevas = deAVarias(archivos.filter((a) => a.accion === "guardar"), 6, async ({ ruta, datos }) => {
-      const blob = await gh("/git/blobs", { method: "POST", body: JSON.stringify({ content: datos, encoding: "base64" }) });
+      const contenido = datos || await almacen().get(`archivo/${ruta}`);
+      if (!contenido) throw new Error(`No encontré la foto ${ruta.split("/").pop()} en el borrador. Recargá la página y probá de nuevo.`);
+      const blob = await gh("/git/blobs", { method: "POST", body: JSON.stringify({ content: contenido, encoding: "base64" }) });
       return { path: `${BASE_FOTOS}/${ruta}`, mode: "100644", type: "blob", sha: blob.sha };
     });
 

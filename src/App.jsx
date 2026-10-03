@@ -2009,7 +2009,10 @@ export default function App() {
           headers: { authorization: `Bearer ${sesion}` },
           body: JSON.stringify({
             fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes, compartidos,
-            archivos: archivos.map(({ accion, ruta, datos }) => ({ accion, ruta, datos })),
+            // Sin las fotos: ya estan en el borrador (se acaba de guardar) y
+            // el servidor las toma de ahi. Con las fotos adentro, el pedido
+            // pasaba los ~6 MB que acepta Netlify (error 413).
+            archivos: archivos.map(({ accion, ruta }) => ({ accion, ruta })),
           }),
         });
         if (r.status === 401) { sesionVencida(); setFitMsg("Se venció la sesión. Tu trabajo sigue acá: entrá de nuevo y volvé a tocar la nube."); return; }
