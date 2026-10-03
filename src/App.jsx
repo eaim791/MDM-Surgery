@@ -1011,7 +1011,17 @@ export default function App() {
     borradorCargado.current = false; subidos.current = new Set(); visto.current = 0;
     setConflicto(null); setGuardadoEstado("");
     setSesion(""); setFitEdit(false); setArchivos([]); setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({});
-    setCompartidos({}); setFirmaGuardada(""); olvidarPasos();
+    setCompartidos({}); setFirmaGuardada(""); olvidarPasos(); base.current = BASE_VACIA;
+  };
+  /* El pase dura 12 horas. Antes, al vencerse en medio del trabajo, se salia
+     del editor y se descartaba lo que no se habia llegado a guardar. Ahora el
+     trabajo queda en la pagina: se pide la contrasena de nuevo y, al entrar,
+     se guarda solo (el borrador de la nube no se vuelve a cargar encima). */
+  const sesionVencida = () => {
+    localStorage.removeItem("mdm-editor");
+    setSesion("");
+    setLoginMsg("Se venció la sesión (dura 12 horas). Tu trabajo sigue acá: entrá de nuevo y se guarda solo.");
+    setLoginAbierto(true);
   };
 
   const [fitEdit, setFitEdit] = useState(false);
@@ -1085,6 +1095,16 @@ export default function App() {
   // Cuando se guardo por ultima vez el borrador que tiene esta pestana: sirve
   // para darse cuenta de que la otra persona guardo algo mas nuevo.
   const visto = useRef(0);
+  /* Como estaba el borrador de la nube la ultima vez que esta pestana lo leyo
+     o lo guardo. Comparando contra esto se sabe que cambio cada uno, y ante un
+     aviso de "la otra persona guardo" se pueden juntar los dos trabajos en vez
+     de elegir uno y perder el otro. */
+  const BASE_VACIA = { fotos: {}, marcos: {}, censura: {}, orden: {}, compartidos: {}, archivos: {} };
+  const base = useRef(BASE_VACIA);
+  const anotarBase = (fotos = {}, marcos = {}, censura = {}, orden = {}, compartidos = {}, lista = []) => {
+    base.current = JSON.parse(JSON.stringify({ fotos, marcos, censura, orden, compartidos,
+      archivos: Object.fromEntries(lista.map((a) => [a.ruta, a.accion])) }));
+  };
   const [conflicto, setConflicto] = useState(null);
   // "", "guardando", "guardado" o el motivo por el que no se pudo.
   const [guardadoEstado, setGuardadoEstado] = useState("");
@@ -1122,6 +1142,7 @@ export default function App() {
             && !Object.keys(censura).length && !Object.keys(orden).length && !Object.keys(comp).length) return;
         subidos.current = new Set(recuperados.filter((a) => a.accion === "guardar").map((a) => a.ruta));
         visto.current = j.borrador.guardado ?? 0;
+        anotarBase(fotos, marcos, censura, orden, comp, lista);
         setFits(fotos); setMarcoEdits(marcos); setCensuras(censura); setOrdenes(orden); setCompartidos(comp);
         setArchivos(recuperados); olvidarPasos();
         setFirmaGuardada(firmaDe(fotos, marcos, recuperados, censura, orden, comp));
@@ -1836,11 +1857,12 @@ export default function App() {
       if (a.accion !== "guardar" || subidos.current.has(a.ruta)) continue;
       const r = await conPase(`/api/borrador?archivo=${encodeURIComponent(a.ruta)}`,
                               { method: "POST", body: JSON.stringify({ datos: a.datos }) });
+      if (r.status === 401) { sesionVencida(); throw new Error("se venció la sesión. Tu trabajo sigue acá: entrá de nuevo y se guarda solo"); }
       const j = await r.json();
-      if (r.status === 401) { salirDelEditor(); throw new Error("Se venció la sesión, volvé a entrar"); }
       if (!j.ok) throw new Error(j.error);
       subidos.current.add(a.ruta);
     }
+    const enviado = { fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes, compartidos, archivos };
     const r = await conPase("/api/borrador", {
       method: "POST",
       // keepalive: aunque se cierre la pestana en el medio, el navegador
@@ -1852,11 +1874,12 @@ export default function App() {
         visto: visto.current, forzar,
       }),
     });
+    if (r.status === 401) { sesionVencida(); throw new Error("se venció la sesión. Tu trabajo sigue acá: entrá de nuevo y se guarda solo"); }
     const j = await r.json();
-    if (r.status === 401) { salirDelEditor(); throw new Error("Se venció la sesión, volvé a entrar"); }
     if (j.conflicto) { setConflicto(j.guardado); return false; }
     if (!j.ok) throw new Error(j.error);
     visto.current = j.guardado ?? Date.now();
+    anotarBase(enviado.fotos, enviado.marcos, enviado.censura, enviado.orden, enviado.compartidos, enviado.archivos);
     setConflicto(null);
     setFirmaGuardada(firma);
     return true;
@@ -1878,7 +1901,65 @@ export default function App() {
     return () => clearTimeout(t);
   }, [firma, sesion, sinGuardar, fitBusy, conflicto]);
   // Traer lo que guardo la otra persona, dejando de lado lo de esta pestana.
-  const traerDelOtro = () => { borradorCargado.current = false; window.location.reload(); };
+  const traerDelOtro = () => {
+    if (!window.confirm("Se van a descartar los cambios de esta pestaña que no se guardaron, y vas a ver solo lo de la otra persona. ¿Seguro? (Para no perder nada, usá «Juntar los dos».)")) return;
+    borradorCargado.current = false; window.location.reload();
+  };
+  /* Juntar los dos trabajos: se parte de lo que guardo la otra persona y se le
+     suma todo lo que cambio esta pestana desde la ultima vez que leyo o guardo
+     el borrador. Si los dos tocaron lo mismo, queda lo de esta pestana. */
+  const juntarCon = (suyo = {}, mio = {}, antes = {}) => {
+    const r = { ...suyo };
+    for (const k of new Set([...Object.keys(mio), ...Object.keys(antes)])) {
+      if (JSON.stringify(mio[k]) === JSON.stringify(antes[k])) continue; // esto no lo toque yo
+      if (k in mio) r[k] = mio[k]; else delete r[k];
+    }
+    return r;
+  };
+  const juntarConElOtro = async () => {
+    setFitBusy(true); setFitMsg("Juntando tus cambios con los de la otra persona…");
+    try {
+      const r = await conPase("/api/borrador");
+      if (r.status === 401) { sesionVencida(); return; }
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error);
+      const suyo = j.borrador ?? {};
+      const b = base.current;
+      const mias = Object.fromEntries(archivos.map((a) => [a.ruta, a]));
+      const suyas = new Map((suyo.archivos ?? []).map((a) => [a.ruta, a]));
+      const lista = [];
+      for (const ruta of new Set([...suyas.keys(), ...Object.keys(mias), ...Object.keys(b.archivos)])) {
+        const yoCambie = (mias[ruta]?.accion ?? null) !== (b.archivos[ruta] ?? null);
+        if (yoCambie) {
+          if (mias[ruta]) { lista.push(mias[ruta]); subidos.current.delete(ruta); }
+          continue;
+        }
+        const de = suyas.get(ruta);
+        if (!de) continue; // la otra persona lo saco
+        if (de.accion !== "guardar") { lista.push({ accion: de.accion, ruta }); continue; }
+        // Foto de la otra persona: se trae de la nube (puede ser distinta de la que hay aca).
+        const rf = await conPase(`/api/borrador?archivo=${encodeURIComponent(ruta)}`);
+        const jf = await rf.json();
+        if (!jf.ok) throw new Error(`no pude traer la foto ${ruta.split("/").pop()} de la otra persona`);
+        lista.push({ accion: "guardar", ruta, datos: jf.datos, url: urlDeBase64(jf.datos) });
+        subidos.current.add(ruta);
+      }
+      const fotos = juntarCon(suyo.fotos, fits, b.fotos);
+      const marcos = juntarCon(suyo.marcos, marcoEdits, b.marcos);
+      const censura = juntarCon(suyo.censura, censuras, b.censura);
+      const orden = juntarCon(suyo.orden, ordenes, b.orden);
+      const comp = juntarCon(suyo.compartidos, compartidos, b.compartidos);
+      // La nube ahora tiene lo suyo: esa es la base, y lo juntado se guarda solo.
+      visto.current = suyo.guardado ?? 0;
+      anotarBase(suyo.fotos, suyo.marcos, suyo.censura, suyo.orden, suyo.compartidos, suyo.archivos ?? []);
+      setFits(fotos); setMarcoEdits(marcos); setCensuras(censura); setOrdenes(orden); setCompartidos(comp);
+      setArchivos(lista); olvidarPasos(); setFirmaGuardada("");
+      setConflicto(null);
+      setFitMsg("Listo: se juntaron tus cambios con los de la otra persona. Se guarda solo en unos segundos.");
+    } catch (e) {
+      setFitMsg(`No pude juntar los cambios: ${e.message}. No se perdió nada: probá de nuevo.`);
+    } finally { setFitBusy(false); }
+  };
   const actualizarPagina = async () => {
     if (!pendientes) return;
     setFitBusy(true); setFitMsg("Guardando…");
@@ -1905,6 +1986,13 @@ export default function App() {
         if (!j.ok) throw new Error(j.error);
         setFitMsg(j.sinCambios ? "No había cambios para publicar" : `Publicado (${j.archivos} archivos)`);
       } else {
+        /* Antes de publicar se guarda el borrador: si la otra persona guardo
+           algo que esta pestana no tiene, aparece el aviso para juntarlo, en
+           vez de publicar sin eso y despues borrarlo con el borrador. */
+        if (!(await guardarBorrador())) {
+          setFitMsg("Antes de publicar: la otra persona guardó cambios. Tocá «Juntar los dos» en el aviso y después publicá.");
+          return;
+        }
         const r = await fetch("/api/publicar", {
           method: "POST",
           headers: { authorization: `Bearer ${sesion}` },
@@ -1913,8 +2001,8 @@ export default function App() {
             archivos: archivos.map(({ accion, ruta, datos }) => ({ accion, ruta, datos })),
           }),
         });
+        if (r.status === 401) { sesionVencida(); setFitMsg("Se venció la sesión. Tu trabajo sigue acá: entrá de nuevo y volvé a tocar la nube."); return; }
         const j = await r.json();
-        if (r.status === 401) { salirDelEditor(); setFitMsg("Se venció la sesión. Entrá de nuevo con el candadito y volvé a publicar."); return; }
         if (!j.ok) throw new Error(j.error);
         const noEstaban = j.faltantes?.length
           ? ` No encontré en el sitio: ${j.faltantes.join(", ")} (puede que ya se hayan quitado antes).`
@@ -1922,7 +2010,7 @@ export default function App() {
         if (j.sinCambios) { setFitMsg(`No había nada para publicar.${noEstaban}`); return; }
         // Ya esta en la pagina de verdad: el borrador deja de hacer falta.
         await conPase("/api/borrador", { method: "DELETE" }).catch(() => {});
-        subidos.current = new Set(); visto.current = 0;
+        subidos.current = new Set(); visto.current = 0; base.current = BASE_VACIA;
         setConflicto(null); setGuardadoEstado("");
         setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setCompartidos({}); setArchivos([]); setFirmaGuardada(""); olvidarPasos();
         // El numero del commit confirma que llego a GitHub de verdad.
@@ -2413,21 +2501,28 @@ export default function App() {
           className="fixed bottom-40 right-6 z-40 max-w-[17rem] border border-[#C0706D] bg-[var(--surface)] px-4 py-3 text-[12px] leading-relaxed text-[var(--ink)] shadow-[0_8px_24px_var(--shadow)] sm:bottom-44 sm:right-8">
           La otra persona guardó cambios después que vos
           ({new Date(conflicto).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}).
-          Si guardás igual, lo suyo se pierde.
-          <span className="mt-2 flex flex-wrap gap-2">
-            <button type="button" onClick={traerDelOtro}
-              className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[11px] transition-colors hover:border-[var(--ink)]">
-              Ver lo suyo
+          Tocá «Juntar los dos» para quedarte con lo tuyo y lo suyo, sin perder nada.
+          <span className="mt-2 flex flex-col gap-2">
+            <button type="button" onClick={juntarConElOtro} disabled={fitBusy}
+              className="cursor-pointer border border-[var(--accent)] bg-[var(--accent)] px-2 py-1.5 text-[11px] font-medium text-white transition-opacity hover:opacity-85 disabled:opacity-50">
+              Juntar los dos
             </button>
-            <button type="button"
-              onClick={async () => {
-                setGuardadoEstado("guardando");
-                try { await guardarBorrador(true); setGuardadoEstado("guardado"); }
-                catch (e) { setGuardadoEstado(`No se pudo guardar: ${e.message}`); }
-              }}
-              className="cursor-pointer border border-[#C0706D] px-2 py-1 text-[11px] text-[#C0706D] transition-opacity hover:opacity-75">
-              Guardar igual
-            </button>
+            <span className="flex flex-wrap gap-2">
+              <button type="button" onClick={traerDelOtro}
+                className="cursor-pointer border border-[var(--line)] px-2 py-1 text-[10px] text-[var(--muted)] transition-colors hover:border-[var(--ink)]">
+                Descartar lo mío
+              </button>
+              <button type="button"
+                onClick={async () => {
+                  if (!window.confirm("Se van a borrar los cambios que guardó la otra persona y queda solo lo de esta pestaña. ¿Seguro? (Para no perder nada, usá «Juntar los dos».)")) return;
+                  setGuardadoEstado("guardando");
+                  try { await guardarBorrador(true); setGuardadoEstado("guardado"); }
+                  catch (e) { setGuardadoEstado(`No se pudo guardar: ${e.message}`); }
+                }}
+                className="cursor-pointer border border-[#C0706D] px-2 py-1 text-[10px] text-[#C0706D] transition-opacity hover:opacity-75">
+                Borrar lo suyo
+              </button>
+            </span>
           </span>
         </div>
       )}
@@ -3068,7 +3163,12 @@ export default function App() {
                           {fitEdit ? "Cerrar editor" : "Editar fotos"}
                         </button>
                         {!!sesion && (
-                          <button type="button" onClick={salirDelEditor}
+                          <button type="button"
+                            onClick={() => {
+                              if ((sinGuardar || guardadoEstado === "guardando")
+                                  && !window.confirm("Hay cambios que todavía no se guardaron en la nube y se van a perder. ¿Salir igual?")) return;
+                              salirDelEditor();
+                            }}
                             className="cursor-pointer text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] transition-opacity hover:opacity-75">
                             Salir
                           </button>
