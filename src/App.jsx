@@ -1110,6 +1110,17 @@ export default function App() {
   const [guardadoEstado, setGuardadoEstado] = useState("");
   const conPase = (url, opciones = {}) =>
     fetch(url, { ...opciones, headers: { ...(opciones.headers || {}), authorization: `Bearer ${sesion}` } });
+  /* Respuesta del servidor. Si Netlify corta la funcion (tarda mas de 10 s) o
+     se cae, no llega JSON: antes se veia "Unexpected end of JSON input", que
+     no le dice nada a nadie. */
+  const leerJson = async (r) => {
+    const texto = await r.text();
+    try { return JSON.parse(texto); } catch {
+      throw new Error(r.status >= 500 || !texto
+        ? `el servidor no respondió bien (error ${r.status}). No se pierde nada: lo tuyo sigue guardado. Esperá un minuto, recargá la página y probá de nuevo`
+        : `respuesta inesperada del servidor (error ${r.status})`);
+    }
+  };
   /* Aviso al cerrar, mientras haya algo sin guardar o un guardado en curso.
      El navegador muestra su propio texto (no se puede cambiar) y en el celular
      muchas veces ni aparece: por eso lo importante es el keepalive de arriba y
@@ -1128,14 +1139,14 @@ export default function App() {
       try {
         const r = await conPase("/api/borrador");
         if (r.status === 401) return salirDelEditor();
-        const j = await r.json();
+        const j = await leerJson(r);
         if (!j.ok || !j.borrador) return;
         const { fotos = {}, marcos = {}, censura = {}, orden = {}, compartidos: comp = {}, archivos: lista = [] } = j.borrador;
         const recuperados = [];
         for (const a of lista) {
           if (a.accion !== "guardar") { recuperados.push(a); continue; }
           const rf = await conPase(`/api/borrador?archivo=${encodeURIComponent(a.ruta)}`);
-          const jf = await rf.json();
+          const jf = await leerJson(rf);
           if (jf.ok) recuperados.push({ ...a, datos: jf.datos, url: urlDeBase64(jf.datos) });
         }
         if (!recuperados.length && !Object.keys(fotos).length && !Object.keys(marcos).length
@@ -1836,7 +1847,7 @@ export default function App() {
     if (Object.keys(fits).length || Object.keys(marcoEdits).length || Object.keys(censuras).length
         || Object.keys(ordenes).length || Object.keys(compartidos).length) {
       const r = await fetch("/__editor/encuadre", { method: "POST", body: JSON.stringify({ fotos: fits, marcos: marcoEdits, censura: censuras, orden: ordenes, compartidos }) });
-      const j = await r.json();
+      const j = await leerJson(r);
       if (!j.ok) throw new Error(j.error);
     }
     if (archivos.length) {
@@ -1844,7 +1855,7 @@ export default function App() {
         method: "POST",
         body: JSON.stringify({ acciones: archivos.map(({ accion, ruta, datos }) => ({ accion, ruta, datos })) }),
       });
-      const j = await r.json();
+      const j = await leerJson(r);
       if (!j.ok) throw new Error(j.error);
     }
     setFits({}); setMarcoEdits({}); setCensuras({}); setOrdenes({}); setCompartidos({}); setArchivos([]); olvidarPasos();
@@ -1858,7 +1869,7 @@ export default function App() {
       const r = await conPase(`/api/borrador?archivo=${encodeURIComponent(a.ruta)}`,
                               { method: "POST", body: JSON.stringify({ datos: a.datos }) });
       if (r.status === 401) { sesionVencida(); throw new Error("se venció la sesión. Tu trabajo sigue acá: entrá de nuevo y se guarda solo"); }
-      const j = await r.json();
+      const j = await leerJson(r);
       if (!j.ok) throw new Error(j.error);
       subidos.current.add(a.ruta);
     }
@@ -1875,7 +1886,7 @@ export default function App() {
       }),
     });
     if (r.status === 401) { sesionVencida(); throw new Error("se venció la sesión. Tu trabajo sigue acá: entrá de nuevo y se guarda solo"); }
-    const j = await r.json();
+    const j = await leerJson(r);
     if (j.conflicto) { setConflicto(j.guardado); return false; }
     if (!j.ok) throw new Error(j.error);
     visto.current = j.guardado ?? Date.now();
@@ -1921,7 +1932,7 @@ export default function App() {
     try {
       const r = await conPase("/api/borrador");
       if (r.status === 401) { sesionVencida(); return; }
-      const j = await r.json();
+      const j = await leerJson(r);
       if (!j.ok) throw new Error(j.error);
       const suyo = j.borrador ?? {};
       const b = base.current;
@@ -1939,7 +1950,7 @@ export default function App() {
         if (de.accion !== "guardar") { lista.push({ accion: de.accion, ruta }); continue; }
         // Foto de la otra persona: se trae de la nube (puede ser distinta de la que hay aca).
         const rf = await conPase(`/api/borrador?archivo=${encodeURIComponent(ruta)}`);
-        const jf = await rf.json();
+        const jf = await leerJson(rf);
         if (!jf.ok) throw new Error(`no pude traer la foto ${ruta.split("/").pop()} de la otra persona`);
         lista.push({ accion: "guardar", ruta, datos: jf.datos, url: urlDeBase64(jf.datos) });
         subidos.current.add(ruta);
@@ -1982,7 +1993,7 @@ export default function App() {
       if (import.meta.env.DEV) {
         await guardarLocal();
         const r = await fetch("/__editor/publicar", { method: "POST" });
-        const j = await r.json();
+        const j = await leerJson(r);
         if (!j.ok) throw new Error(j.error);
         setFitMsg(j.sinCambios ? "No había cambios para publicar" : `Publicado (${j.archivos} archivos)`);
       } else {
@@ -2002,7 +2013,7 @@ export default function App() {
           }),
         });
         if (r.status === 401) { sesionVencida(); setFitMsg("Se venció la sesión. Tu trabajo sigue acá: entrá de nuevo y volvé a tocar la nube."); return; }
-        const j = await r.json();
+        const j = await leerJson(r);
         if (!j.ok) throw new Error(j.error);
         const noEstaban = j.faltantes?.length
           ? ` No encontré en el sitio: ${j.faltantes.join(", ")} (puede que ya se hayan quitado antes).`

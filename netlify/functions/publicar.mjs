@@ -29,6 +29,19 @@ const gh = async (camino, opciones = {}) => {
   return cuerpo;
 };
 
+/* De a varias a la vez. Netlify corta la funcion a los 10 segundos y, de a
+   una, cada llamada a GitHub tarda ~0,3 s: con ~25 fotos se pasaba del tiempo
+   y el editor recibia una respuesta vacia. GitHub pide no exagerar con las
+   llamadas simultaneas que crean contenido, asi que van de a 6. */
+const deAVarias = async (items, cuantas, fn) => {
+  const res = new Array(items.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(cuantas, items.length) }, async () => {
+    while (i < items.length) { const k = i++; res[k] = await fn(items[k]); }
+  }));
+  return res;
+};
+
 export default async (req) => {
   if (req.method !== "POST") return json({ ok: false }, 405);
   if (!(await paseValido(pedirPase(req), process.env.EDITOR_PASSWORD))) {
@@ -54,14 +67,21 @@ export default async (req) => {
       return json({ ok: true, sinCambios: true });
     }
 
+    /* Todo lo que no depende de lo anterior va en paralelo (ver deAVarias):
+       las fotos nuevas, el archivo de encuadres y el arbol del repositorio. */
+    const hayEncuadres = Object.keys(fotos).length || Object.keys(marcos).length || Object.keys(censura).length
+      || Object.keys(orden).length || Object.keys(compartidos).length;
+
     // 1. Punto de partida: el último commit de la rama.
-    const ref = await gh(`/git/ref/heads/${RAMA}`);
-    const commitBase = await gh(`/git/commits/${ref.object.sha}`);
+    const base = (async () => {
+      const ref = await gh(`/git/ref/heads/${RAMA}`);
+      const commitBase = await gh(`/git/commits/${ref.object.sha}`);
+      return { ref, commitBase };
+    })();
 
     // 2. Encuadres: se lee el archivo actual y se le aplican los cambios.
-    const arbol = [];
-    if (Object.keys(fotos).length || Object.keys(marcos).length || Object.keys(censura).length
-        || Object.keys(orden).length || Object.keys(compartidos).length) {
+    const encuadres = (async () => {
+      if (!hayEncuadres) return null;
       const actual = await gh(`/contents/${ENCUADRES}?ref=${RAMA}`);
       // De base64 a texto pasando por bytes: las claves tienen acentos
       // ("Julieta Espósito") y atob solo devuelve bytes sueltos.
@@ -98,8 +118,8 @@ export default async (req) => {
         method: "POST",
         body: JSON.stringify({ content: JSON.stringify(datos), encoding: "utf-8" }),
       });
-      arbol.push({ path: ENCUADRES, mode: "100644", type: "blob", sha: blob.sha });
-    }
+      return { path: ENCUADRES, mode: "100644", type: "blob", sha: blob.sha };
+    })();
 
     /* 3a. Lo que se quiere borrar tiene que existir: si se le pide a GitHub
        que borre una ruta que no esta en el repositorio, responde
@@ -107,29 +127,33 @@ export default async (req) => {
        arbol del commit y se comparan las rutas (normalizadas, porque los
        acentos pueden venir escritos de dos maneras distintas). */
     const aBorrar = archivos.filter((a) => a.accion === "borrar");
-    let enElRepo = null;
-    if (aBorrar.length) {
-      const base = await gh(`/git/trees/${commitBase.tree.sha}?recursive=1`);
-      if (!base.truncated) {
-        enElRepo = new Map(base.tree.filter((x) => x.type === "blob").map((x) => [x.path.normalize("NFC"), x.path]));
-      }
-    }
-    const faltantes = [];
+    const repo = (async () => {
+      if (!aBorrar.length) return null;
+      const { commitBase } = await base;
+      const t = await gh(`/git/trees/${commitBase.tree.sha}?recursive=1`);
+      return t.truncated ? null
+        : new Map(t.tree.filter((x) => x.type === "blob").map((x) => [x.path.normalize("NFC"), x.path]));
+    })();
 
-    // 3b. Fotos: las nuevas van como blob; las quitadas, con sha en null.
-    for (const { accion, ruta, datos } of archivos) {
+    // 3b. Fotos nuevas: cada una va como blob, de a varias a la vez.
+    const nuevas = deAVarias(archivos.filter((a) => a.accion === "guardar"), 6, async ({ ruta, datos }) => {
+      const blob = await gh("/git/blobs", { method: "POST", body: JSON.stringify({ content: datos, encoding: "base64" }) });
+      return { path: `${BASE_FOTOS}/${ruta}`, mode: "100644", type: "blob", sha: blob.sha };
+    });
+
+    const [{ ref, commitBase }, entradaEncuadres, enElRepo, entradasNuevas] = await Promise.all([base, encuadres, repo, nuevas]);
+    const arbol = [...(entradaEncuadres ? [entradaEncuadres] : []), ...entradasNuevas];
+
+    // 3c. Fotos quitadas: con sha en null.
+    const faltantes = [];
+    for (const { ruta } of aBorrar) {
       const path = `${BASE_FOTOS}/${ruta}`;
-      if (accion === "guardar") {
-        const blob = await gh("/git/blobs", { method: "POST", body: JSON.stringify({ content: datos, encoding: "base64" }) });
-        arbol.push({ path, mode: "100644", type: "blob", sha: blob.sha });
-      } else if (accion === "borrar") {
-        if (enElRepo) {
-          const real = enElRepo.get(path.normalize("NFC"));
-          if (!real) { faltantes.push(ruta); continue; }
-          arbol.push({ path: real, mode: "100644", type: "blob", sha: null });
-        } else {
-          arbol.push({ path, mode: "100644", type: "blob", sha: null });
-        }
+      if (enElRepo) {
+        const real = enElRepo.get(path.normalize("NFC"));
+        if (!real) { faltantes.push(ruta); continue; }
+        arbol.push({ path: real, mode: "100644", type: "blob", sha: null });
+      } else {
+        arbol.push({ path, mode: "100644", type: "blob", sha: null });
       }
     }
 
