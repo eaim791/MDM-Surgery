@@ -13,7 +13,6 @@ import { UI } from "./i18n.js";
 import heroVideo from "./assets/hero-bg.mp4";
 import heroPoster from "./assets/hero-poster.webp";
 import heroPosterMobile from "./assets/hero-mobile-poster.webp";
-import marceloPhoto from "./assets/marcelodimaggio.webp";
 import {
   PROCEDURES, PROCEDURES_WITH_CASES, AREAS, INCLUDED, LEAD, SPECIALISTS, ASSISTANTS,
   LOCATIONS, SEDES, TESTIMONIALS, casesFor, CERTIFICATES, PAPERS,
@@ -82,7 +81,6 @@ const FORMSPREE_ENDPOINT = "https://formspree.io/f/xnpaaroa";
 // Ningun humano completa nombre, email y mensaje en menos de esto — un envio
 // mas rapido es un bot que llena el formulario por script.
 const MIN_FILL_MS = 3000;
-const TEST_PAGE_SIZE = 2;
 // Certificaciones internacionales que se ven de entrada; el resto queda plegado.
 const CERTS_PREVIEW = 3;
 
@@ -118,6 +116,126 @@ const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
 };
+/* Testimonios como mazo: la tarjeta del medio manda y las demas quedan
+   apiladas detras, una asomando a cada lado. Todas ocupan la misma celda de
+   la grilla, asi la altura la pone la mas alta y el texto nunca se corta.
+   Se pasa con las flechas, arrastrando o con el teclado. La ultima carta es
+   el aviso de que se suman mas testimonios. */
+function TestimonialDeck({ items, t }) {
+  const NET = { instagram: ["Instagram", Instagram], facebook: ["Facebook", Facebook], google: ["Google", Star] };
+  const total = items.length + 1;
+  const [idx, setIdx] = useState(0);
+  const drag = useRef(null);
+  const go = (n) => setIdx(Math.max(0, Math.min(total - 1, n)));
+  const pos = (i) => {
+    const d = i - idx, a = Math.abs(d);
+    return { transform: `translateX(${d * 30}%) translateY(${a * 14}px) scale(${1 - a * 0.08})`,
+             opacity: a > 2 ? 0 : 1 - a * 0.2, zIndex: 10 - a, pointerEvents: a ? "none" : "auto" };
+  };
+  const frame = "flex flex-col border bg-[var(--surface)] p-7 transition-[transform,opacity,box-shadow,border-color] duration-500 ease-out motion-reduce:transition-none";
+  const flecha = "flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-[var(--rule)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90 disabled:cursor-default disabled:opacity-35 disabled:hover:border-[var(--rule)] disabled:hover:bg-transparent disabled:hover:text-[var(--muted)]";
+  return (
+    <div className="mt-10">
+      <div role="group" aria-roledescription="carrusel" aria-label={t.test.title} tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "ArrowLeft") go(idx - 1); if (e.key === "ArrowRight") go(idx + 1); }}
+        onPointerDown={(e) => { drag.current = e.clientX; }}
+        onPointerUp={(e) => { if (drag.current === null) return; const dx = e.clientX - drag.current; drag.current = null; if (Math.abs(dx) > 40) go(idx + (dx < 0 ? 1 : -1)); }}
+        onPointerCancel={() => { drag.current = null; }}
+        className="grid cursor-grab touch-pan-y select-none grid-cols-1 overflow-hidden px-2 pb-6 pt-2 active:cursor-grabbing sm:px-0">
+        {items.map((x, i) => {
+          const net = x.source?.url && NET[x.source.type];
+          const centro = i === idx;
+          return (
+            <figure key={`${x.initials}-${i}`} aria-hidden={!centro}
+              style={{ gridArea: "1 / 1", ...pos(i) }}
+              className={`${frame} mx-auto w-[min(88%,34rem)] ${centro ? "border-[var(--accent)] shadow-[0_24px_60px_var(--shadow)]" : "border-[var(--line)]"}`}>
+              {x.stars && <div className="mb-4"><Stars value={x.stars} t={t} /></div>}
+              <blockquote className="flex-1 font-display text-[17px] font-normal leading-relaxed text-[var(--ink)]">
+                “{x.text}”
+              </blockquote>
+              <figcaption className="mt-6 border-t border-[var(--line)] pt-4">
+                <p className="text-[13px] text-[var(--ink)]">
+                  {x.initials}{x.place && <span className="text-[var(--faint)]"> · {x.place}</span>}
+                </p>
+                {(x.proc || x.time) && (
+                  <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
+                    {[x.proc, x.time].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+                {net ? (
+                  <a href={x.source.url} target="_blank" rel="noopener noreferrer" tabIndex={centro ? 0 : -1}
+                    className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--accent)] transition-opacity hover:opacity-75">
+                    {(() => { const Icon = net[1]; return <Icon size={13} strokeWidth={1.8} aria-hidden="true" />; })()}
+                    {t.test.viewOn.replace("{net}", net[0])}
+                    <ArrowUpRight size={12} strokeWidth={1.8} aria-hidden="true" />
+                  </a>
+                ) : x.source?.type && t.test.via[x.source.type] ? (
+                  <p className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-[var(--faint)]">
+                    <MessageCircle size={13} strokeWidth={1.8} aria-hidden="true" />
+                    {t.test.via[x.source.type]}
+                  </p>
+                ) : null}
+              </figcaption>
+            </figure>
+          );
+        })}
+        <div aria-hidden={idx !== items.length} style={{ gridArea: "1 / 1", ...pos(items.length) }}
+          className={`${frame} mx-auto w-[min(88%,34rem)] items-center justify-center gap-3 border-dashed text-center ${idx === items.length ? "border-[var(--accent)]" : "border-[var(--line)]"}`}>
+          <Construction size={22} strokeWidth={1.5} aria-hidden="true" className="text-[var(--faint)]" />
+          <p className="font-display text-[17px] font-normal text-[var(--ink)]">{t.test.soonTitle}</p>
+          <p className="max-w-xs text-[13px] leading-relaxed text-[var(--faint)]">{t.test.soonBody}</p>
+        </div>
+      </div>
+      <div className="flex items-center justify-center gap-4">
+        <button type="button" onClick={() => go(idx - 1)} disabled={idx === 0}
+          aria-label={t.test.prev} title={t.test.prev} className={flecha}>
+          <ArrowLeft size={16} strokeWidth={1.9} />
+        </button>
+        <span className="text-[11px] tracking-wide text-[var(--faint)]" aria-live="polite">{idx + 1} / {total}</span>
+        <button type="button" onClick={() => go(idx + 1)} disabled={idx === total - 1}
+          aria-label={t.test.next} title={t.test.next} className={flecha}>
+          <ArrowRight size={16} strokeWidth={1.9} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* Fotos del doctor: todas las de src/assets/doctor/ (marcelodimaggio.webp,
+   marcelodimaggio1.webp, marcelodimaggio2.webp, ...), en orden por numero. Para
+   sumar una, alcanza con dejarla en esa carpeta con ese nombre. */
+const DOCTOR_PHOTOS = Object.entries(import.meta.glob("./assets/doctor/marcelodimaggio*.webp", { eager: true, import: "default" }))
+  .map(([ruta, src]) => ({ n: Number((ruta.match(/marcelodimaggio(\d*)/) ?? [])[1] || 0), src }))
+  .sort((a, b) => a.n - b.n)
+  .map((f) => f.src);
+
+/* La foto del doctor cambia sola cada pocos segundos, con un fundido suave y un
+   leve acercamiento. Se queda quieta si el visitante tiene activado "reducir
+   movimiento", si el mouse esta encima, o si hay una sola foto. */
+function DoctorPhotos({ alt }) {
+  const reduce = useReducedMotion();
+  const [idx, setIdx] = useState(0);
+  const [pausa, setPausa] = useState(false);
+  useEffect(() => { DOCTOR_PHOTOS.forEach((src) => { new Image().src = src; }); }, []);
+  useEffect(() => {
+    if (reduce || pausa || DOCTOR_PHOTOS.length < 2) return;
+    const id = setInterval(() => setIdx((i) => (i + 1) % DOCTOR_PHOTOS.length), 5000);
+    return () => clearInterval(id);
+  }, [reduce, pausa]);
+  return (
+    <div className="absolute inset-0" onMouseEnter={() => setPausa(true)} onMouseLeave={() => setPausa(false)}>
+      <AnimatePresence initial={false}>
+        <motion.img key={idx} src={DOCTOR_PHOTOS[idx]} alt={alt}
+          initial={reduce ? false : { opacity: 0, scale: 1.04, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.985 }}
+          transition={{ duration: 0.9, ease: "easeOut" }}
+          className="absolute inset-0 h-full w-full object-contain object-bottom" />
+      </AnimatePresence>
+    </div>
+  );
+}
+
 const container = { hidden: {}, visible: { transition: { staggerChildren: 0.1 } } };
 const heroFade = {
   hidden: { opacity: 0, y: 14 },
@@ -160,13 +278,15 @@ const initialsOf = (name) => {
   return ((words[0]?.[0] ?? "") + (words[1]?.[0] ?? "")).toUpperCase();
 };
 
-function IconLink({ Icon, href = "#", label, small }) {
-  const s = small ? "h-7 w-7" : "h-9 w-9";
+function IconLink({ Icon, href = "#", label, small, big }) {
+  const s = small ? "h-7 w-7" : big ? "relative h-[50px] w-[50px]" : "h-9 w-9";
   const external = /^https?:|^mailto:/.test(href);
   return (
     <a href={href} aria-label={label} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
       className={`${s} flex cursor-pointer items-center justify-center rounded-full border-[1.5px] border-[var(--rule)] text-[var(--muted)] transition-all duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90`}>
-      <Icon size={small ? 12 : 15} strokeWidth={1.8} />
+      <Icon size={small ? 12 : big ? 18 : 15} strokeWidth={1.8} />
+      {/* Aro fino por fuera (en la version grande), como el de la foto del doctor. */}
+      {big && <span aria-hidden="true" className="pointer-events-none absolute -inset-[5px] rounded-full border border-[var(--accent)] opacity-35" />}
     </a>
   );
 }
@@ -436,8 +556,11 @@ function Slogan({ text }) {
 
   // Ya no es una cita chica entre dos filetes al final de una seccion: es su
   // propia pausa a todo el ancho, con fondo propio, entre Qué hacemos y Equipo.
+  // Mismo color (--accent-soft) y mismo tamano de letra que las bandas de MDM &
+  // Equipo (encabezado y redes); el aire de arriba y abajo es un poco mayor
+  // porque el subrayado y la flor cuelgan por debajo de la frase.
   return (
-    <section aria-hidden="true" className="overflow-hidden bg-[var(--chip)] py-20 sm:py-28">
+    <section aria-hidden="true" className="overflow-hidden bg-[var(--accent-soft)] py-5 sm:py-6">
       <div ref={wrapRef} className="mx-auto max-w-5xl px-6">
         <motion.p
           // scale via el prop corto de motion, no style={{transform:`scale(${scale})`}}:
@@ -455,7 +578,7 @@ function Slogan({ text }) {
           // span sobrante desborda parejo a los dos lados, su centro
           // coincide con el origin-center del scale, y listo entra en la
           // pantalla aunque el texto en si siga siendo mas ancho que ella.
-          className="origin-center flex items-center justify-center font-slogan italic text-[36px] font-medium leading-snug text-[var(--ink)] sm:text-[46px]"
+          className="origin-center -mb-[0.8em] -mt-[0.6em] flex items-center justify-center font-slogan italic text-[clamp(44px,6vw,66px)] font-medium leading-snug text-[var(--ink)]"
         >
           <span className={`relative inline-block shrink-0 pb-3 sm:pb-4 ${show ? "doodle-show" : ""}`}>
             {/* El texto se "escribe" con el mismo mecanismo que el trazo de
@@ -483,14 +606,14 @@ function Slogan({ text }) {
                 de la flor). Dos SVG en vez de uno: la flor necesita
                 mantener sus proporciones sea cual sea el ancho del texto. */}
             <svg aria-hidden="true" viewBox="0 0 1000 100" preserveAspectRatio="none"
-              className="pointer-events-none absolute left-0 top-full h-[0.4em] w-[calc(100%-2em)] sm:h-[0.45em]"
+              className="pointer-events-none absolute left-0 top-full h-[0.4em] w-[calc(100%-2em)] -translate-y-[1.65em] sm:h-[0.45em]"
               style={{ overflow: "visible" }}>
               <path className="doodle-flourish"
                 d="M 0,50 C 80,20 160,80 240,45 S 400,15 480,55 S 640,85 720,40 S 860,20 1000,50"
                 fill="none" stroke="var(--accent)" strokeWidth="6" strokeLinecap="round" />
             </svg>
             <svg aria-hidden="true" viewBox="0 0 44 44"
-              className="pointer-events-none absolute right-0 top-full h-[1em] w-[1em] -translate-y-[0.15em] sm:h-[1.1em] sm:w-[1.1em]"
+              className="pointer-events-none absolute right-0 top-full h-[1em] w-[1em] -translate-y-[1.75em] sm:h-[1.1em] sm:w-[1.1em]"
               style={{ overflow: "visible" }}>
               <circle className="doodle-circle"
                 cx="22" cy="22" r="1.8" fill="none" stroke="var(--accent)" strokeWidth="1.6" />
@@ -743,7 +866,6 @@ export default function App() {
   // de este instante es fisicamente imposible para una persona llenando dos
   // campos a mano, asi que se trata como bot sin recurrir a un captcha.
   const contactMountedAt = useRef(Date.now());
-  const [testPage, setTestPage] = useState(0);
   const [lightbox, setLightbox] = useState(null);
   // Documento legal abierto desde el pie de pagina: "medical" | "cookies" |
   // null. "privacy"/"terms" ya estan soportados por LegalModal pero todavia
@@ -2707,7 +2829,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <main className="relative bg-[var(--bg)] lg:pl-60">
+      <main className="relative overflow-x-clip bg-[var(--bg)] lg:pl-60">
         {/* ============ HERO ============ */}
         {/* El hero ya no centra el texto: el bloque se ancla abajo a la izquierda,
             el video respira del lado derecho. Rompe la composicion mas predecible
@@ -3658,105 +3780,132 @@ export default function App() {
             <SilkRibbon
               className="pointer-events-none absolute -top-4 right-0 hidden w-52 aspect-[300/460] opacity-70 md:block"
               rotate={22} />
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
-              <Eyebrow>{t.team.eyebrow}</Eyebrow>
-              {/* Subidos de 17/19px y 14px: como bajada chica entre el eyebrow
-                  y el titulo quedaban mas chicos que el resto del sitio, y a
-                  ese tamano se leian mal — sobre todo la cita, que ya de por
-                  si usa cursiva. */}
-              <p className="mt-3 max-w-xl font-display text-[20px] italic leading-snug text-[var(--muted)] sm:text-[23px]">
-                “{t.team.quote}”
-              </p>
-              <SectionTitle>{t.team.title}</SectionTitle>
-              <p className="mt-5 max-w-2xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{t.team.body}</p>
+            {/* Encabezado (variante 5): una banda de color con la frase en la
+                tipografia manuscrita del slogan del sitio; debajo, el titulo y
+                el texto, centrados. */}
+            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}
+              className="text-center">
+              {/* Sale de la columna de contenido: llega hasta el menu lateral a la
+                  izquierda y hasta el borde de la pagina a la derecha. */}
+              <div className="relative left-1/2 grid w-screen -translate-x-1/2 justify-items-center gap-2 bg-[var(--accent-soft)] px-5 py-9 sm:px-10 sm:py-12 lg:w-[calc(100vw-15rem)]">
+                <Eyebrow>{t.team.eyebrow}</Eyebrow>
+                <p className="max-w-[20ch] text-balance text-[clamp(44px,6vw,66px)] leading-[1.05] text-[var(--ink)]"
+                  style={{ fontFamily: '"Mrs Saint Delafield", cursive' }}>
+                  {t.team.quote}
+                </p>
+              </div>
+              <div className="mx-auto mt-9 max-w-[60ch]">
+                <SectionTitle size="text-2xl sm:text-3xl lg:text-4xl">{t.team.title}</SectionTitle>
+                <p className="mt-5 text-[15px] leading-relaxed text-[var(--muted)]">{t.team.body}</p>
+              </div>
             </motion.div>
 
-            {/* Foto del Dr.: recortada sobre el tono claro del sitio (el fondo
-                azul de estudio era el unico bloque oscuro de la zona), vertical
-                4:5, alineada con la columna de texto y con un marco fino
-                desplazado, estilo galeria. La foto va con fondo transparente:
-                el fondo lo pone el CSS, asi tambien funciona en modo oscuro. */}
-            <motion.div id="dr-di-maggio" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}
-              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 gap-10 md:grid-cols-[minmax(0,320px)_1fr] md:items-center md:gap-10 lg:grid-cols-[360px_1fr] lg:gap-12 2xl:grid-cols-[420px_1fr]">
-              <motion.div variants={settleIn} className="relative mb-4 mr-4 max-w-[360px] md:max-w-none">
-                <div aria-hidden="true" className="absolute inset-0 translate-x-4 translate-y-4 border border-[var(--accent)]/35" />
-                <div className="relative aspect-[4/5] overflow-hidden"
-                  style={{ background: "radial-gradient(ellipse 80% 70% at 50% 38%, var(--surface) 0%, var(--chip) 75%)" }}>
-                  <motion.img src={marceloPhoto} alt={LEAD.name}
-                    whileHover={{ scale: 1.03 }} transition={{ duration: 0.5, ease: "easeOut" }}
-                    className="h-full w-full object-cover object-center" />
-                </div>
-              </motion.div>
-              <motion.div variants={fadeUp}>
-                <div className="flex flex-wrap items-baseline gap-3">
-                  <h3 className="font-display text-3xl font-normal text-[var(--ink)] sm:text-4xl">{LEAD.name}</h3>
-                  {/* Destello periodico: un brillo pasa rapido por la frase
-                      y despues hace una pausa larga antes de repetir — como
-                      un reflejo de luz, no un parpadeo constante. */}
-                  <span className="years-shine text-[13px] tracking-wide">{LEAD[lang].years}</span>
-                </div>
+            {/* Dr. Di Maggio (variante O): nombre y bio arriba, centrados; debajo
+                la foto grande en el medio (~46 % del ancho) con las
+                especialidades a un lado y las matriculas al otro, y los
+                botones al final. Las cuatro primeras de LEAD.creds son
+                especialidades. La foto es un recorte sin fondo: el disco y el
+                aro los pone el CSS, asi tambien funciona en modo oscuro. */}
+            <motion.div id="dr-di-maggio" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}
+              variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 justify-items-center gap-8 text-center">
+              <motion.div variants={fadeUp} className="max-w-[60ch]">
+                <h3 className="font-display text-3xl font-normal text-[var(--ink)] sm:text-4xl">{LEAD.name}</h3>
+                {/* Destello periodico: un brillo pasa rapido por la frase
+                    y despues hace una pausa larga antes de repetir. */}
+                <span className="years-shine mt-1.5 inline-block text-[13px] tracking-wide">{LEAD[lang].years}</span>
                 <p className="mt-2 text-[13px] uppercase tracking-[0.12em] text-[var(--muted)] sm:text-[14px]">{LEAD[lang].role}</p>
-                <p className="mt-5 max-w-4xl text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{LEAD[lang].bio}</p>
-                {/* Sello en vez del punto liso: son las credenciales que mas
-                    pesan para la confianza, justo donde se presenta al
-                    doctor — vale la pena que se noten de un vistazo. */}
-                <ul className="mt-6 space-y-2.5">
-                  {LEAD[lang].creds.map((c) => (
-                    <li key={c} className="flex items-start gap-2.5 text-[14px] text-[var(--muted)]">
-                      <SealIcon size={14} strokeWidth={1.7} className="mt-0.5 flex-shrink-0 text-[var(--accent)]" />{c}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-6 flex flex-wrap gap-2">
-                  <IconLink Icon={EnvelopeIcon} label="Email" href={`mailto:${CONTACT_EMAIL}`} />
-                  <IconLink Icon={Facebook} label="Facebook" href={SOCIAL_LINKS.facebook} />
-                  <IconLink Icon={XLogo} label="X" href={SOCIAL_LINKS.x} />
-                  <IconLink Icon={Instagram} label="Instagram" href={SOCIAL_LINKS.instagram} />
-                  <IconLink Icon={Linkedin} label="LinkedIn" href={SOCIAL_LINKS.linkedin} />
+                <p className="mt-5 text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{LEAD[lang].bio}</p>
+              </motion.div>
+              <div className="grid w-full items-center gap-x-10 gap-y-7 sm:grid-cols-2 xl:grid-cols-[minmax(0,27fr)_minmax(0,46fr)_minmax(0,27fr)]">
+                <motion.div variants={settleIn} className="relative order-1 mx-auto aspect-[4/5] w-full max-w-[420px] sm:col-span-2 xl:order-2 xl:col-span-1 xl:max-w-none">
+                  {/* Disco y aro abajo, en un cuadrado: la cabeza asoma por arriba. */}
+                  <div aria-hidden="true" className="absolute inset-x-0 bottom-0 aspect-square">
+                    <div className="absolute inset-x-[8%] bottom-0 top-[8%] rounded-t-[50%] bg-gradient-to-b from-[var(--accent-soft)] to-transparent" />
+                    <div className="absolute inset-[3%] rounded-full border border-[var(--accent)] opacity-40" />
+                  </div>
+                  <DoctorPhotos alt={LEAD.name} />
+                </motion.div>
+                {[[t.team.credSpec, LEAD[lang].creds.slice(0, 4), "order-2 xl:order-1 xl:text-right"],
+                  [t.team.credLic, LEAD[lang].creds.slice(4), "order-3"]].map(([titulo, lista, orden]) => (
+                  <motion.div key={titulo} variants={fadeUp} className={`${orden} text-left`}>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--accent)]">{titulo}</p>
+                    <ul className="mt-3 space-y-2.5">
+                      {lista.map((c) => (
+                        <li key={c}
+                          className={`flex items-start gap-2.5 text-[14px] leading-snug text-[var(--muted)] ${orden.includes("text-right") ? "xl:flex-row-reverse" : ""}`}>
+                          <SealIcon size={14} strokeWidth={1.7} className="mt-0.5 flex-shrink-0 text-[var(--accent)]" />{c}
+                        </li>
+                      ))}
+                    </ul>
+                  </motion.div>
+                ))}
+              </div>
+              {/* Banda de redes (variante 6): de ancho completo (llega al menu lateral y
+                  al borde derecho, igual que la del encabezado), con el texto entre
+                  dos lineas finas y los botones con aro. */}
+              <motion.div variants={fadeUp}
+                className="relative left-1/2 mt-4 grid w-screen -translate-x-1/2 justify-items-center justify-self-start gap-5 bg-[var(--accent-soft)] px-5 py-9 sm:py-12 lg:w-[calc(100vw-15rem)]">
+                <div className="flex w-full max-w-[560px] items-center gap-5">
+                  <span aria-hidden="true" className="h-px flex-1 bg-[var(--accent)] opacity-45" />
+                  <p className="text-center text-[clamp(38px,5.4vw,60px)] leading-[1.05] text-[var(--ink)]"
+                    style={{ fontFamily: '"Mrs Saint Delafield", cursive' }}>
+                    {t.team.followMe}
+                  </p>
+                  <span aria-hidden="true" className="h-px flex-1 bg-[var(--accent)] opacity-45" />
+                </div>
+                <div className="flex flex-wrap justify-center gap-4">
+                  <IconLink big Icon={EnvelopeIcon} label="Email" href={`mailto:${CONTACT_EMAIL}`} />
+                  <IconLink big Icon={Facebook} label="Facebook" href={SOCIAL_LINKS.facebook} />
+                  <IconLink big Icon={XLogo} label="X" href={SOCIAL_LINKS.x} />
+                  <IconLink big Icon={Instagram} label="Instagram" href={SOCIAL_LINKS.instagram} />
+                  <IconLink big Icon={Linkedin} label="LinkedIn" href={SOCIAL_LINKS.linkedin} />
                 </div>
               </motion.div>
             </motion.div>
 
-            <div id="surgical-team" className="scroll-mt-24 pt-20">
-              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+            {/* Equipo quirurgico y asistentes (variante T): tarjetas centradas, con
+                una linea de color arriba y el circulo de iniciales (no hay fotos
+                del equipo). Los asistentes llevan fondo de color y aro fino para
+                diferenciarlos del equipo quirurgico. */}
+            <div id="surgical-team" className="scroll-mt-24 pt-20 text-center">
+              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}
+                className="mx-auto max-w-[60ch]">
                 <Eyebrow>{t.team.specEyebrow}</Eyebrow>
                 <SectionTitle>{t.team.specTitle}</SectionTitle>
-                <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-[var(--muted)]">{t.team.specBody}</p>
+                <p className="mt-5 text-[14px] leading-relaxed text-[var(--muted)]">{t.team.specBody}</p>
               </motion.div>
-              {/* Nomina en lista, no grid de tarjetas: son nombres y roles, no
-                  contenido que necesite quedar contenido en una caja propia. */}
-              {/* gap-x real, no solo padding: sin un corte entre columnas los
-                  bordes de dos filas vecinas quedaban pegados borde a borde y
-                  se leian como una sola linea corrida (mas visible en oscuro,
-                  donde --line tiene mas contraste). */}
               <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.05 }}
-                className="mt-10 grid grid-cols-1 border-t border-[var(--line)] sm:grid-cols-2 sm:gap-x-10">
+                className="mt-10 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                 {SPECIALISTS.map((sp) => (
                   <motion.div key={sp.name} variants={fadeUp}
-                    className="flex items-center gap-4 border-b border-[var(--line)] py-5">
-                    <PhotoBox label={initialsOf(sp.name)} className="h-11 w-11 flex-shrink-0 rounded-full" textClass="text-sm" />
+                    className="grid content-start justify-items-center gap-3 border border-t-2 border-[var(--line)] border-t-[var(--accent)] bg-[var(--surface)] px-3 pb-[18px] pt-[22px]">
+                    <PhotoBox label={initialsOf(sp.name)} className="h-16 w-16 flex-shrink-0 rounded-full" textClass="text-lg" />
                     <div className="min-w-0">
-                      <h3 className="font-display text-lg font-normal text-[var(--ink)]">{sp.name}</h3>
-                      <p className="mt-0.5 text-[12px] leading-relaxed text-[var(--muted)]">{sp[lang]}</p>
+                      <h3 className="font-display text-base font-normal leading-tight text-[var(--ink)]">{sp.name}</h3>
+                      <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted)]">{sp[lang]}</p>
                     </div>
                   </motion.div>
                 ))}
               </motion.div>
             </div>
 
-            <div id="assistants" className="scroll-mt-24 pt-20">
-              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}>
+            <div id="assistants" className="scroll-mt-24 pt-20 text-center">
+              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={fadeUp}
+                className="mx-auto max-w-[60ch]">
                 <Eyebrow>{t.team.asstEyebrow}</Eyebrow>
                 <SectionTitle>{t.team.asstTitle}</SectionTitle>
               </motion.div>
               <motion.div variants={container} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}
-                className="mt-10 grid grid-cols-1 divide-y divide-[var(--line)] border-t border-[var(--line)] sm:grid-cols-3 sm:divide-y-0 sm:divide-x sm:border-t-0">
+                className="mt-10 grid gap-3 md:grid-cols-3">
                 {ASSISTANTS.map((a) => (
                   <motion.div key={a.name} variants={fadeUp}
-                    className="flex items-center gap-4 py-5 sm:px-6 sm:first:pl-0 sm:last:pr-0">
-                    <PhotoBox label={initialsOf(a.name)} className="h-11 w-11 flex-shrink-0 rounded-full" textClass="text-sm" />
+                    className="grid content-start justify-items-center gap-3 border border-t-2 border-transparent border-t-[var(--accent)] bg-[var(--accent-soft)] px-3 pb-[18px] pt-[22px]">
+                    <span className="relative flex-shrink-0">
+                      <PhotoBox label={initialsOf(a.name)} className="h-16 w-16 rounded-full !bg-[var(--surface)]" textClass="text-lg" />
+                      <span aria-hidden="true" className="absolute -inset-[5px] rounded-full border border-[var(--accent)] opacity-40" />
+                    </span>
                     <div className="min-w-0">
-                      <h3 className="font-display text-lg font-normal text-[var(--ink)]">{a.name}</h3>
+                      <h3 className="font-display text-lg font-normal leading-tight text-[var(--ink)]">{a.name}</h3>
                       <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted)]">{a[lang]}</p>
                     </div>
                   </motion.div>
@@ -3917,86 +4066,8 @@ export default function App() {
               <SectionTitle>{t.test.title}</SectionTitle>
             </motion.div>
 
-            {(() => {
-              const all = TESTIMONIALS.map((x) => ({
-                initials: x.initials, place: x.place, stars: x.stars, source: x.source, ...x[lang],
-              }));
-              const totalPages = Math.max(1, Math.ceil(all.length / TEST_PAGE_SIZE));
-              const page = ((testPage % totalPages) + totalPages) % totalPages;
-              const visible = all.slice(page * TEST_PAGE_SIZE, page * TEST_PAGE_SIZE + TEST_PAGE_SIZE);
-              const NET = { instagram: ["Instagram", Instagram], facebook: ["Facebook", Facebook], google: ["Google", Star] };
-              return (
-                <>
-                  <motion.div key={page} variants={container} initial="hidden" animate="visible"
-                    className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {visible.map((x, i) => {
-                      const net = x.source?.url && NET[x.source.type];
-                      return (
-                        <motion.figure key={`${x.initials}-${page}-${i}`} variants={fadeUp}
-                          className="flex flex-col border border-[var(--line)] bg-[var(--surface)] p-7">
-                          {x.stars && <div className="mb-4"><Stars value={x.stars} t={t} /></div>}
-                          <blockquote className="flex-1 font-display text-[17px] font-normal leading-relaxed text-[var(--ink)]">
-                            “{x.text}”
-                          </blockquote>
-                          <figcaption className="mt-6 border-t border-[var(--line)] pt-4">
-                            <p className="text-[13px] text-[var(--ink)]">
-                              {x.initials}{x.place && <span className="text-[var(--faint)]"> · {x.place}</span>}
-                            </p>
-                            {/* Procedimiento + tiempo transcurrido: sin ese contexto un
-                                testimonio suelto pesa mucho menos. */}
-                            {(x.proc || x.time) && (
-                              <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
-                                {[x.proc, x.time].filter(Boolean).join(" · ")}
-                              </p>
-                            )}
-                            {/* Origen: link a la publicacion original si existe; si no,
-                                el canal por el que llego (sin link, no se inventa uno). */}
-                            {net ? (
-                              <a href={x.source.url} target="_blank" rel="noopener noreferrer"
-                                className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--accent)] transition-opacity hover:opacity-75">
-                                {(() => { const Icon = net[1]; return <Icon size={13} strokeWidth={1.8} aria-hidden="true" />; })()}
-                                {t.test.viewOn.replace("{net}", net[0])}
-                                <ArrowUpRight size={12} strokeWidth={1.8} aria-hidden="true" />
-                              </a>
-                            ) : x.source?.type && t.test.via[x.source.type] ? (
-                              <p className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-[var(--faint)]">
-                                <MessageCircle size={13} strokeWidth={1.8} aria-hidden="true" />
-                                {t.test.via[x.source.type]}
-                              </p>
-                            ) : null}
-                          </figcaption>
-                        </motion.figure>
-                      );
-                    })}
-                    {/* Mientras se suman testimonios reales: un recuadro que deja
-                        claro que la seccion sigue creciendo, en la ultima pagina. */}
-                    {page === totalPages - 1 && (
-                      <motion.div variants={fadeUp}
-                        className="flex flex-col items-center justify-center gap-3 border border-dashed border-[var(--line)] bg-[var(--surface)] p-7 text-center">
-                        <Construction size={22} strokeWidth={1.5} aria-hidden="true" className="text-[var(--faint)]" />
-                        <p className="font-display text-[17px] font-normal text-[var(--ink)]">{t.test.soonTitle}</p>
-                        <p className="max-w-xs text-[13px] leading-relaxed text-[var(--faint)]">{t.test.soonBody}</p>
-                      </motion.div>
-                    )}
-                  </motion.div>
-                  {totalPages > 1 && (
-                    <div className="mt-5 flex items-center justify-end gap-3">
-                      <button type="button" onClick={() => setTestPage((p) => p - 1)}
-                        aria-label={t.test.prev} title={t.test.prev}
-                        className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-[var(--rule)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90">
-                        <ArrowLeft size={16} strokeWidth={1.9} />
-                      </button>
-                      <span className="text-[11px] tracking-wide text-[var(--faint)]">{page + 1} / {totalPages}</span>
-                      <button type="button" onClick={() => setTestPage((p) => p + 1)}
-                        aria-label={t.test.next} title={t.test.next}
-                        className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-[var(--rule)] text-[var(--muted)] transition-colors duration-200 hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--surface)] active:scale-90">
-                        <ArrowRight size={16} strokeWidth={1.9} />
-                      </button>
-                    </div>
-                  )}
-                </>
-              );
-            })()}
+            <TestimonialDeck t={t}
+              items={TESTIMONIALS.map((x) => ({ initials: x.initials, place: x.place, stars: x.stars, source: x.source, ...x[lang] }))} />
 
           </section>
 

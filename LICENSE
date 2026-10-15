@@ -1,0 +1,50 @@
+Copyright (c) 2026 Emma Aimetta (código fuente / source code).
+Copyright (c) 2026 Marcelo Di Maggio / MDM Surgery (fotografías, textos, logotipos, nombre y marca / photographs, text, logos, name and marks).
+Todos los derechos reservados. All rights reserved.
+
+ESPAÑOL
+
+Este repositorio y todo su contenido se publican únicamente para el
+funcionamiento del sitio web https://mdmsurgery.com. Tienen dos titulares:
+
+  - El CÓDIGO FUENTE y el diseño del sitio (carpetas src/ y netlify/, archivos
+    de configuración y documentación técnica) son propiedad de Emma Aimetta.
+  - Las FOTOGRAFÍAS (incluidas las de pacientes), los VIDEOS, los TEXTOS
+    médicos, los LOGOTIPOS y el nombre y la marca "MDM Surgery" y "Marcelo Di
+    Maggio" son propiedad de Marcelo Di Maggio / MDM Surgery.
+
+No se concede ninguna licencia, expresa ni implícita. Sin autorización previa y
+por escrito del titular que corresponda queda prohibido copiar, modificar,
+distribuir, publicar, sublicenciar, vender o reutilizar total o parcialmente
+este material, incluido su uso para entrenar sistemas automáticos.
+
+Las fotografías de pacientes y los testimonios se publican con su autorización y
+no pueden extraerse ni reutilizarse fuera del sitio por ningún motivo.
+
+Las librerías de terceros que usa el proyecto conservan sus propias licencias
+(ver THIRD_PARTY_LICENSES.md). Esta licencia no las modifica.
+
+ENGLISH
+
+This repository and all of its contents are published solely to operate the
+website https://mdmsurgery.com. They have two owners:
+
+  - The SOURCE CODE and the site design (the src/ and netlify/ folders,
+    configuration files and technical documentation) are the property of
+    Emma Aimetta.
+  - The PHOTOGRAPHS (including patient photos), VIDEOS, medical TEXTS, LOGOS,
+    and the "MDM Surgery" and "Marcelo Di Maggio" names and marks are the
+    property of Marcelo Di Maggio / MDM Surgery.
+
+No license, express or implied, is granted. Without the prior written
+permission of the relevant owner you may not copy, modify, distribute, publish,
+sublicense, sell or reuse this material in whole or in part, including using it
+to train automated systems.
+
+Patient photographs and testimonials are published with their authorization and
+may not be extracted or reused outside the site for any reason.
+
+Third-party libraries used by the project keep their own licenses (see
+THIRD_PARTY_LICENSES.md). This license does not change them.
+
+THE MATERIAL IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.

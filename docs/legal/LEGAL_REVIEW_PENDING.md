@@ -31,10 +31,14 @@ y `docs/audits/LEGAL_PRIVACY.md` — no se repite acá.
    ese consentimiento si se lo piden. Puntual: confirmar el consentimiento
    de los testimonios con handle de Instagram (`@maeru.jpg`,
    `@artistadeloefimero`) para citarlos en el sitio. [CONFIRMAR CON EL CLIENTE — no requiere cambios de código]
-8. **Revisar si hay algún otro dato legal requerido** que no esté listado
+8. **Licencia del repositorio** (`LICENSE`: todos los derechos reservados; el código es de
+   Emma Aimetta y las fotos, textos y marca son de Marcelo Di Maggio / MDM Surgery):
+   confirmar con un abogado esa división de titularidad y si hace falta un contrato
+   de desarrollo que la deje por escrito. [CONFIRMAR CON ABOGADO Y CLIENTE]
+9. **Revisar si hay algún otro dato legal requerido** que no esté listado
    acá, a medida que avance la implementación (ej. al completar Política de
    Privacidad y Términos con los datos de los puntos 1-4).
-9. **Revisión final con abogado** de los 4 documentos (Privacidad, Aviso
+10. **Revisión final con abogado** de los 4 documentos (Privacidad, Aviso
    Médico, Términos, Cookies) antes o al momento de publicar los que faltan
    — Aviso Médico y Cookies ya están publicados en el sitio, pero ningún
    documento legal de este proyecto pasó por revisión jurídica profesional
