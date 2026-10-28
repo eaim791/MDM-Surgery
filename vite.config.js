@@ -133,4 +133,10 @@ function editorApi() {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), editorApi()],
+  build: {
+    // Vite incrusta como data: los archivos de menos de 4 KB, tipografias
+    // incluidas, y la politica de seguridad del sitio (font-src 'self', en
+    // netlify.toml) las bloquea. Las tipografias van siempre como archivo.
+    assetsInlineLimit: (archivo) => (/\.woff2?$/.test(archivo) ? false : undefined),
+  },
 })

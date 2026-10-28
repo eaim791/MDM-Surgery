@@ -507,9 +507,9 @@ export const LOCATIONS = [
 ];
 
 export const SEDES = [
-  "Buenos Aires y Córdoba, Argentina",
-  "Madrid, España",
-  "New York, USA",
+  { es: "Buenos Aires y Córdoba, Argentina", en: "Buenos Aires and Córdoba, Argentina" },
+  { es: "Madrid, España", en: "Madrid, Spain" },
+  { es: "New York, USA", en: "New York, USA" },
 ];
 
 /* Each entry is transcribed from the certificate it links to. `institution` is what the

@@ -109,4 +109,4 @@ Las librerías de terceros conservan sus propias licencias: ver [`THIRD_PARTY_LI
 
 ## Créditos
 
-Página hecha por [Emma A.](https://aimettaemma.vercel.app/)
+Página hecha por [Emma A.](https://portfolio-emma-aimetta.vercel.app/)

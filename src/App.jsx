@@ -511,8 +511,10 @@ function Slogan({ text }) {
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
     const on = () => setTwoLines(mq.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
+    // Safari 13 y anteriores no tienen addEventListener en MediaQueryList (solo
+    // addListener): sin esto, la pagina entera se rompia al montar el slogan.
+    if (mq.addEventListener) mq.addEventListener("change", on); else mq.addListener?.(on);
+    return () => { if (mq.removeEventListener) mq.removeEventListener("change", on); else mq.removeListener?.(on); };
   }, []);
   const cut = text.indexOf(", ");
   const lines = twoLines && cut > 0 ? [text.slice(0, cut + 1), text.slice(cut + 2)] : [text];
@@ -2388,7 +2390,7 @@ export default function App() {
           </button>
         )}
         <ul className="space-y-0.5 text-[11px] leading-relaxed text-[var(--faint)]">
-          {SEDES.map((s) => <li key={s}>{s}</li>)}
+          {SEDES.map((s) => <li key={s.es}>{s[lang]}</li>)}
         </ul>
       </div>
     </div>
@@ -2403,15 +2405,15 @@ export default function App() {
       <div>
         <Eyebrow>{t.contact.eyebrow}</Eyebrow>
         <SectionTitle size="text-2xl sm:text-3xl">{t.contact.title}</SectionTitle>
-        <p className="mt-4 max-w-md text-[14px] leading-relaxed text-[var(--muted)]">{t.contact.body}</p>
-        <p className="mt-3 max-w-md text-[13px] leading-relaxed text-[var(--faint)]">{t.contact.process}</p>
-        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-[var(--muted)]">
+        <p className="mt-3 max-w-md text-[13px] sm:mt-4 sm:text-[14px] leading-relaxed text-[var(--muted)]">{t.contact.body}</p>
+        <p className="mt-3 hidden max-w-md text-[13px] leading-relaxed text-[var(--faint)] sm:block">{t.contact.process}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 sm:mt-5 gap-y-1 text-[13px] text-[var(--muted)]">
           <a href={`mailto:${CONTACT_EMAIL}`} aria-label={CONTACT_EMAIL}
             className="email-domain transition-colors hover:text-[var(--ink)]">{EMAIL_USER}</a>
           <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--ink)]">{INSTAGRAM_HANDLE}</a>
         </div>
       </div>
-      <form onSubmit={submitEnquiry} className="space-y-4">
+      <form onSubmit={submitEnquiry} className="space-y-3 sm:space-y-4">
         {/* Honeypot: invisible para una persona (fuera de pantalla, afuera
             del tab order, oculto de lectores de pantalla), pero un bot que
             completa cada input del formulario lo llena igual. Sin display:none
@@ -2421,25 +2423,25 @@ export default function App() {
           <input type="text" id="contact-company" name="_gotcha" tabIndex={-1} autoComplete="off"
             value={cForm._gotcha} onChange={(e) => setCForm({ ...cForm, _gotcha: e.target.value })} />
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <label className="block">
             <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fName}</span>
             <input type="text" value={cForm.name} placeholder={t.contact.fNamePh} maxLength={60}
               onChange={(e) => setCForm({ ...cForm, name: e.target.value })}
-              className="mt-2 w-full rounded-lg border border-[var(--field-line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+              className="mt-1.5 w-full rounded-lg border border-[var(--field-line)] bg-transparent px-3 py-2 text-[13px] sm:py-2.5 text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
           </label>
           <label className="block">
             <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fEmail}</span>
             <input type="email" value={cForm.email} placeholder={t.contact.fEmailPh} maxLength={90}
               onChange={(e) => setCForm({ ...cForm, email: e.target.value })}
-              className="mt-2 w-full rounded-lg border border-[var(--field-line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+              className="mt-1.5 w-full rounded-lg border border-[var(--field-line)] bg-transparent px-3 py-2 text-[13px] sm:py-2.5 text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
           </label>
         </div>
         <label className="block">
           <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fProc}</span>
           <select value={cForm.proc}
             onChange={(e) => setCForm({ ...cForm, proc: e.target.value })}
-            className="mt-2 w-full cursor-pointer rounded-lg border border-[var(--field-line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors focus:border-[var(--ink)]">
+            className="mt-1.5 w-full cursor-pointer rounded-lg border border-[var(--field-line)] bg-transparent px-3 py-2 text-[13px] sm:py-2.5 text-[var(--ink)] transition-colors focus:border-[var(--ink)]">
             <option value="" className="text-[var(--surface)]">{t.contact.fProcPh}</option>
             {PROCEDURES.map((p) => (
               <option key={p.slug} value={p.slug} className="text-[var(--surface)]">{p[lang].name}</option>
@@ -2450,13 +2452,13 @@ export default function App() {
           <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">{t.contact.fMsg}</span>
           <textarea id="contact-msg" rows={4} value={cForm.msg} placeholder={t.contact.fMsgPh} maxLength={800}
             onChange={(e) => setCForm({ ...cForm, msg: e.target.value })}
-            className="mt-2 w-full resize-y rounded-lg border border-[var(--field-line)] bg-transparent px-3 py-2.5 text-[13px] text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
+            className="mt-1.5 w-full resize-y rounded-lg max-sm:h-[4.5rem] sm:mt-2 border border-[var(--field-line)] bg-transparent px-3 py-2 text-[13px] sm:py-2.5 text-[var(--ink)] transition-colors placeholder:text-[var(--faint)] focus:border-[var(--ink)]" />
           <span className="mt-1.5 block text-[11px] leading-relaxed text-[var(--faint)]">{t.contact.fMsgNote}</span>
         </label>
         {cErr && <p className="text-[12px] text-[#E0908D]">{cErr}</p>}
         <div className="flex flex-wrap items-center gap-4">
           <button type="submit" disabled={cSubmitting}
-            className="flex cursor-pointer items-center gap-2.5 border border-[var(--accent)] bg-[var(--accent)] px-8 py-3.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85 active:scale-[0.98] disabled:cursor-wait disabled:opacity-70">
+            className="flex cursor-pointer items-center gap-2.5 border border-[var(--accent)] bg-[var(--accent)] px-8 py-3 text-[11px] sm:py-3.5 font-medium uppercase tracking-[0.22em] text-[var(--surface)] transition-opacity duration-200 hover:opacity-85 active:scale-[0.98] disabled:cursor-wait disabled:opacity-70">
             {cSubmitting && <Loader2 size={14} strokeWidth={2} className="animate-spin" />}
             {cSubmitting ? t.contact.sending : t.contact.send}
           </button>
@@ -2724,11 +2726,14 @@ export default function App() {
         {contactModalOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setContactModalOpen(false)} role="dialog" aria-modal="true"
-            className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-6">
+            className="fixed inset-0 z-[100] flex overflow-y-auto overscroll-contain bg-black/50 p-4 sm:p-6">
+            {/* m-auto y no items-center: si el recuadro es mas alto que la pantalla
+                (celular), items-center cortaba la parte de arriba (el titulo y la X)
+                y no habia forma de llegar con el scroll. */}
             <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
               transition={{ duration: 0.25, ease: "easeOut" }}
               onClick={(e) => e.stopPropagation()}
-              className="relative my-10 grid w-full max-w-3xl grid-cols-1 gap-10 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-8 shadow-[0_20px_60px_var(--shadow)] sm:p-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:gap-14 md:p-12">
+              className="relative m-auto grid w-full max-w-3xl grid-cols-1 gap-5 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:gap-10 shadow-[0_20px_60px_var(--shadow)] sm:p-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:gap-14 md:p-12">
               <button type="button" onClick={() => setContactModalOpen(false)} aria-label={t.contact.close}
                 className="absolute right-5 top-5 cursor-pointer text-[var(--muted)] transition-colors hover:text-[var(--ink)] active:scale-90">
                 <X size={20} />
@@ -3808,7 +3813,7 @@ export default function App() {
                 aro los pone el CSS, asi tambien funciona en modo oscuro. */}
             <motion.div id="dr-di-maggio" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}
               variants={container} className="mt-12 grid scroll-mt-24 grid-cols-1 justify-items-center gap-8 text-center">
-              <motion.div variants={fadeUp} className="max-w-[60ch]">
+              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={fadeUp} className="max-w-[60ch]">
                 <h3 className="font-display text-3xl font-normal text-[var(--ink)] sm:text-4xl">{LEAD.name}</h3>
                 {/* Destello periodico: un brillo pasa rapido por la frase
                     y despues hace una pausa larga antes de repetir. */}
@@ -3817,7 +3822,7 @@ export default function App() {
                 <p className="mt-5 text-[16px] leading-relaxed text-[var(--muted)] sm:text-[17px]">{LEAD[lang].bio}</p>
               </motion.div>
               <div className="grid w-full items-center gap-x-10 gap-y-7 sm:grid-cols-2 xl:grid-cols-[minmax(0,27fr)_minmax(0,46fr)_minmax(0,27fr)]">
-                <motion.div variants={settleIn} className="relative order-1 mx-auto aspect-[4/5] w-full max-w-[420px] sm:col-span-2 xl:order-2 xl:col-span-1 xl:max-w-none">
+                <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={settleIn} className="relative order-1 mx-auto aspect-[4/5] w-full max-w-[420px] sm:col-span-2 xl:order-2 xl:col-span-1 xl:max-w-none">
                   {/* Disco y aro abajo, en un cuadrado: la cabeza asoma por arriba. */}
                   <div aria-hidden="true" className="absolute inset-x-0 bottom-0 aspect-square">
                     <div className="absolute inset-x-[8%] bottom-0 top-[8%] rounded-t-[50%] bg-gradient-to-b from-[var(--accent-soft)] to-transparent" />
@@ -3825,9 +3830,12 @@ export default function App() {
                   </div>
                   <DoctorPhotos alt={LEAD.name} />
                 </motion.div>
-                {[[t.team.credSpec, LEAD[lang].creds.slice(0, 4), "order-2 xl:order-1 xl:text-right"],
-                  [t.team.credLic, LEAD[lang].creds.slice(4), "order-3"]].map(([titulo, lista, orden]) => (
-                  <motion.div key={titulo} variants={fadeUp} className={`${orden} text-left`}>
+                {/* La key es fija (no el titulo): el titulo cambia con el idioma, y con una
+                    key nueva la columna se volvia a crear y su animacion de entrada
+                    quedaba en "oculto" — las dos columnas desaparecian al cambiar ES/EN. */}
+                {[["spec", t.team.credSpec, LEAD[lang].creds.slice(0, 4), "order-2 xl:order-1 xl:text-right"],
+                  ["lic", t.team.credLic, LEAD[lang].creds.slice(4), "order-3"]].map(([id, titulo, lista, orden]) => (
+                  <motion.div key={id} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={fadeUp} className={`${orden} text-left`}>
                     <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--accent)]">{titulo}</p>
                     <ul className="mt-3 space-y-2.5">
                       {lista.map((c) => (
@@ -3843,7 +3851,7 @@ export default function App() {
               {/* Banda de redes (variante 6): de ancho completo (llega al menu lateral y
                   al borde derecho, igual que la del encabezado), con el texto entre
                   dos lineas finas y los botones con aro. */}
-              <motion.div variants={fadeUp}
+              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={fadeUp}
                 className="relative left-1/2 mt-4 grid w-screen -translate-x-1/2 justify-items-center justify-self-start gap-5 bg-[var(--accent-soft)] px-5 py-9 sm:py-12 lg:w-[calc(100vw-15rem)]">
                 <div className="flex w-full max-w-[560px] items-center gap-5">
                   <span aria-hidden="true" className="h-px flex-1 bg-[var(--accent)] opacity-45" />
@@ -4163,7 +4171,7 @@ export default function App() {
               <div>
                 <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--faint)]">{t.footer.where}</p>
                 <ul className="mt-3 space-y-0.5 text-[13px] leading-relaxed text-[var(--muted)]">
-                  {SEDES.map((s) => <li key={s}>{s}</li>)}
+                  {SEDES.map((s) => <li key={s.es}>{s[lang]}</li>)}
                 </ul>
               </div>
               <div>
